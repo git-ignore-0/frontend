@@ -1,0 +1,44 @@
+/* Order detail: the shared StatusBadge sits beside the order ID.
+   No separate status row, accordion or progress meter. */
+.order-detail-page .order-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 315px;
+  grid-template-areas:
+    "products summary"
+    "shipping summary"
+    "actions summary";
+  column-gap: 22px;
+  row-gap: 0;
+  align-items: start;
+}
+.order-detail-layout > * { min-width: 0; }
+.order-detail-products { grid-area: products; }
+.order-detail-shipping { grid-area: shipping; }
+.order-detail-cost { grid-area: summary; margin: 0; align-self: start; }
+.order-detail-actions { grid-area: actions; margin-bottom: 0; }
+.order-detail-heading-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  margin-bottom: 1px;
+}
+.order-detail-heading-line h1 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.order-detail-heading-line .acc-status { flex: none; }
+@media (max-width: 800px) {
+  .order-detail-page .order-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "products"
+      "summary"
+      "shipping"
+      "actions";
+  }
+  .order-detail-cost { margin: 0 0 14px; position: static; }
+  .order-detail-actions { margin-top: 2px; }
+}

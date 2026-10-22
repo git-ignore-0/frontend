@@ -1,0 +1,219 @@
+/* Workshops shares Store/Account tokens. All feature rules stay under .nfv-workshops.
+   Its listing remains separate from the Home preview and the About editorial hero. */
+.nfv-workshops {
+  min-height: 60vh;
+  padding: clamp(1.5rem, 4vw, 3rem) 0 clamp(2.5rem, 5vw, 4rem);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.nfv-workshops *,
+.nfv-workshops *::before,
+.nfv-workshops *::after { box-sizing: border-box; }
+
+.nfv-workshops .wk-shell {
+  width: min(calc(100% - 2rem), 50rem);
+  margin-inline: auto;
+}
+.nfv-workshops .wk-hero {
+  padding: clamp(.75rem, 2vw, 1.5rem) 0 clamp(.5rem, 1.5vw, 1rem);
+  text-align: center;
+}
+.nfv-workshops .wk-hero h1 {
+  margin: 0;
+  color: var(--green);
+  font-size: clamp(1.625rem, 3.2vw, 2.1875rem);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.nfv-workshops .wk-hero p {
+  max-width: 38rem;
+  margin: .75rem auto 0;
+  color: var(--ink2);
+  font-size: clamp(.875rem, 1.55vw, 1rem);
+  font-weight: 400;
+  line-height: 1.65;
+}
+.nfv-workshops .wk-section { margin-top: clamp(1.75rem, 3vw, 2.5rem); }
+.nfv-workshops .wk-section-past { margin-top: clamp(2rem, 4vw, 2.75rem); }
+.nfv-workshops .wk-section-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .625rem;
+  margin-bottom: .875rem;
+}
+.nfv-workshops .wk-section-heading h2 {
+  margin: 0;
+  color: var(--green);
+  font-size: clamp(1.0625rem, 1.7vw, 1.3125rem);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.35;
+}
+.nfv-workshops .wk-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.375rem;
+  padding: .1rem .45rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: .6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.nfv-workshops .wk-grid { display: grid; gap: .875rem; }
+.nfv-workshops .wk-calendar-card {
+  display: grid;
+  grid-template-columns: 4.25rem minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
+}
+.nfv-workshops .wk-calendar-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--green2) 32%, var(--line));
+  box-shadow: 0 5px 15px rgba(24, 49, 34, .05);
+}
+.nfv-workshops .wk-date-tile {
+  width: 4.25rem;
+  min-height: 4.25rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: .375rem .25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  line-height: 1.15;
+  text-align: center;
+}
+.nfv-workshops .wk-date-tile time { display: flex; flex-direction: column; align-items: center; }
+.nfv-workshops .wk-date-month {
+  color: var(--ink2);
+  font-size: .625rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.nfv-workshops .wk-date-day {
+  margin-top: .2rem;
+  color: var(--green);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.nfv-workshops .wk-date-status { display: none; }
+.nfv-workshops .wk-card-copy { min-width: 0; }
+.nfv-workshops .wk-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.nfv-workshops .wk-card-meta time {
+  min-width: 0;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.nfv-workshops .wk-status {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: .625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.nfv-workshops .wk-status-ongoing {
+  background: var(--honey);
+  color: var(--ink2);
+}
+.nfv-workshops .wk-status-completed {
+  background: transparent;
+  color: var(--muted);
+}
+.nfv-workshops .wk-card-copy h3 {
+  margin: .5rem 0 .3rem;
+  color: var(--green);
+  font-size: clamp(.9375rem, 1.5vw, 1.0625rem);
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.nfv-workshops .wk-card-copy h3 a:hover { color: var(--green2); }
+.nfv-workshops .wk-card-copy p {
+  max-width: 34rem;
+  margin: .35rem 0 0;
+  color: var(--ink2);
+  font-size: .875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.nfv-workshops .wk-card-copy .wk-fallback-note {
+  padding-left: .625rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: .8125rem;
+}
+/* Keep the link semantic; .btn/.btn-small provide exactly the Store button UI. */
+.nfv-workshops .wk-card-action { align-self: end; justify-self: end; }
+.nfv-workshops .wk-card-action .btn { max-width: 100%; }
+.nfv-workshops .wk-state { margin-top: 1.25rem; }
+.nfv-workshops .wk-page-state {
+  min-height: clamp(11rem, 25vh, 17rem);
+  display: grid;
+  align-items: center;
+}
+.nfv-workshops .wk-page-state .nfv-data-state { width: 100%; }
+
+@media (max-width: 767px) {
+  .nfv-workshops { padding: 1.5rem 0 3rem; }
+  .nfv-workshops .wk-calendar-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .75rem;
+    padding: .875rem;
+  }
+  .nfv-workshops .wk-date-tile {
+    width: 100%;
+    min-height: 2.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .5rem .75rem;
+  }
+  .nfv-workshops .wk-date-tile time { flex-direction: row; gap: .625rem; }
+  .nfv-workshops .wk-date-day { margin-top: 0; font-size: 1.25rem; }
+  .nfv-workshops .wk-date-status {
+    display: inline-flex;
+    color: var(--green);
+    font-size: .6875rem;
+    font-weight: 700;
+  }
+  .nfv-workshops .wk-card-meta .wk-status { display: none; }
+  .nfv-workshops .wk-card-action { justify-self: stretch; }
+  .nfv-workshops .wk-card-action .btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nfv-workshops *, .nfv-workshops *::before, .nfv-workshops *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

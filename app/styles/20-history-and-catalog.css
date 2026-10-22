@@ -1,0 +1,139 @@
+/* v7: realistic, bounded history lists; compact at 320px without horizontal scroll. */
+.hist-control-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px 14px;margin:6px 0 10px;min-width:0}
+.hist-control-head .acc-search-row{margin:0;flex:1 1 440px;min-width:0;justify-content:flex-start;flex-wrap:wrap}
+.hist-control-head .acc-order-search{width:min(330px,100%);flex:1 1 190px}
+.hist-period,.hist-test{display:inline-flex;align-items:center;gap:7px;color:#728474;font-size:12px;min-width:0;line-height:1.4}
+.hist-period select,.hist-test select{background:#fff;border:1px solid var(--line);border-radius:3px;font:inherit;font-size:13px;color:#365042;max-width:100%;height:36px;padding:0 25px 0 8px}
+.hist-test{white-space:normal;flex:none}
+.acc-order-tabs .acc-order-tab span{color:#7b9380;font-size:11px;margin-left:3px}
+.hist-subhead{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin:13px 0 4px}
+.hist-subhead h3{font-size:14px;font-weight:650;margin:0}
+.hist-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:13px 0 4px;color:#829188;font-size:12px;border-top:1px solid #e9ede8;margin-top:10px}
+.hist-footer strong{color:#345740}.hist-footer button{min-height:36px}.hist-end{color:#8e9a90;font-size:12px}
+.hist-shrink{min-width:0;flex:1 1 auto;overflow-wrap:anywhere;word-break:normal}.acc-order-top>.hist-shrink{min-width:0}
+.acc-order-id{overflow-wrap:anywhere}.acc-subline{overflow-wrap:anywhere}
+.acc-order-names{overflow-wrap:anywhere;word-break:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.acc-detail-line .grow strong,.acc-detail-line .grow small{overflow-wrap:anywhere}
+.acc-detail-line>strong{white-space:normal;text-align:right;flex:0 0 auto;max-width:35%}
+
+.hist-state{border:1px solid #e4eae1;padding:18px;margin:9px 0;text-align:center}.hist-state p{color:#78897b;font-size:12px}.hist-state .btn{margin-top:5px}
+.hist-skeleton{height:43px;margin:7px 0;border-radius:3px;background:#edf1eb}
+@media(max-width:560px){
+ .hist-control-head{align-items:stretch;flex-direction:column;gap:9px}.hist-control-head .acc-search-row{flex:none;width:100%;display:grid;grid-template-columns:1fr;gap:7px}
+ .hist-control-head .acc-order-search{width:100%;flex:none}.hist-period{justify-content:space-between}.hist-period select{width:60%;height:38px}
+ .hist-control-head .hist-test{align-self:flex-start}.acc-order-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:6px;padding:0 0 8px}
+ .acc-order-tabs .acc-order-tab{min-width:0;white-space:normal;padding:8px 5px;min-height:36px}
+ .acc-order-tabs .acc-order-tab:first-child{grid-column:1/-1}
+ .acc-order-mid{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:start;gap:7px 9px}
+ .acc-order-mid .acc-order-thumbs{grid-row:1;grid-column:1}.acc-order-mid .acc-order-names{grid-row:1;grid-column:2;min-width:0;font-size:13px;line-height:1.45}
+ .acc-order-mid .acc-order-total{grid-column:2;grid-row:2;text-align:left;font-size:14px;min-width:0}
+ .acc-order-mid .acc-order-total small{display:inline;font-size:11px;margin-left:5px}
+ .acc-order-bottom{align-items:center}.acc-order-bottom small{max-width:55%;font-size:11px;line-height:1.4}
+ .hist-footer{flex-direction:column;align-items:stretch;text-align:center}.hist-footer .btn{width:100%}
+
+ .acc-referral-code code{overflow-wrap:anywhere}
+}
+@media(max-width:340px){.acc-order-top{flex-wrap:wrap}.acc-order-top .acc-status{margin-left:auto}.acc-order-thumbs .acc-thumb{width:31px;height:31px}}
+
+
+/* v8 — single saved address: compact presentation with reliable mobile wrapping. */
+.acc-single-address .acc-heading{align-items:center}
+.acc-one-address-display{max-width:720px;min-width:0;overflow-wrap:anywhere;background:#fcfdfa;border:1px solid #e0e7de;padding:15px 17px;border-radius:4px}
+.acc-one-address-head{display:flex;align-items:center;gap:7px;color:#658069;font-size:12px;font-weight:750;margin-bottom:9px}
+.acc-one-address-display>strong{font-size:15px;display:block;font-weight:750;line-height:1.35}
+.acc-one-address-phone{font-size:13px;color:#738278;margin:3px 0 9px}
+.acc-one-address-display p{font-size:14px;line-height:1.6;margin:0;color:#40554a;overflow-wrap:anywhere}
+.acc-one-address-form{margin:0 0 10px;padding:15px;background:#fbfcf9;border:1px solid #dde6dc}
+.acc-checkout-one{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
+.acc-checkout-one-copy{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.acc-checkout-one-copy strong{display:flex;align-items:center;gap:5px;font-size:13px}
+.acc-checkout-one-copy p{font-size:13px;margin:5px 0 2px}
+.acc-checkout-one-copy small{display:block;font-size:12px;line-height:1.5;color:#627367;overflow-wrap:anywhere}
+.acc-checkout-one .btn{flex:none}
+@media(max-width:560px){.acc-one-address-display{padding:13px}.acc-one-address-form{padding:12px}.acc-checkout-one{flex-direction:column;align-items:stretch}.acc-checkout-one .btn{align-self:flex-start}}
+@media(max-width:340px){.acc-one-address-display{padding:12px}}
+
+/* v9 — Danh mục là navigation, Bộ lọc là thuộc tính bổ sung */
+.catalog-layout #catalogPanel{min-width:0}
+.catalog-filter-btn{display:inline-flex!important;align-items:center;gap:6px;min-height:34px;background:#fff;border-color:#ccd9cc;color:#345a3f}
+.catalog-filter-btn.has-filters{border-color:#80a888;background:#f0f6ed}
+.filter-count{background:#365a40;color:white;border-radius:9px;min-width:15px;height:15px;padding:0 4px;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.facet-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-2px 0 11px}
+.facet-chip{border:1px solid #cadec8;background:#f2f7ee;color:#355a3d;padding:4px 9px;border-radius:3px;font-size:12px}
+.facet-clear{background:none;border:0;color:#68786d;text-decoration:underline;font-size:12px;padding:6px}
+.filter-sheet{display:flex;position:fixed;z-index:70;inset:0;background:rgba(16,38,25,.46);justify-content:center;align-items:center;padding:16px}
+.filter-sheet-inner{height:auto;max-height:min(600px,90vh);overflow-y:auto;width:min(390px,100%);padding:21px 22px 19px;background:#fff;border:1px solid #dde7d8;border-radius:7px;box-shadow:none}
+.facet-dialog-title{font-size:16px;font-weight:700;color:#24452e}
+.facet-panel{display:block}
+.facet-section{padding:15px 0 12px;border-top:1px solid #e3eae1}
+.facet-label{font-size:13px;font-weight:650;margin-bottom:10px}
+.facet-checkbox{display:flex;align-items:center;gap:10px;text-align:left;width:100%;background:#fff;border:1px solid #dbe4d8;padding:11px;border-radius:4px;color:#2c4b33;font-size:13px}
+.facet-checkbox.selected{border-color:#a7c4a4;background:#f5f9f2}
+.facet-checkbox small{display:block;color:#849184;margin-top:3px;font-size:11px}
+.facet-check{width:18px;height:18px;border:1px solid #b3c2b0;border-radius:3px;flex:none;display:grid;place-items:center;color:white}
+.facet-checkbox.selected .facet-check{border-color:#477c52;background:#477c52}
+.facet-options{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.facet-option{display:flex;gap:8px;align-items:center;text-align:left;border:1px solid #dfe7dc;background:white;padding:9px;border-radius:4px;font-size:12px;min-height:42px;color:#3f5542}
+.facet-option.selected{background:#f2f8ee;border-color:#8cba8f;color:#2c5b39}
+.facet-radio{width:13px;height:13px;border:1px solid #9eafa0;border-radius:50%;flex:none;display:grid;place-items:center}
+.facet-option.selected .facet-radio:after{content:'';width:7px;height:7px;border-radius:50%;background:#477a52}
+.facet-note{font-size:11px;color:#728274;margin:11px 0 0}
+.facet-dialog-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:15px}
+.facet-dialog-actions .btn{flex:1;white-space:normal}
+.categories-row{overflow:visible}
+@media(max-width:800px){.filter-sheet .filter-sheet-inner{height:auto;width:min(390px,100%);max-height:90vh}.filter-sheet{align-items:center}}
+@media(max-width:560px){
+ .categories-row{display:flex!important;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;scrollbar-width:none;max-width:100%;width:100%}
+ .categories-row .cat-tile{flex:0 0 auto;width:auto;min-width:max-content;min-height:32px}
+ .filter-sheet{align-items:flex-end;justify-content:center;padding:0}
+ .filter-sheet .filter-sheet-inner{width:100%;max-width:100%;max-height:85vh;border-radius:12px 12px 0 0;padding:20px 18px max(18px,env(safe-area-inset-bottom));}
+ .toolbar .left{min-width:0;flex-wrap:nowrap;gap:8px}
+ .toolbar .left .muted{white-space:nowrap}
+ .catalog-head h2{font-size:18px}
+}
+@media(max-width:340px){.catalog-filter-btn{padding:6px 9px;font-size:12px}.sort-wrap select{min-width:110px;max-width:120px}.toolbar .left .muted{font-size:11px}}
+
+/* Shared order, CSA, rewards, and referral history styles. */
+/* v13: Shared StatusBadge / StatusFilter for order + referral histories. */
+.acc-status[data-status-badge]{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;line-height:1.4;text-align:center;max-width:100%;white-space:normal;overflow-wrap:break-word;}
+.hist-status-filter{scrollbar-width:thin;scrollbar-color:#cbd8cd transparent;}
+.hist-status-filter .acc-order-tab{flex:0 0 auto;}
+@media(max-width:560px){
+ .hist-status-filter[data-status-kind="referrals"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;overflow:visible;padding-bottom:8px;}
+ .hist-status-filter[data-status-kind="referrals"] .acc-order-tab{grid-column:auto;min-width:0;min-height:39px;padding:6px 5px;white-space:normal;text-align:center;font-size:12px;}
+}
+
+
+/* v14: One compact HistoryListItem layout for CSA, rewards and referrals.
+   Business-specific values (quota, points, status) are supplied as data, not duplicated markup. */
+.history-item{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:start;gap:9px;padding:13px 0;border-bottom:1px solid var(--line);min-width:0}
+.history-item:last-child{border-bottom:0}
+.history-item-icon{width:28px;height:28px;display:grid;place-items:center;color:#64836d;background:#f3f7f2;border:1px solid #e3ece1;border-radius:4px;flex:0 0 auto}
+.history-item-main{min-width:0;padding-top:1px}
+.history-item-title,.history-item-title-link{display:block;margin:0;color:#2e4033;font-size:13px;font-weight:650;line-height:1.48;overflow-wrap:anywhere;word-break:normal;text-align:left}
+.history-item-title-link{padding:0;border:0;background:none;cursor:pointer;color:#365f45}
+.history-item-title-link:hover,.history-item-title-link:focus-visible{text-decoration:underline;text-underline-offset:3px}
+.history-item-meta{display:flex;flex-wrap:wrap;gap:3px 6px;align-items:baseline;color:#859287;font-size:11px;line-height:1.5;margin-top:4px;min-width:0}
+.history-item-meta>span{overflow-wrap:anywhere}
+.history-item-meta>span+span:before{content:'·';margin-right:6px;color:#bac5ba}
+.history-item-trailing{display:flex;justify-content:flex-end;align-items:flex-start;min-width:0;max-width:150px;padding-top:2px}
+.history-item-trailing .history-value{font-size:13px;line-height:1.5;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right;color:#4b7354}
+.history-item-trailing .history-value.negative{color:#826c4f}
+.history-item-trailing .history-value.positive{color:#3b7550}
+.history-item-trailing .acc-status{white-space:normal;text-align:center;line-height:1.4;overflow-wrap:break-word;max-width:100%}
+@media(max-width:420px){
+ .history-item{grid-template-columns:26px minmax(0,1fr) auto;gap:8px;padding:12px 0}
+ .history-item-icon{width:26px;height:26px}
+ .history-item-trailing{max-width:110px}
+ .history-item-title{font-size:13px}
+ .history-item[data-kind="referrals"]{grid-template-columns:26px minmax(0,1fr)}
+ .history-item[data-kind="referrals"] .history-item-trailing{grid-column:2;justify-content:flex-start;max-width:100%;padding-top:0}
+}
+
+
+/* Orders list: breathing room below the status chips (also when the list is empty). */
+.nfv-orders-section .account-orders-list { margin-block-start: 16px; }
+.nfv-orders-section .account-orders-list .acc-order:first-child { margin-block-start: 0; }
+@media (max-width: 600px) {
+  .nfv-orders-section .account-orders-list { margin-block-start: 14px; }
+}

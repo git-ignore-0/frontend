@@ -1,0 +1,185 @@
+/* Account has two navigation layouts only:
+ * <1024px: hub -> detail (bounded width on tablets)
+ * >=1024px: persistent desktop sidebar.
+ * Order detail keeps its own phone-only back button.
+ */
+.account-mobile-head,
+.account-mobile-hub,
+.mobile-order-back { display: none; }
+
+.account-nav-shell { min-width: 0; }
+
+@media (max-width: 1023px) {
+  .account-nav-shell { display: none; }
+
+  .account-layout,
+  .account-mobile-head,
+  .account-mobile-hub {
+    width: 100%;
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+    min-width: 0;
+  }
+
+  .account-layout { display: block; margin-top: 2px; }
+  .account-layout.mobile-hub { display: none; }
+
+  .account-mobile-head {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 17px 0 13px;
+  }
+  .account-mobile-head h1 {
+    font-size: 23px;
+    font-weight: 700;
+    letter-spacing: -.45px;
+    line-height: 1.28;
+    margin: 0;
+    color: #22382a;
+    overflow-wrap: anywhere;
+  }
+  .account-mobile-head .acc-page-subtitle {
+    font-size: 12px;
+    color: #77887b;
+    margin: 0;
+    line-height: 1.55;
+  }
+  .account-mobile-back {
+    background: none;
+    border: 0;
+    padding: 0 0 6px;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    align-self: flex-start;
+    min-height: 32px;
+    color: #486851;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .account-mobile-back svg { width: 16px; height: 16px; }
+
+  .account-mobile-hub { display: block; padding: 0 2px 16px; }
+  .account-mobile-overview-head { padding-inline: 2px; }
+  .acc-hub-group { margin-bottom: 16px; }
+  .acc-hub-group-head {
+    margin: 0 0 7px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .acc-hub-group-head h2 {
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0;
+    color: #4c6251;
+    letter-spacing: .05px;
+  }
+  .acc-hub-links {
+    border: 1px solid #e3e9e1;
+    border-radius: 5px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .acc-hub-link {
+    width: 100%;
+    min-height: 61px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #edf1eb;
+    text-align: left;
+    padding: 10px 12px;
+    color: inherit;
+  }
+  .acc-hub-link:last-child { border-bottom: 0; }
+  .acc-hub-link:hover, .acc-hub-link:focus-visible { background: #f4f8f2; }
+  .acc-hub-ico {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: #f1f5ef;
+    color: #4c7056;
+    flex: none;
+    display: grid;
+    place-items: center;
+  }
+  .acc-hub-ico svg { width: 17px; height: 17px; }
+  .acc-hub-link .copy { display: block; flex: 1; min-width: 0; }
+  .acc-hub-link .copy strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 650;
+    line-height: 1.5;
+    color: #293c30;
+    overflow-wrap: anywhere;
+  }
+  .acc-hub-link .copy small {
+    display: block;
+    font-size: 11.5px;
+    color: #7d8b7f;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    margin-top: 1px;
+  }
+  .acc-hub-chevron { flex: none; color: #8ca291; width: 16px; height: 16px; }
+
+  .account-content .acc-section:first-child { margin-top: 0; }
+  /* Drill-down title already identifies these sections. */
+  .account-tab-orders .acc-section:first-child > .acc-heading h2,
+  .account-tab-address .acc-section:first-child > .acc-heading h2,
+  .account-tab-profile .acc-section:first-child > .acc-heading h2 { display: none; }
+  .account-tab-orders .acc-section:first-child > .acc-heading p,
+  .account-tab-address .acc-section:first-child > .acc-heading p,
+  .account-tab-profile .acc-section:first-child > .acc-heading p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .acc-section, .acc-order, .acc-one-address-display { overflow-wrap: anywhere; }
+}
+
+@media (max-width: 600px) {
+  .order-detail-page .breadcrumbs { display: none; }
+  .mobile-order-back {
+    display: inline-flex;
+    background: none;
+    border: 0;
+    gap: 6px;
+    align-items: center;
+    min-height: 38px;
+    padding: 4px 0 6px;
+    color: #486851;
+    font-weight: 650;
+    font-size: 13px;
+  }
+  .order-detail-page .account-title { padding-top: 7px; }
+}
+
+@media (max-width: 340px) {
+  .acc-hub-link { padding: 9px 10px; gap: 10px; }
+  .acc-hub-ico { width: 30px; height: 30px; }
+  .account-mobile-hub, .account-mobile-overview-head { padding-inline: 5px; }
+}
+
+/* Shared Account sign-out action; displayed only when a session exists. */
+.account-logout--sidebar { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 7px; }
+.account-logout-button {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px;
+  padding: 9px 10px; background: transparent; border: 0; border-radius: 4px;
+  color: #925047; font-size: 13px; font-weight: 600; text-align: left;
+}
+.account-logout-button:hover { background: #fff2f0; }
+.account-logout-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.account-mobile-logout { display: none; }
+@media (max-width: 1023px) {
+  .account-mobile-logout { display: block; width: 100%; max-width: 680px; margin: 0 auto 22px; padding: 0 2px; }
+  .account-logout--hub { border: 1px solid #e3e9e1; background: #fff; border-radius: 5px; overflow: hidden; }
+  .account-logout--hub .account-logout-button { min-height: 56px; padding: 10px 14px; gap: 12px; }
+  .account-logout--hub .account-logout-icon { width: 32px; height: 32px; color: #a2574c; background: #fcf2f0; border-radius: 4px; }
+  .account-logout--hub .account-logout-error { margin: 0 14px 12px; }
+}

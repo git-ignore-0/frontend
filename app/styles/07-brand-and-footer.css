@@ -1,0 +1,100 @@
+/* Original brand assets; header uses the full horizontal artwork.
+   Do not clip the source image or add a separate brand text label. */
+.nfv-brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  text-decoration: none;
+}
+.nfv-brand-logo img { display: block; object-fit: contain; }
+.nfv-brand-logo--header,
+.nfv-brand-logo--header img { width: 151px; height: 40px; }
+.nfv-brand-logo--footer { width: 50px; height: 50px; }
+.nfv-brand-logo--footer img { width: 100%; height: 100%; object-fit: contain; }
+.site-header .nfv-brand-logo { margin-right: auto; }
+
+/* Only guarded Account / order-detail routes need a short-page footer layout.
+   Other screens (including Home and Store) retain their original document flow. */
+.nfv-app--auth-route { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.nfv-app--auth-route > .nfv-site-footer { margin-top: auto; }
+
+/* Footer uses the primary button's base green, deepened slightly.
+   Derived from --green so both surfaces stay aligned when the theme changes. */
+.nfv-site-footer {
+  --nfv-footer-background: color-mix(in srgb, var(--green) 86%, black);
+  background: var(--nfv-footer-background);
+  color: #f8fbf7;
+  border-top: 1px solid var(--nfv-footer-background);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.nfv-site-footer__inner { padding-top: 48px; padding-bottom: 22px; }
+.nfv-site-footer__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr) minmax(0, 1.4fr);
+  align-items: start;
+  column-gap: clamp(24px, 3.6vw, 54px);
+  row-gap: 32px;
+  padding-bottom: 42px;
+}
+.nfv-site-footer__main > * { min-width: 0; }
+.nfv-site-footer__identity { display: flex; align-items: center; gap: 12px; }
+.nfv-site-footer__identity strong {
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.4;
+  letter-spacing: -.02em;
+}
+.nfv-site-footer__about p { max-width: 360px; margin: 15px 0 0; color: #e2eee2; line-height: 1.8; }
+.nfv-site-footer__contact h2 {
+  margin: 0 0 14px;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+.nfv-site-footer__contact dl { display: grid; gap: 8px; margin: 0; }
+.nfv-site-footer__contact dl > div { display: grid; gap: 2px; }
+.nfv-site-footer__contact dt { font-weight: 750; color: #fff; }
+.nfv-site-footer__contact dd { margin: 0; overflow-wrap: anywhere; }
+.nfv-site-footer__contact p { margin: 14px 0 0; color: #e2eee2; }
+.nfv-site-footer__nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 22px;
+  row-gap: 11px;
+  align-content: start;
+  font-size: 13px;
+  font-weight: 650;
+}
+.nfv-site-footer__nav a { min-width: 0; overflow-wrap: anywhere; }
+.nfv-site-footer a { color: inherit; }
+.nfv-site-footer a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nfv-site-footer a:focus-visible { outline: 2px solid #d5ebbb; outline-offset: 3px; }
+.nfv-site-footer__bottom {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  padding-top: 19px;
+  border-top: 1px solid rgba(255, 255, 255, .24);
+  color: #e2eee2;
+  font-size: 12px;
+}
+@media (max-width: 1023px) {
+  .nfv-site-footer__main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .nfv-site-footer__nav { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .nfv-site-footer__inner { padding-top: 34px; padding-bottom: 22px; }
+  .nfv-site-footer__main { grid-template-columns: minmax(0, 1fr); gap: 26px; padding-bottom: 28px; }
+  .nfv-site-footer__about p { margin-top: 10px; }
+  .nfv-site-footer__nav { grid-column: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
+  .nfv-site-footer__bottom { display: grid; gap: 8px; }
+}
+@media (max-width: 380px) {
+  .nfv-site-footer__identity strong { font-size: 16px; }
+  .nfv-site-footer__nav { column-gap: 12px; }
+}

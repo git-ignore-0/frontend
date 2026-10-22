@@ -1,0 +1,29 @@
+/* Shared side panel: visual source of truth is the mobile navigation shell.
+   Menu, Store cart and Stories all render these same classes. */
+.nfv-responsive-dialog .nfv-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}
+.nfv-responsive-dialog .nfv-dialog-head h2{min-width:0;margin:0;font-size:16px;font-weight:700;color:var(--ink)}
+.nfv-responsive-dialog .nfv-dialog-body{min-width:0;overscroll-behavior:contain}
+.nfv-responsive-dialog .filter-sheet-inner{scrollbar-width:thin;overscroll-behavior:contain}
+/* Keep the original product filter size and breakpoint from 20-history-and-catalog.css. */
+.story-detail-dialog{z-index:120}
+.story-detail-dialog .filter-sheet-inner{width:min(780px,100%);max-height:85dvh}
+@media(max-width:560px){
+  .story-detail-dialog .filter-sheet-inner{width:100%;max-width:100%;max-height:92dvh}
+}
+
+/* All panels inherit geometry from the mobile menu; keep the explicit safety bound. */
+.nfv-unified-panel {max-width:100%}
+/* The three side panels share mobile navigation's geometry, overlay, heading and controls. */
+.nfv-unified-panel-overlay {z-index:110}
+.nfv-unified-panel .nfv-mobile-nav-heading h2 {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nfv-unified-panel .nfv-mobile-nav-close {flex:none;min-height:38px;background:var(--paper)}
+.nfv-unified-panel > .drawer-body {
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:20px 18px;background:var(--paper);
+}
+.nfv-unified-panel > .drawer-foot {
+  flex:none;min-width:0;padding:15px 18px calc(15px + env(safe-area-inset-bottom));
+  background:var(--paper);border-top:1px solid var(--line);
+}
+.nfv-unified-panel > .drawer-foot .btn {max-width:100%}
+@media(prefers-reduced-motion:reduce){.nfv-unified-panel{animation:none}}

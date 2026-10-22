@@ -1,0 +1,20 @@
+/* Shared CouponField: compact, only shown at Checkout > Review. */
+.nfv-coupon{padding:13px 0 12px;border-bottom:1px solid var(--line);min-width:0}
+.nfv-coupon-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
+.nfv-coupon-head strong{font-size:13px;font-weight:800;color:var(--ink)}
+.nfv-coupon-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;min-width:0}
+.nfv-coupon-row .nfv-control{width:100%;min-width:0;max-width:none;height:var(--nfv-control-height);font-size:var(--nfv-control-font-size);text-transform:uppercase;letter-spacing:.15px}
+.nfv-coupon-row .btn{flex:none;min-width:67px;height:var(--nfv-control-height);min-height:var(--nfv-control-height)}
+.nfv-coupon-applied{display:flex;gap:8px;align-items:center;justify-content:space-between;min-width:0;padding:8px 10px;background:#f3f7f0;border:1px solid #d2e2d0;border-radius:4px}
+.nfv-coupon-applied-left{min-width:0;display:flex;flex-direction:column;gap:2px}
+.nfv-coupon-applied-code{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:800;color:#396445;overflow-wrap:anywhere}
+.nfv-coupon-applied-caption{font-size:12px;color:#597366}
+.nfv-coupon-applied .btn{height:30px;min-height:30px}
+.nfv-coupon-error{font-size:12px;line-height:1.5;color:#a04436;margin:6px 0 0}
+.nfv-coupon-note{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+.nfv-coupon-discount{color:#387649}
+.checkout-summary .nfv-coupon + .summary-divider{margin-top:11px}
+@media(max-width:420px){.nfv-coupon{padding:12px 0}.nfv-coupon-row .btn{min-width:64px}}
+
+
+.nfv-photo-placeholder{width:100%;height:100%;min-height:100px;display:flex;align-items:center;justify-content:center;background:#f4f6f1;color:#7d927b}.nfv-photo-placeholder .nfv-photo-empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;position:static}.nfv-photo-placeholder .photo-placeholder-icon{display:flex}

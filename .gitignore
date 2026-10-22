@@ -1,0 +1,36 @@
+# Dependencies
+/node_modules
+
+# Next.js build output
+/.next/
+/out/
+/.vercel/
+
+# Test, coverage, and generated audit output
+/coverage/
+/playwright-report/
+/test-results/
+/artifacts/
+/cpanel-deploy/
+/cpanel-deploy-passenger.zip
+
+# TypeScript
+*.tsbuildinfo
+
+# Local environment files
+.env*
+!.env.example
+
+# Debug logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

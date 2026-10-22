@@ -1,0 +1,101 @@
+/* NFV shared account benefits — uses existing design tokens and shared Button/FormControl/DataState. */
+.benefits-page{min-width:0}.benefits-page .benefit-section{overflow:visible}
+.benefits-page .acc-heading{margin-bottom:12px}
+.benefit-balance{background:#f3f8f1;border:1px solid #e1eadf;border-radius:4px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.benefit-balance>span{font-size:13px;color:#647c67}.benefit-balance>strong{color:#315e3a;font-size:26px;line-height:1.2;font-weight:720}
+.benefit-balance>strong small{font-size:13px;font-weight:500}
+.benefit-gift-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.benefit-gift{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:auto auto;column-gap:11px;row-gap:10px;border:1px solid var(--line);border-radius:4px;padding:10px;min-width:0;align-items:start}
+.benefit-gift-thumb{grid-row:1/3;position:relative;overflow:hidden;border-radius:4px;background:#f1f3ee;border:1px solid #e4e9df;width:76px;height:76px;display:flex;align-items:center;justify-content:center;color:#749479;flex:none}
+.benefit-gift-thumb img{width:100%;height:100%;object-fit:cover}.benefit-gift-thumb img+.benefit-gift-fallback{display:none}
+.benefit-gift-body{min-width:0}.benefit-gift-body>strong{display:block;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.benefit-gift-cost{font-size:12px;color:var(--ink2);margin-top:3px}.benefit-gift-availability{margin-top:6px}
+.benefit-gift>.btn{grid-column:2;justify-self:start;white-space:normal;text-align:center;min-height:32px;height:auto;padding-block:6px}
+.benefit-plan-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin-bottom:12px}
+.benefit-plan-title>strong{font-size:15px;min-width:0;overflow-wrap:anywhere}
+.benefit-info-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:1px solid #ebeee8;padding:9px 0;min-width:0}
+.benefit-info-row:last-child{border-bottom:0}.benefit-info-row span{color:#7b887e;font-size:12px;min-width:90px}.benefit-info-row strong{font-weight:650;font-size:13px;text-align:right;overflow-wrap:anywhere;min-width:0}
+.benefit-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+.benefit-quota-list{display:grid;gap:12px}.benefit-quota{border-bottom:1px solid #edf0eb;padding:0 0 12px}.benefit-quota:last-child{border:0;padding-bottom:0}
+.benefit-quota-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:13px}.benefit-quota-top strong{min-width:0;overflow-wrap:anywhere}.benefit-quota-top span{color:#476f51;white-space:normal;text-align:right;font-weight:700;flex-shrink:0}
+.benefit-quota-bar{height:5px;border-radius:4px;background:#e8eee6;margin:8px 0 3px;overflow:hidden}.benefit-quota-bar>span{display:block;background:#668a6d;height:100%;border-radius:4px}
+.benefit-quota>small{display:block;color:#849084;font-size:11px}
+.benefit-transaction{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #edf0eb;min-width:0}
+.benefit-transaction:last-child{border:0}.benefit-tx-main{min-width:0}.benefit-tx-main strong{display:block;font-size:13px;font-weight:650;line-height:1.45;overflow-wrap:anywhere}.benefit-tx-main small{display:block;color:#829188;font-size:11px;line-height:1.4;overflow-wrap:anywhere;margin-top:3px}
+.benefit-tx-end{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;flex-shrink:0;max-width:42%}.benefit-tx-end>strong{font-size:13px}.benefit-tx-end small{font-size:11px;color:#778a78}.benefit-inline-actions{margin-top:12px}
+.benefit-ref-code-line{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.benefit-ref-code-line code{font-family:inherit;font-size:16px;letter-spacing:.5px;font-weight:750;overflow-wrap:anywhere;min-width:0;color:#345f40}
+.benefit-code-actions{display:flex;gap:7px;flex-wrap:wrap;flex-shrink:0}
+.benefit-invite-count{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f7f9f5;border:1px solid #e8ede6;padding:10px 12px;margin-bottom:6px;border-radius:4px}
+.benefit-invite-count>span{font-size:12px;color:#738274}.benefit-invite-count>strong{font-size:17px;color:#385f42}
+.benefit-ref-form p{font-size:12px;color:#7a897c;margin:0 0 9px}.benefit-ref-form .nfv-control{width:100%;max-width:430px}.benefit-ref-form>.btn{margin-top:8px}.benefit-ref-form .help-error{min-height:0}
+.benefit-how{margin:0;padding-left:19px}.benefit-how li{padding:4px 0;font-size:13px;color:var(--ink2)}.benefit-terms{margin-top:12px;border-top:1px solid #e9eee7;padding-top:11px}.benefit-terms strong{font-size:13px}.benefit-terms p{font-size:12px;color:#788579;line-height:1.55;margin:3px 0 0}
+.benefit-modal-backdrop{position:fixed;inset:0;z-index:105;background:#1f3327a8;display:flex;align-items:center;justify-content:center;padding:16px}
+.benefit-modal{background:#fffefb;border:1px solid #dce5da;border-radius:5px;width:min(420px,100%);max-height:85vh;overflow-y:auto;padding:17px;box-shadow:0 12px 34px #1c2c1c16}
+.benefit-modal-head{display:flex;align-items:center;justify-content:space-between;gap:9px}.benefit-modal-head h2{font-size:17px;margin:0}.benefit-modal-head .icon-btn{min-width:30px;min-height:30px}
+.benefit-modal-copy{font-size:13px;color:#708173;margin:10px 0}.benefit-modal-gift{display:flex;align-items:center;gap:11px;padding:10px 0}.benefit-modal-gift .benefit-gift-thumb{width:55px;height:55px}.benefit-modal-gift>div:last-child{min-width:0}.benefit-modal-gift strong{font-size:13px;display:block}.benefit-modal-gift small{font-size:12px;color:#7e8d81;display:block;margin-top:2px}
+.benefit-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:13px;flex-wrap:wrap}
+@media(max-width:900px){.benefit-gift-list{grid-template-columns:1fr}}
+@media(max-width:600px){
+ .benefit-gift-list{grid-template-columns:1fr;gap:8px}.benefit-gift{grid-template-columns:65px minmax(0,1fr);gap:7px 10px;padding:9px}.benefit-gift-thumb{width:65px;height:65px}
+ .benefit-balance{padding:12px}.benefit-balance>strong{font-size:23px}.benefit-detail-grid{grid-template-columns:1fr}
+ /* Referral action buttons retain their component dimensions on all viewports. */
+ .benefit-gift-body>strong{font-size:13px}.benefit-tx-end{max-width:48%}.benefit-quota-top span{font-size:12px}
+}
+
+
+
+/* Long histories use existing HistoryList; each can paginate independently. */
+.benefit-history-host{min-width:0}
+.benefit-history-host .hist-rows{min-width:0}
+.benefit-history-host .benefit-transaction{align-items:flex-start}
+.benefit-history-host .benefit-tx-main{min-width:0;flex:1}
+.benefit-history-host .benefit-tx-end{min-width:0}
+.benefit-history-host .hist-footer{margin-top:4px}
+.benefit-history-host .hist-footer .hist-page-error{flex-basis:100%;font-size:12px;color:#a94736}
+@media(max-width:420px){
+ .benefit-history-host .benefit-transaction{gap:8px;padding:10px 0}
+ .benefit-history-host .benefit-tx-end{max-width:45%}
+ .benefit-history-host .hist-footer{gap:8px}
+}
+
+/* Gift grid shares the same paginated footer as Account history lists. */
+[data-benefit-gifts]{min-width:0}
+[data-benefit-gifts]>.hist-footer{margin-top:12px;gap:10px}
+[data-benefit-gifts] .hist-page-error{flex-basis:100%;font-size:12px;color:#a94736}
+
+/* Referral v61 — a single compact account panel for both referral codes.
+   Same FormControl and Button variants for every viewport. */
+.referral-benefits-page{container-type:inline-size}
+.referral-code-box{padding:0;margin-bottom:16px;min-width:0}
+.referral-code-part{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:12px;align-items:center;padding:14px 17px;min-width:0}
+.referral-code-part+.referral-code-part{border-top:1px solid var(--line)}
+.referral-part-title{margin:0;font-size:14px;font-weight:650;line-height:1.45;letter-spacing:0;overflow-wrap:anywhere}
+.referral-part-body{min-width:0}
+.referral-part-body .benefit-info-row:first-child{padding-top:0}
+.referral-part-body .benefit-info-row:last-child{padding-bottom:0}
+.referral-code-entry{display:flex;align-items:center;gap:8px;min-width:0}
+.referral-code-entry .nfv-control{min-width:0;max-width:none;flex:1 1 auto;width:0}
+.referral-code-entry>.btn{margin:0;flex:0 0 auto;white-space:nowrap}
+.referral-part-body .benefit-ref-code-line{display:flex;gap:9px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.referral-part-body .benefit-ref-code-line code{font-size:15px;min-width:0}
+.referral-part-body .benefit-code-actions{display:flex;gap:6px;width:auto;flex:0 0 auto;justify-content:flex-end}
+.referral-part-body .benefit-code-actions .btn{flex:0 0 auto}
+.referral-muted-note{font-size:12px;color:var(--ink2);line-height:1.5;margin:3px 0 0}
+.referral-how-compact{display:grid;gap:1px}
+.referral-how-compact li{padding:2px 0}
+.referral-benefits-page .benefit-terms{margin-top:8px;padding-top:9px}
+.referral-history-summary{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--ink2)}
+.referral-history-summary strong{color:var(--ink);font-weight:700}
+.referral-benefits-page [data-benefit-history="referrals"]{min-width:0}
+@container (max-width:559px){
+ .referral-code-box{margin-bottom:14px}
+ .referral-code-part{grid-template-columns:minmax(0,1fr);gap:8px;padding:12px 14px}
+ .referral-part-title{font-size:14px}
+}
+/* Extremely narrow account content may wrap, but never stretch buttons. */
+@container (max-width:275px){
+ .referral-code-entry{flex-wrap:wrap}
+ .referral-code-entry .nfv-control{flex:1 1 100%;width:100%}
+ .referral-part-body .benefit-ref-code-line{flex-wrap:wrap}
+}

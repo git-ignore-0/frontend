@@ -1,0 +1,31 @@
+/* the app.2 guest entry reuses existing .btn and .btn-outline controls. */
+.nfv-auth-page { padding: clamp(24px, 5vw, 68px) 0 76px; }
+.nfv-auth-card {
+  max-width: 470px;
+  margin-inline: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: clamp(24px, 5vw, 40px);
+}
+.nfv-auth-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  background: #eaf1e5;
+  color: var(--green);
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+.nfv-auth-card h1 { margin: 0 0 7px; font-size: clamp(25px, 4vw, 32px); letter-spacing: -.035em; }
+.nfv-auth-intro { margin: 0 0 22px; font-size: 14px; line-height: 1.65; color: var(--muted); }
+.nfv-auth-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.nfv-auth-actions--entry > .btn { flex: 1 1 145px; }
+.nfv-auth-actions--drawer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nfv-auth-actions--drawer > .btn { min-width: 0; padding-inline: 8px; }
+.nfv-auth-notice { background: #f1f5e9; border: 1px solid #dce6d7; padding: 12px; font-size: 13px; }
+.nfv-auth-feedback { max-width: 660px; padding-block: 56px; }
+@media (max-width: 560px) {
+  .nfv-auth-page { padding-block: 20px 44px; }
+  .nfv-auth-card { padding: 23px 18px; }
+}

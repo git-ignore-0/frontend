@@ -1,0 +1,21 @@
+/* The v61 stylesheet prefers Inter and uses Noto Sans on shared form fields,
+   but neither font was bundled in its original standalone HTML. Keep all
+   original CSS rules intact and make their intended faces available offline. */
+body {
+  font-family: "Inter Variable", "Inter", "Noto Sans Variable", "Noto Sans", Arial, sans-serif;
+}
+
+.serif,
+.welcome-copy h1,
+.detail-info h1,
+.account-hello h2,
+.result h1,
+.csa-hero h1,
+.editorial h3,
+.csa-side strong {
+  font-family: "Inter Variable", "Inter", "Noto Sans Variable", "Noto Sans", Arial, sans-serif;
+}
+
+.nfv-control {
+  font-family: "Noto Sans Variable", "Noto Sans", Arial, sans-serif;
+}

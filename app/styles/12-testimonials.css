@@ -1,0 +1,151 @@
+/* Testimonials inherits the Store/Account palette, type and controls. All styles are feature-scoped. */
+:is(.nfv-testimonials, .nfv-stories-widget, .story-detail-dialog) {
+  --story-card-radius: calc(var(--radius) + 6px);
+  --story-panel-radius: calc(var(--radius) + 4px);
+  --story-surface: var(--paper);
+  --story-border: var(--line);
+  --story-muted-surface: var(--soft);
+  --story-author-size: 12px;
+  --story-author-meta-size: 11px;
+  color: var(--ink);
+  font-family: inherit;
+}
+:is(.nfv-testimonials, .nfv-stories-widget, .story-detail-dialog) * {box-sizing:border-box}
+
+/* Page: familiar Store/Account density and typography without changing the content grid. */
+.nfv-testimonials {--story-author-size:13px;--story-author-meta-size:12px}
+.nfv-testimonials.testimonials-page {min-height:70vh; background:var(--bg); padding-block:28px 58px}
+.nfv-testimonials .testimonials-page-shell {max-width:var(--max,1180px); margin-inline:auto}
+.nfv-testimonials .testimonials-back-link {margin:0 0 17px; padding-left:0}
+.nfv-testimonials .testimonials-page-intro {max-width:770px; margin-bottom:22px}
+.nfv-testimonials .testimonials-page-intro h1 {font:inherit; font-size:clamp(24px,2.55vw,30px); font-weight:650; letter-spacing:-.6px; line-height:1.3; margin:7px 0 10px; color:var(--ink)}
+.nfv-testimonials .testimonials-page-intro p {font-size:14px; line-height:1.7; color:var(--ink2); margin:0}
+.nfv-testimonials .testimonials-filters {margin:0 0 11px}
+.nfv-testimonials .testimonials-refresh-feedback {min-height:27px; display:flex; align-items:center; justify-content:flex-end; gap:8px; color:var(--muted); font-size:12px}
+.nfv-testimonials .testimonials-refresh-feedback .btn {margin-left:8px}
+.nfv-testimonials .testimonials-grid {list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px}
+.nfv-testimonials .testimonials-grid li {display:flex; min-width:0}
+
+/* Story cards mirror the Store's surface, border and hover treatment; one radius per card. */
+:is(.nfv-testimonials,.nfv-stories-widget) :is(.testimonials-list-card,.testimonials-featured-card,.testimonials-preview-card) {
+  display:flex; flex-direction:column; width:100%; padding:0; min-width:0;
+  overflow:hidden; border:1px solid var(--story-border); border-radius:var(--story-card-radius);
+  background:var(--story-surface); color:var(--ink); text-align:left;
+  cursor:pointer; font:inherit;
+  box-shadow:0 1px 3px #203e2610;
+  transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+:is(.nfv-testimonials,.nfv-stories-widget) :is(.testimonials-list-card,.testimonials-featured-card,.testimonials-preview-card):hover {
+  border-color:#b4cbb6; box-shadow:0 7px 20px #203e2618; transform:translateY(-2px);
+}
+:is(.nfv-testimonials,.nfv-stories-widget) :is(.testimonials-list-card,.testimonials-featured-card,.testimonials-preview-card):focus-visible {
+  outline:2px solid var(--green); outline-offset:3px;
+}
+.nfv-testimonials .testimonials-list-card {min-height:100%}
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) :is(.testimonials-list-media,.testimonials-featured-media,.testimonials-preview-media,.testimonials-detail-media) {
+  position:relative; display:block; overflow:hidden; background:var(--story-muted-surface);
+}
+.nfv-testimonials .testimonials-list-media {width:100%; aspect-ratio:16/10}
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) :is(.testimonials-list-media,.testimonials-featured-media,.testimonials-preview-media,.testimonials-detail-media)>img,
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) .testimonials-image-fallback {
+  display:block; width:100%; height:100%; object-fit:cover;
+}
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) .testimonials-image-fallback {
+  display:grid; place-items:center; color:var(--green);
+}
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) .testimonials-tag {
+  position:absolute; left:12px; bottom:12px; width:max-content; max-width:calc(100% - 24px);
+  display:inline-flex; align-items:center; padding:5px 10px;
+  font-size:10px; font-weight:650; letter-spacing:0; line-height:1.25;
+  border:1px solid #d5e5d5; border-radius:999px; background:var(--paper); color:var(--green);
+  box-shadow:0 2px 8px #203e2612;
+}
+:is(.nfv-testimonials,.nfv-stories-widget,.story-detail-dialog) .testimonials-tag.is-farmer {background:#edf5eb; border-color:#cbdfca}
+.nfv-testimonials .testimonials-list-content {display:flex; flex:1; flex-direction:column; padding:18px}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-quote-icon {display:grid; place-items:center; width:25px; height:25px; margin-bottom:9px; color:var(--green); background:var(--soft); border-radius:7px}
+.nfv-testimonials .testimonials-list-content>q {display:-webkit-box; flex:1; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3; margin-bottom:18px; font-weight:600; font-size:14px; line-height:1.65}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-list-person {display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; border-top:1px solid var(--line); padding-top:12px}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-list-person>span:first-child {display:grid; gap:3px; min-width:0}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-list-person strong {font-size:var(--story-author-size); color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-list-person small {font-size:var(--story-author-meta-size); color:var(--muted)}
+:is(.nfv-testimonials,.nfv-stories-widget) .testimonials-card-arrow {display:grid; place-items:center; width:26px; height:26px; flex:none; color:var(--green); border-radius:50%; background:var(--soft)}
+.nfv-testimonials .testimonials-pagination {display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:12px; margin-top:26px}
+.nfv-testimonials .testimonials-pagination span {font-size:13px; color:var(--muted)}
+
+/* A single visible launcher. Strong contrast, comfortable hit area, safe distance from viewport edge. */
+.nfv-stories-widget .testimonials-launcher {
+  position:fixed; z-index:45; left:16px; top:50%; transform:translateY(-50%);
+  min-height:46px; height:46px; padding-inline:16px 18px; gap:10px;
+  border:1px solid var(--green); border-radius:999px;
+  background:var(--green); color:#fff;
+  box-shadow:0 8px 24px #18332638,0 2px 6px #1833261b;
+  font-weight:700; font-size:12px; letter-spacing:.01em;
+  transition:background .15s,box-shadow .15s,transform .15s,opacity .15s;
+}
+.nfv-stories-widget .testimonials-launcher:hover {background:#1c402b; box-shadow:0 10px 28px #1833264f; transform:translateY(calc(-50% - 2px))}
+.nfv-stories-widget .testimonials-launcher .nfv-button-content {display:inline-flex; align-items:center; gap:10px}
+.nfv-stories-widget .testimonials-launcher .ico {width:19px; height:19px; flex:none}
+.nfv-stories-widget .testimonials-launcher:focus-visible {outline:3px solid #a8cdaa; outline-offset:3px}
+.nfv-stories-widget .testimonials-launcher[data-drawer-mounted="true"] {opacity:0; pointer-events:none}
+
+/* Floating Stories uses the same navigation-style panel as Menu and Cart. */
+.nfv-stories-widget .stories-drawer-body {overscroll-behavior:contain; display:flex; flex-direction:column; gap:0; background:var(--paper)}
+.nfv-stories-widget .stories-drawer-description {border:1px solid var(--line); background:var(--soft); border-radius:var(--story-panel-radius); padding:12px 14px; margin:4px 0 18px; font-size:12px; line-height:1.65; color:var(--ink2)}
+.nfv-stories-widget .stories-view-all {width:100%}
+.nfv-stories-widget .testimonials-featured-card {flex:none}
+.nfv-stories-widget .testimonials-featured-media {width:100%; aspect-ratio:16/9}
+.nfv-stories-widget .testimonials-featured-content {display:flex; flex-direction:column; gap:9px; padding:15px}
+.nfv-stories-widget .testimonials-featured-content>q {font-size:13px; line-height:1.65; font-weight:600; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+.nfv-stories-widget .testimonials-preview-list {display:grid; gap:11px; margin-top:15px; padding-top:15px; border-top:1px solid var(--line)}
+.nfv-stories-widget .testimonials-preview-card {display:grid; grid-template-columns:94px minmax(0,1fr); gap:0; min-height:94px}
+.nfv-stories-widget .testimonials-preview-media {height:100%; min-height:94px}
+.nfv-stories-widget .testimonials-preview-media .testimonials-tag {display:none}
+.nfv-stories-widget .testimonials-preview-content {display:grid; align-content:center; gap:7px; min-width:0; padding:11px 12px}
+.nfv-stories-widget .testimonials-preview-content>q {font-size:12px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.nfv-stories-widget .testimonials-preview-content .testimonials-quote-icon,.nfv-stories-widget .testimonials-preview-content .testimonials-card-arrow {display:none}
+.nfv-stories-widget .testimonials-preview-content .testimonials-list-person {border:0; padding:0}
+
+/* Page, drawer and detail loading all use the same centered DataState. */
+.nfv-testimonials .testimonials-results > .nfv-data-state,
+.nfv-stories-widget .stories-drawer-body > .nfv-data-state,
+.story-detail-dialog .testimonials-detail-content > .nfv-data-state {
+  width:100%; min-height:210px; margin:0 auto; align-self:center;
+  justify-content:center; text-align:center;
+}
+.nfv-stories-widget .stories-drawer-body > .nfv-data-state {min-height:180px; flex:1}
+.story-detail-dialog .testimonials-detail-content > .nfv-data-state {min-height:155px}
+
+/* Story detail reuses Store's dialog/bottom-sheet shell; only story content is styled here. */
+.story-detail-dialog .filter-sheet-inner {background:var(--paper);border-radius:var(--story-panel-radius)}
+.story-detail-dialog .testimonials-detail-layout {display:grid; grid-template-columns:minmax(0,40%) minmax(0,1fr); gap:20px}
+.story-detail-dialog .testimonials-detail-media {aspect-ratio:4/5;border-radius:var(--story-panel-radius)}
+.story-detail-dialog .testimonials-detail-content {display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-width:0}
+.story-detail-dialog .testimonials-detail-content>.testimonials-tag {position:static;box-shadow:none}
+.story-detail-dialog .testimonials-detail-quote {font:inherit;font-size:17px;line-height:1.65;font-weight:600;color:var(--ink)}
+.story-detail-dialog .testimonials-full-story {margin:0;color:var(--ink2);font-size:13px;line-height:1.8;white-space:pre-wrap}
+.story-detail-dialog .testimonials-detail-person {width:100%;display:grid;gap:4px;margin-top:auto;padding-top:12px;border-top:1px solid var(--line)}
+.story-detail-dialog .testimonials-detail-person strong {font-size:13px}
+.story-detail-dialog .testimonials-detail-person small {font-size:11px;color:var(--muted)}
+.story-detail-dialog .nfv-data-state {border-radius:var(--story-panel-radius);border-color:var(--line)}
+.story-detail-dialog .nfv-data-state--loading .nfv-data-state-skeleton {border-radius:6px}
+
+@media(max-width:800px) {
+  .nfv-testimonials .testimonials-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .story-detail-dialog .testimonials-detail-layout {grid-template-columns:1fr;gap:14px}
+  .story-detail-dialog .testimonials-detail-media {aspect-ratio:16/9}
+  .story-detail-dialog .testimonials-detail-quote {font-size:16px}
+}
+@media(max-width:560px) {
+  .nfv-testimonials.testimonials-page {padding-block:18px 44px}
+  .nfv-testimonials .testimonials-grid {grid-template-columns:minmax(0,1fr);gap:12px}
+  .nfv-stories-widget .testimonials-launcher {top:auto;left:16px;bottom:calc(86px + env(safe-area-inset-bottom));transform:none;height:44px;min-height:44px;padding-inline:15px}
+  .nfv-stories-widget .testimonials-launcher:hover {transform:translateY(-2px)}
+  .story-detail-dialog .filter-sheet-inner {border-radius:16px 16px 0 0}
+  .story-detail-dialog .testimonials-detail-media {aspect-ratio:16/10}
+  .story-detail-dialog .testimonials-detail-content {padding-bottom:16px}
+}
+@media(prefers-reduced-motion:reduce) {
+  :is(.nfv-testimonials,.nfv-stories-widget) :is(.testimonials-list-card,.testimonials-featured-card,.testimonials-preview-card) {transition:none}
+  .nfv-stories-widget .testimonials-launcher {transition:none}
+}
+@media print {.nfv-stories-widget,.story-detail-dialog {display:none}}

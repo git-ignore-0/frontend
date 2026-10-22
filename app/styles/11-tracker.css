@@ -1,0 +1,807 @@
+/* Farm Tracker: compact Store/Account styling, scoped to page content.
+   Native farmer/photo dialogs intentionally keep their original styling. */
+.nfv-tracker.tracker-standalone {
+  --tracker-dark: #12321f;
+  --tracker-med: #1f5c3f;
+  --tracker-bright: #3f9f74;
+  --tracker-light: #79b854;
+  --tracker-lightbg: #f4f6ea;
+  --tracker-card: #fff;
+  --tracker-gold: #f2b53d;
+  --tracker-farmer: #8a5a2a;
+  --tracker-ink: #22301f;
+  --tracker-muted: #5c6a55;
+  --tracker-line: #e2e8dc;
+  /* Keep ready, loading, empty and error blocks on the same vertical rhythm. */
+  --tracker-section-gap: clamp(22px,3vw,32px);
+  min-width: 0;
+  overflow-x: clip;
+  color: var(--tracker-ink);
+  background: var(--bg);
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+}
+.nfv-tracker * {
+  box-sizing: border-box;
+}
+.nfv-tracker .tracker-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+}
+.nfv-tracker .tracker-shell {
+  /* Scope shared site tokens to the content only; do not recolor detail dialogs. */
+  --tracker-dark: var(--green);
+  --tracker-med: var(--green2);
+  --tracker-farmer: var(--green);
+  --tracker-card: var(--paper);
+  --tracker-lightbg: var(--soft);
+  --tracker-ink: var(--ink);
+  --tracker-muted: var(--muted);
+  --tracker-line: var(--line);
+  --tracker-card-radius: var(--radius);
+  width: min(100%,var(--max));
+  margin: 0 auto;
+  padding: clamp(22px,2.5vw,32px) clamp(15px,2.4vw,24px) clamp(38px,5vw,58px);
+  color: var(--ink);
+  font-family: 'Inter','Noto Sans',Arial,sans-serif;
+}
+.nfv-tracker .tracker-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.nfv-tracker .tracker-header h1 {
+  max-width: 780px;
+  margin: 0 auto 9px;
+  color: var(--tracker-dark);
+  font-family: inherit;
+  font-size: clamp(21px,2.05vw,26px);
+  font-weight: 650;
+  line-height: 1.28;
+  letter-spacing: normal;
+  text-wrap: balance;
+}
+.nfv-tracker .tracker-intro {
+  max-width: 660px;
+  margin: 0 auto;
+  color: var(--tracker-muted);
+  font-size: clamp(13px,1.15vw,14px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.nfv-tracker .tracker-legend {
+  margin: clamp(14px,2vw,20px) 0 8px;
+}
+.nfv-tracker .tracker-legend ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nfv-tracker .tracker-legend li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-card);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+.nfv-tracker .tracker-legend-threshold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--tracker-dark);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+}
+.nfv-tracker .tracker-demo-note {
+  margin: clamp(14px,2vw,20px) 0;
+  padding: clamp(10px,1.3vw,13px) clamp(12px,2vw,18px);
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-lightbg);
+  color: var(--ink2);
+  font-size: clamp(12px,1.05vw,13px);
+  line-height: 1.55;
+  text-align: center;
+}
+.nfv-tracker .tracker-demo-note strong {
+  color: var(--tracker-farmer);
+}
+.nfv-tracker .tracker-plant-icon,
+.nfv-tracker .tracker-mother-tree {
+  display: inline-flex;
+  flex: none;
+  align-items: flex-end;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+.nfv-tracker .tracker-mother-tree-child {
+  margin-right: -.64em;
+  font-size: .42em;
+}
+.nfv-tracker .tracker-stats {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: clamp(8px,1.4vw,12px);
+  margin: 0;
+  padding: 0;
+}
+.nfv-tracker .tracker-stat {
+  min-width: 0;
+  padding: clamp(12px,1.6vw,16px) 10px;
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-card);
+  box-shadow: none;
+  text-align: center;
+}
+.nfv-tracker .tracker-stat dd {
+  margin: 0;
+  color: var(--tracker-dark);
+  font-size: clamp(23px,2.5vw,29px);
+  font-weight: 700;
+  line-height: 1;
+}
+.nfv-tracker .tracker-stat dd.is-loading {
+  min-height: 29px;
+  width: 52px;
+  margin: auto;
+  border-radius: 999px;
+  background: var(--tracker-lightbg);
+  animation: tracker-shimmer 1.4s ease-in-out infinite alternate;
+}
+.nfv-tracker .tracker-stat dt {
+  margin-top: 6px;
+  color: var(--tracker-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  overflow-wrap: anywhere;
+}
+.nfv-tracker .tracker-field-section {
+  min-width: 0;
+  margin: var(--tracker-section-gap) 0;
+  padding: clamp(13px,2vw,18px);
+  overflow: hidden;
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-card);
+  box-shadow: none;
+}
+.nfv-tracker .tracker-field-section h2 {
+  margin: 0 0 4px;
+  color: var(--tracker-dark);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: normal;
+  letter-spacing: normal;
+}
+.nfv-tracker .tracker-field-section>p {
+  margin: 0 0 11px;
+  color: var(--tracker-muted);
+  font-size: 12px;
+}
+.nfv-tracker .tracker-field-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-color: #c9d4bf transparent;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+.nfv-tracker .tracker-field-scroll ul {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 60px;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 10px 6px 12px;
+  border-bottom: 2px dashed var(--tracker-line);
+  list-style: none;
+}
+.nfv-tracker .tracker-field-scroll li {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: 12px;
+}
+.nfv-tracker .tracker-field-icon-stage {
+  position: relative;
+  display: flex;
+  width: 58px;
+  height: 56px;
+  align-items: flex-end;
+  justify-content: center;
+}
+.nfv-tracker .tracker-field-name {
+  max-width: 60px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--tracker-muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nfv-tracker .tracker-farm-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: clamp(10px,1.6vw,14px);
+  margin: clamp(18px,2.5vw,25px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nfv-tracker .tracker-farm-grid>li {
+  display: flex;
+  min-width: 0;
+}
+.nfv-tracker .tracker-farm-card {
+  container: tracker-farm-card / inline-size;
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  padding: clamp(13px,1.6vw,17px);
+  overflow: hidden;
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-card);
+  box-shadow: none;
+  transition: box-shadow .2s ease,border-color .2s ease;
+}
+.nfv-tracker .tracker-farm-card:hover {
+  border-color: #b8ccba;
+  box-shadow: 0 3px 12px #152f2510;
+}
+.nfv-tracker .tracker-leader-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 18px;
+}
+.nfv-tracker .tracker-farm-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.nfv-tracker .tracker-farm-info {
+  min-width: 0;
+}
+.nfv-tracker .tracker-farm-heading h3 {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tracker-dark);
+  font-family: inherit;
+  font-size: clamp(15px,1.6vw,17px);
+  font-weight: 650;
+  line-height: normal;
+  letter-spacing: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nfv-tracker .tracker-farm-location {
+  display: block;
+  margin-top: 2px;
+  color: var(--tracker-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.nfv-tracker .tracker-farm-avatar {
+  position: relative;
+  display: flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--tracker-card-radius);
+  background: linear-gradient(135deg,var(--tracker-dark),var(--tracker-bright));
+  box-shadow: none;
+  font-size: 26px;
+}
+.nfv-tracker .tracker-avatar-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nfv-tracker .tracker-avatar-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nfv-tracker .tracker-stage-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-lightbg);
+  color: var(--tracker-med);
+  font-size: 12px;
+  font-weight: 700;
+}
+.nfv-tracker .tracker-count {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 0 0 10px;
+}
+.nfv-tracker .tracker-count-primary,
+.nfv-tracker .tracker-count-secondary {
+  min-width: 0;
+}
+.nfv-tracker .tracker-count-secondary {
+  text-align: right;
+}
+.nfv-tracker .tracker-count-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+.nfv-tracker .tracker-count-secondary .tracker-count-value {
+  justify-content: flex-end;
+}
+.nfv-tracker .tracker-count-value strong {
+  color: var(--tracker-dark);
+  font-size: 24px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.nfv-tracker .tracker-count-value span {
+  min-width: 0;
+  color: var(--tracker-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.nfv-tracker .tracker-count-label {
+  display: block;
+  color: var(--tracker-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.nfv-tracker .tracker-progress-wrap {
+  position: relative;
+  margin: 14px 2px 5px;
+}
+.nfv-tracker .tracker-progress {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tracker-lightbg);
+}
+.nfv-tracker .tracker-progress>span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg,var(--tracker-light),var(--tracker-bright),var(--tracker-med));
+  transition: width .6s cubic-bezier(.22,1,.36,1);
+}
+.nfv-tracker .tracker-progress-ticks {
+  position: relative;
+  height: 20px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nfv-tracker .tracker-progress-ticks li {
+  position: absolute;
+  top: 0;
+  color: var(--tracker-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  transform: translateX(-50%);
+}
+.nfv-tracker .tracker-progress-ticks li:first-child {
+  transform: none;
+}
+.nfv-tracker .tracker-progress-ticks li:last-child {
+  transform: translateX(-100%);
+}
+.nfv-tracker .tracker-progress-ticks li.is-reached {
+  color: var(--tracker-bright);
+}
+.nfv-tracker .tracker-impact-note {
+  margin: 10px 0 0;
+  color: var(--tracker-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.nfv-tracker .card-action {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+/* Tracker actions use the shared NFV Button; no duplicate button palette. */
+.nfv-tracker .tracker-detail-button .nfv-button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.nfv-tracker .tracker-state .btn {
+  margin-top: 8px;
+}
+.nfv-tracker .tracker-state {
+  margin-top: var(--tracker-section-gap);
+  padding: 30px 18px;
+  border: 1px solid var(--tracker-line);
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-card);
+  text-align: center;
+}
+.nfv-tracker .tracker-state h2 {
+  font-family: inherit;
+  font-size: 17px;
+  color: var(--tracker-dark);
+  letter-spacing: normal;
+}
+.nfv-tracker .tracker-state-skeleton {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 18px;
+}
+.nfv-tracker .tracker-state-skeleton span {
+  height: 24px;
+  width: 98px;
+  border-radius: var(--tracker-card-radius);
+  background: var(--tracker-lightbg);
+  animation: tracker-shimmer 1.4s ease-in-out infinite alternate;
+}
+@keyframes tracker-shimmer {
+  to {
+    opacity: .45;
+  }
+}
+/* Native dialogs are rendered by the tracker page, never style other app dialogs. */
+.nfv-tracker .farmer-dialog {
+  position: fixed;
+  z-index: 101;
+  width: min(980px,88vw);
+  max-width: 980px;
+  max-height: 90dvh;
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--tracker-line);
+  border-radius: 22px;
+  background: white;
+  color: var(--tracker-ink);
+  box-shadow: 0 30px 90px #0b291e55;
+}
+.nfv-tracker .farmer-dialog::backdrop,
+.nfv-tracker .image-lightbox::backdrop {
+  background: #0c211caa;
+  backdrop-filter: blur(3px);
+}
+.nfv-tracker .farmer-dialog__close,
+.nfv-tracker .image-lightbox__close {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #12321f;
+  font-size: 27px;
+  cursor: pointer;
+  box-shadow: 0 3px 14px #0002;
+}
+.nfv-tracker .farmer-dialog__body {
+  display: grid;
+  grid-template-columns: minmax(240px,42%) minmax(0,1fr);
+  min-height: 320px;
+}
+.nfv-tracker .farmer-dialog__media {
+  position: relative;
+  display: flex;
+  min-height: 340px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(145deg,#cbe7b9,#e4f0d8);
+}
+.nfv-tracker .farmer-dialog__fallback {
+  font-size: 72px;
+}
+.nfv-tracker .farmer-dialog__main-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+.nfv-tracker .farmer-dialog__main-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nfv-tracker .farmer-dialog__content {
+  min-width: 0;
+  padding: 36px clamp(20px,4vw,42px);
+}
+.nfv-tracker .farmer-dialog__eyebrow,
+.nfv-tracker .farmer-dialog__about-label {
+  margin: 0 0 8px;
+  color: var(--tracker-farmer);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.nfv-tracker .farmer-dialog__name {
+  margin: 0;
+  color: var(--tracker-dark);
+  font-family: inherit;
+  font-size: clamp(23px,3vw,32px);
+  font-weight: 800;
+  line-height: 1.2;
+}
+.nfv-tracker .farmer-dialog__address {
+  display: inline-flex;
+  margin: 10px 0 26px;
+  padding: 6px 10px;
+  border-radius: 30px;
+  background: var(--tracker-lightbg);
+  color: var(--tracker-muted);
+  font-size: 13px;
+}
+.nfv-tracker .farmer-dialog__description {
+  margin: 0;
+  color: var(--tracker-muted);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+.nfv-tracker .farmer-gallery {
+  margin-top: 26px;
+}
+.nfv-tracker .farmer-gallery__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.nfv-tracker .farmer-gallery__rail {
+  display: flex;
+  gap: 9px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.nfv-tracker .farmer-gallery__thumb {
+  flex: none;
+  width: 68px;
+  height: 68px;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #e8efe3;
+  cursor: pointer;
+}
+.nfv-tracker .farmer-gallery__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nfv-tracker .farmer-gallery__thumb:hover {
+  border-color: var(--tracker-med);
+}
+.nfv-tracker .image-lightbox {
+  position: fixed;
+  z-index: 110;
+  width: min(1200px,94vw);
+  max-width: 1200px;
+  max-height: 94dvh;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: #102018;
+  color: white;
+}
+.nfv-tracker .image-lightbox__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30vh;
+}
+.nfv-tracker .image-lightbox__stage>img {
+  display: block;
+  max-width: 100%;
+  max-height: 88dvh;
+  object-fit: contain;
+}
+.nfv-tracker .image-lightbox__nav {
+  position: absolute;
+  top: 45%;
+  width: 42px;
+  height: 54px;
+  border: 0;
+  border-radius: 9px;
+  background: #14281acc;
+  color: white;
+  font-size: 32px;
+  cursor: pointer;
+}
+.nfv-tracker .image-lightbox__nav--prev {
+  left: 12px;
+}
+.nfv-tracker .image-lightbox__nav--next {
+  right: 12px;
+}
+.nfv-tracker .image-lightbox__meta {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 16px;
+  background: #172c1fbb;
+  color: white;
+  font-size: 12px;
+  white-space: nowrap;
+}
+@container tracker-farm-card (max-width:380px) {
+  .nfv-tracker .tracker-count-label {
+    white-space: normal;
+  }
+  .nfv-tracker .tracker-count-label-part {
+    display: block;
+  }
+}
+@media (max-width:900px) {
+  .nfv-tracker .tracker-shell {
+    padding-top: 22px;
+  }
+  .nfv-tracker .tracker-stats {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .nfv-tracker .tracker-field-scroll ul {
+    gap: 10px 14px;
+  }
+  .nfv-tracker .tracker-field-icon-stage {
+    width: 55px;
+    height: 55px;
+  }
+}
+@media (max-width:680px) {
+  .nfv-tracker .tracker-shell {
+    padding: 20px 14px 42px;
+  }
+  .nfv-tracker .tracker-header h1 {
+    font-size: clamp(20px,5vw,23px);
+    line-height: 1.3;
+  }
+  .nfv-tracker .tracker-intro {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .nfv-tracker .tracker-legend {
+    margin-top: 18px;
+  }
+  .nfv-tracker .tracker-legend ul {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .nfv-tracker .tracker-legend li {
+    padding: 7px 10px;
+  }
+  .nfv-tracker .tracker-stat {
+    padding: 12px 7px;
+  }
+  .nfv-tracker .tracker-stat dd {
+    font-size: 24px;
+  }
+  .nfv-tracker .tracker-stat dt {
+    font-size: 12px;
+  }
+  .nfv-tracker .tracker-farm-grid {
+    grid-template-columns: minmax(0,1fr);
+    gap: 10px;
+  }
+  .nfv-tracker .tracker-farm-card {
+    padding: 14px;
+  }
+  .nfv-tracker .farmer-dialog {
+    width: calc(100vw - 24px);
+    max-height: 90dvh;
+  }
+  .nfv-tracker .farmer-dialog__body {
+    display: block;
+  }
+  .nfv-tracker .farmer-dialog__media {
+    min-height: 180px;
+    max-height: 260px;
+  }
+  .nfv-tracker .farmer-dialog__content {
+    padding: 20px 18px 24px;
+  }
+  .nfv-tracker .farmer-dialog__address {
+    margin-bottom: 18px;
+  }
+  .nfv-tracker .image-lightbox {
+    width: 96vw;
+  }
+}
+@media (max-width:380px) {
+  .nfv-tracker .tracker-shell {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .nfv-tracker .tracker-header h1 {
+    font-size: 23px;
+  }
+  .nfv-tracker .tracker-legend li {
+    font-size: 12.5px;
+  }
+  .nfv-tracker .tracker-legend-threshold {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+  .nfv-tracker .tracker-field-icon-stage {
+    width: 50px;
+  }
+  .nfv-tracker .tracker-farm-card {
+    padding: 12px;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .nfv-tracker .tracker-progress>span,
+  .nfv-tracker .tracker-farm-card,
+  .nfv-tracker .tracker-stat dd.is-loading,
+  .nfv-tracker .tracker-state-skeleton span {
+    animation: none;
+  }
+}

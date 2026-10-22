@@ -1,0 +1,59 @@
+/* Checkout: desktop uses two columns. One action footer follows the full summary on mobile. */
+.checkout-flow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 315px;
+  grid-template-areas: "details totals" "actions totals";
+  align-items: start;
+  gap: 10px 22px;
+}
+.checkout-flow-main { grid-area: details; min-width: 0; }
+.checkout-flow-main > .box { margin-bottom: 0; }
+.checkout-flow-layout > .checkout-summary { grid-area: totals; min-width: 0; margin: 0; }
+.checkout-flow-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 0 4px;
+}
+.checkout-flow-actions .btn { min-width: 0; }
+/* At intermediate widths, don't squeeze form and totals into two narrow columns. */
+@media (max-width: 980px) {
+  .checkout-flow-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "details" "totals" "actions";
+    gap: 12px;
+  }
+  .checkout-flow-layout > .checkout-summary { position: static; }
+  .checkout-flow-actions { padding: 2px 0 8px; }
+}
+@media (max-width: 420px) {
+  .checkout-flow-actions { gap: 8px; }
+  .checkout-flow-actions .btn { flex: 1 1 0; min-width: 0; white-space: normal; }
+}
+
+/* v41: checkout recipient summary when the visitor is signed in. */
+.checkout-recipient-saved{border:1px solid var(--line);background:var(--paper);padding:14px;border-radius:4px;min-width:0;}
+.checkout-recipient-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.checkout-recipient-saved>strong{font-size:14px;display:block;}
+.checkout-recipient-saved .sm{margin-top:2px;}
+.checkout-recipient-saved p{margin:5px 0 0;font-size:13px;overflow-wrap:anywhere;color:var(--ink2);}
+@media(max-width:420px){.checkout-recipient-saved{padding:12px;}}
+
+@media(max-width:600px){}
+
+/* Checkout recipient buttons share the same size on desktop and mobile. */
+
+/* Recipient details and inline edit action on the confirmation screen. */
+.nfv-review-address-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;min-width:0}
+.nfv-review-address-head h3{margin:0;font-size:14px}
+.nfv-review-address-head .btn{flex:none}
+
+@media(max-width:420px){
+ .checkout-flow-actions .btn[data-act="checkout-back-cart"],
+ .checkout-flow-actions .btn[data-act="checkout-back-review"]{flex:0 1 auto;padding-inline:9px}
+ .checkout-flow-actions .btn[data-act="place-order"],
+ .checkout-flow-actions .btn[data-checkout-continue]{flex:1 1 auto;padding-inline:7px}
+}

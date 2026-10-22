@@ -1,0 +1,129 @@
+/* app: one main navigation definition, with desktop links >=1280px and a mobile drawer below. */
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.25vw, 21px);
+  height: 100%;
+  min-width: 0;
+  margin-left: 6px;
+}
+.nfv-nav-link {
+  color: var(--ink2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.nfv-nav-link--desktop {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-bottom: 2px solid transparent;
+  padding-top: 2px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.nfv-nav-link--desktop:is(:hover, .is-active) {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+.nfv-menu-trigger { display: none; }
+
+/* Visual shell reused by Menu, Store cart and Floating Stories. */
+.nfv-mobile-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(17, 40, 27, .60);
+}
+.nfv-mobile-nav-panel {
+  width: min(360px, 90vw);
+  height: 100%;
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: -8px 0 30px rgba(16, 34, 21, .16);
+}
+.nfv-mobile-nav-heading,
+.nfv-mobile-nav-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+}
+.nfv-mobile-nav-heading {
+  min-height: 66px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.nfv-mobile-nav-heading h2 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: .03em; }
+.nfv-mobile-nav-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  color: var(--ink);
+}
+.nfv-mobile-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 18px;
+}
+.nfv-mobile-nav-list { display: grid; gap: 3px; }
+.nfv-mobile-nav-account { border-top: 1px solid var(--line); padding-top: 9px; margin-top: 9px; }
+.nfv-nav-link--drawer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 49px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 14px;
+}
+.nfv-nav-link-icon { display: inline-flex; color: #66876b; }
+.nfv-nav-link--drawer:hover,
+.nfv-nav-link--drawer.is-active { background: #ecf3e9; color: var(--green); }
+.nfv-nav-link--drawer > span:nth-child(2) { flex: 1; }
+.nfv-mobile-nav-footer {
+  border-top: 1px solid var(--line);
+  padding: 15px 18px calc(15px + env(safe-area-inset-bottom));
+  color: var(--ink2);
+  font-size: 13px;
+}
+.nfv-locale-toggle {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  padding: 5px 11px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+@media (max-width: 1279px) {
+  .main-nav { display: none; }
+  .header-inner { gap: 12px; }
+  .nfv-menu-trigger { display: inline-flex; }
+}
+@media (max-width: 560px) {
+  .site-header .locale-button { display: none !important; }
+  .site-header .header-actions { gap: 6px; flex: none; }
+}
+@media (max-width: 360px) {
+  .site-header .header-inner { gap: 6px; }
+  .site-header .header-actions { gap: 4px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nfv-mobile-nav-panel { animation: nfv-nav-slide-in .2s ease-out both; }
+  @keyframes nfv-nav-slide-in { from { transform: translateX(18px); opacity: .8; } to { transform: translateX(0); opacity: 1; } }
+}

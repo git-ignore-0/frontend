@@ -1,4 +1,5 @@
 import type {Locale, Screen} from "@/types";
+import type {PublicSiteSettings} from "@/types/site-settings";
 import {SITE_ORIGIN} from "@/config/site-brand";
 
 export type MainNavId = "home" | "about" | "workshops" | "csa" | "tracker" | "testimonials" | "store" | "forum" | "account" | "plants" | "animals";
@@ -19,11 +20,20 @@ export const MAIN_NAV_ITEMS: readonly MainNavItem[] = [
   {id:"workshops",label:{vi:"Workshop",en:"Workshops"},path:"/workshops/{locale}",icon:"clock",screen:"workshops"},
   {id:"csa",label:{vi:"CSA",en:"CSA"},path:"/csa/{locale}",icon:"leaf",screen:"csa"},
   {id:"tracker",label:{vi:"Theo dõi nông trại",en:"Farm tracker"},path:"/tracker/{locale}",icon:"pin",screen:"tracker"},
-  {id:"store",label:{vi:"Cửa hàng",en:"Store"},path:"/store/{locale}",icon:"bag",screen:"store"},
-  {id:"forum",label:{vi:"Diễn đàn",en:"Forum"},path:"https://forum.naturalfarmingvietnam.com/",icon:"share",external:true}
+  {id:"store",label:{vi:"Cửa hàng",en:"Store"},path:"/store/{locale}",icon:"bag",screen:"store"}
 ];
 
-/** Account is available in the compact drawer, without changing the seven site destinations. */
+const FORUM_NAV_ITEM:Omit<MainNavItem,"path">={
+  id:"forum",label:{vi:"Diễn đàn",en:"Forum"},icon:"share",external:true
+};
+
+/** Forum is public only while its enabled link is present in site settings. */
+export function mainNavigationItems(settings:PublicSiteSettings|null):readonly MainNavItem[]{
+  const forum=settings?.links.find(link=>link.kind==="forum")?.url;
+  return forum?[...MAIN_NAV_ITEMS,{...FORUM_NAV_ITEM,path:forum}]:MAIN_NAV_ITEMS;
+}
+
+/** Account is available in the compact drawer without changing public destinations. */
 export const MAIN_NAV_ACCOUNT: MainNavItem = {
   id:"account",label:{vi:"Tài khoản",en:"Account"},path:"/account/{locale}",icon:"user",screen:"account"
 };

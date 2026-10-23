@@ -9,12 +9,14 @@ const drawer=source("src/components/navigation/MobileNavDrawer.tsx");
 const header=source("src/components/navigation/SiteHeader.tsx");
 const styles=source("app/styles/05-main-navigation.css");
 
-test("v62 has exactly seven canonical navigation destinations",()=>{
+test("v62 has six permanent destinations and a settings-driven Forum destination",()=>{
   const ids=[...data.matchAll(/\{id:"(home|about|workshops|csa|tracker|store|forum)"/g)].map(match=>match[1]);
-  assert.deepEqual(ids,["home","about","workshops","csa","tracker","store","forum"]);
-  for(const route of ["/{locale}","/about/{locale}","/workshops/{locale}","/csa/{locale}","/tracker/{locale}","/store/{locale}","https://forum.naturalfarmingvietnam.com/"]){
+  assert.deepEqual(ids,["home","about","workshops","csa","tracker","store"]);
+  for(const route of ["/{locale}","/about/{locale}","/workshops/{locale}","/csa/{locale}","/tracker/{locale}","/store/{locale}"]){
     assert.ok(data.includes(`path:"${route}"`),route);
   }
+  assert.match(data,/mainNavigationItems/);
+  assert.doesNotMatch(data,/https:\/\/forum\.naturalfarmingvietnam\.com/);
   assert.match(data,/MAIN_NAV_ACCOUNT: MainNavItem/);
   assert.match(data,/path:"\/account\/\{locale\}"/);
   assert.doesNotMatch(data,/MAIN_NAV_SHORTCUTS|featured:true/);
@@ -22,7 +24,7 @@ test("v62 has exactly seven canonical navigation destinations",()=>{
 
 test("desktop and drawer share a link component; only drawer includes Account",()=>{
   assert.match(main,/export function MainNavLink/);
-  assert.match(main,/MAIN_NAV_ITEMS\.map\(item=><MainNavLink/);
+  assert.match(main,/mainNavigationItems\(settings\)\.map\(item=><MainNavLink/);
   assert.match(main,/item=\{MAIN_NAV_ACCOUNT\}/);
   assert.doesNotMatch(main,/MAIN_NAV_SHORTCUTS|Truy cập nhanh|Khám phá NFV/);
   assert.match(main,/href=\{href\}/);

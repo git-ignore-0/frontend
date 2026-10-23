@@ -12,7 +12,7 @@ const profile=source("src/screens/AccountProfile.tsx");
 const logout=source("src/components/auth/LogoutButton.tsx");
 
 test("drawer shows only site links, Account and language selector",()=>{
-  assert.match(nav,/MAIN_NAV_ITEMS\.map/);
+  assert.match(nav,/mainNavigationItems\(settings\)\.map/);
   assert.match(nav,/item=\{MAIN_NAV_ACCOUNT\}/);
   assert.doesNotMatch(nav,/shortcut|Quick access|Truy cập nhanh|Khám phá NFV/);
   assert.doesNotMatch(drawer,/nfv-mobile-nav-shortcuts/);

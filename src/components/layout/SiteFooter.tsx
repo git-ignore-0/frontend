@@ -1,13 +1,18 @@
 "use client";
 
 import {BrandLogo} from "@/components/brand/BrandLogo";
-import {FOOTER_CONTACT,FOOTER_COPY,FOOTER_LINKS,resolveFooterLink} from "@/data/footer-navigation";
+import {FOOTER_COPY,footerNavigationLinks,resolveFooterLink} from "@/data/footer-navigation";
+import {useSiteSettings} from "@/hooks/useSiteSettings";
+import {contactPresentation} from "@/lib/contact-settings";
+import {externalLinkLabel} from "@/lib/site-links";
 import {useNFV} from "@/state/NFVContext";
 
 /** Keeps the brand/footer sections together in one content grid, themed with shared design tokens. */
 export function SiteFooter(){
   const {ui}=useNFV();
   const copy=FOOTER_COPY[ui.locale];
+  const settings=useSiteSettings(ui.locale);
+  const {email,phone,phoneHref,facebook,youtube}=contactPresentation(settings);
   return <footer className="nfv-site-footer">
     <div className="container nfv-site-footer__inner">
       <div className="nfv-site-footer__main">
@@ -21,15 +26,20 @@ export function SiteFooter(){
         <section className="nfv-site-footer__contact">
           <h2>{copy.contactTitle}</h2>
           <dl>
-            <div><dt>{copy.emailLabel}</dt><dd><a href={`mailto:${FOOTER_CONTACT.email}`}>{FOOTER_CONTACT.email}</a></dd></div>
-            <div><dt>{copy.phoneLabel}</dt><dd><a href={`tel:${FOOTER_CONTACT.phoneHref}`}>{FOOTER_CONTACT.phone}</a></dd></div>
+            {email&&<div><dt>{copy.emailLabel}</dt><dd><a href={`mailto:${email}`}>{email}</a></dd></div>}
+            {phone&&<div><dt>{copy.phoneLabel}</dt><dd><a href={phoneHref}>{phone}</a></dd></div>}
           </dl>
+          {(facebook||youtube)&&<nav className="nfv-site-footer__socials" aria-label={ui.locale==="vi"?"Mạng xã hội":"Social media"}>
+            {facebook&&<a href={facebook} target="_blank" rel="noopener noreferrer" aria-label={externalLinkLabel("Facebook",ui.locale)}>Facebook <span aria-hidden="true">↗</span></a>}
+            {youtube&&<a href={youtube} target="_blank" rel="noopener noreferrer" aria-label={externalLinkLabel("YouTube",ui.locale)}>YouTube <span aria-hidden="true">↗</span></a>}
+          </nav>}
           <p>{copy.contactNote}</p>
         </section>
         <nav className="nfv-site-footer__nav" aria-label={ui.locale==="vi"?"Liên kết cuối trang":"Footer navigation"}>
-          {FOOTER_LINKS.map(link=>{
-            const item=resolveFooterLink(link,ui.locale);
+          {footerNavigationLinks(settings).map(link=>{
+            const item=resolveFooterLink(link,ui.locale,settings);
             return <a key={item.id} href={item.href} target={item.external?"_blank":undefined}
+              aria-label={item.external?externalLinkLabel(item.label,ui.locale):undefined}
               rel={item.external?"noopener noreferrer":undefined}>{item.label}{item.external&&<span aria-hidden="true"> ↗</span>}</a>;
           })}
         </nav>

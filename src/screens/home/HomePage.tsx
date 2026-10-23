@@ -5,6 +5,7 @@ import {HomeImage,HomeSectionHeading,HomeTextLink,sitePageHref} from "./HomeShar
 import {HomeStoryCard} from "./HomeStoryCard";
 import {HomeWorkshops} from "./HomeWorkshops";
 import {ContactLinks} from "@/components/editorial/ContactLinks";
+import {useSiteSettings} from "@/hooks/useSiteSettings";
 import {useHomeContent} from "./useHomeContent";
 
 /** Single Home screen. Layout shell owns Header/Footer; Home styles are scoped. */
@@ -12,7 +13,8 @@ export function HomePage(){
   const {ui,navigate}=useNFV();
   const {locale}=ui;
   const c=HOME_COPY[locale];
-  const {workshops,settings}=useHomeContent(locale);
+  const {workshops}=useHomeContent(locale);
+  const settings=useSiteSettings(locale);
   const stories=[
     {image:"harvest.webp",label:c.plantLabel,title:c.plantTitle,body:c.plantBody,cta:c.plantCta,href:sitePageHref(locale,"plants")},
     {image:"piglets.webp",label:c.animalLabel,title:c.animalTitle,body:c.animalBody,cta:c.animalCta,href:sitePageHref(locale,"animals"),tall:true},

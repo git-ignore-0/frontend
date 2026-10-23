@@ -21,14 +21,15 @@ async function loadBrowserNavigation(){
 }
 
 test('desktop/drawer routing keeps ported pages local and tracker stay on local routes',()=>{
-  const item=id=>nav.MAIN_NAV_ITEMS.find(x=>x.id===id);
+  const items=nav.mainNavigationItems({links:[{kind:'forum',url:'https://forum.example/'}]});
+  const item=id=>items.find(x=>x.id===id);
   assert.equal(nav.resolveMainNavHref(item('home'),'vi'),'/vi');
   assert.equal(nav.resolveMainNavHref(item('about'),'en'),'/about/en');
   assert.equal(nav.resolveMainNavHref(item('workshops'),'vi'),'/workshops/vi');
   assert.equal(nav.resolveMainNavHref(item('tracker'),'vi'),'/tracker/vi');
   assert.equal(nav.resolveMainNavHref(item('store'),'en'),'/store/en');
   assert.equal(nav.resolveMainNavHref(item('csa'),'vi'),'/csa/vi');
-  assert.equal(nav.resolveMainNavHref(item('forum'),'vi'),'https://forum.naturalfarmingvietnam.com/');
+  assert.equal(nav.resolveMainNavHref(item('forum'),'vi'),'https://forum.example/');
   assert.equal(nav.resolveMainNavHref(nav.MAIN_NAV_ACCOUNT,'vi'),'/account/vi');
 });
 

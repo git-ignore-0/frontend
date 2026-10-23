@@ -58,6 +58,7 @@
 .nfv-site-footer__contact dl > div { display: grid; gap: 2px; }
 .nfv-site-footer__contact dt { font-weight: 750; color: #fff; }
 .nfv-site-footer__contact dd { margin: 0; overflow-wrap: anywhere; }
+.nfv-site-footer__socials { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-weight: 700; }
 .nfv-site-footer__contact p { margin: 14px 0 0; color: #e2eee2; }
 .nfv-site-footer__nav {
   display: grid;

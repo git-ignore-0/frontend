@@ -1,5 +1,6 @@
 import type {Locale} from "@/types";
-import {MAIN_NAV_ITEMS,resolveMainNavHref,type MainNavId} from "@/data/main-navigation";
+import type {PublicSiteSettings} from "@/types/site-settings";
+import {mainNavigationItems,resolveMainNavHref,type MainNavId} from "@/data/main-navigation";
 import {SITE_ORIGIN} from "@/config/site-brand";
 import {isLocalPublicPage} from "@/lib/site-links";
 
@@ -22,13 +23,18 @@ export const FOOTER_LINKS: readonly FooterLink[] = [
   {id:"forum"}
 ];
 
+export function footerNavigationLinks(settings:PublicSiteSettings|null):readonly FooterLink[]{
+  const forumEnabled=mainNavigationItems(settings).some(item=>item.id==="forum");
+  return forumEnabled?FOOTER_LINKS:FOOTER_LINKS.filter(link=>link.id!=="forum");
+}
+
 /** Shared link resolution keeps the footer and main menu in sync. */
-export function resolveFooterLink(link:FooterLink,locale:Locale){
+export function resolveFooterLink(link:FooterLink,locale:Locale,settings:PublicSiteSettings|null){
   if ("path" in link) return {
     id:link.id, label:link.label[locale],
     href:isLocalPublicPage(link.id) ? link.path.replace("{locale}",locale) : `${SITE_ORIGIN}${link.path.replace("{locale}",locale)}`,external:false
   };
-  const shared=MAIN_NAV_ITEMS.find(item=>item.id===link.id);
+  const shared=mainNavigationItems(settings).find(item=>item.id===link.id);
   if(!shared) throw new Error(`Unknown main navigation id: ${link.id}`);
   return {
     id:shared.id,label:shared.label[locale],
@@ -54,7 +60,3 @@ export const FOOTER_COPY:Record<Locale,{
     legal:"Knowledge grows through observation.", closing:"Living Soil · From soil, life begins"
   }
 };
-
-export const FOOTER_CONTACT = {
-  email:"khanh@naturalfarmingvietnam.com", phone:"+84 988.158.285", phoneHref:"+84988158285"
-} as const;

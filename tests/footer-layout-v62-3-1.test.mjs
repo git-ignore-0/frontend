@@ -12,7 +12,8 @@ test('Footer keeps brand, contact and links in one content grid before copyright
   const bottom=jsx.indexOf('className="nfv-site-footer__bottom"');
   assert.ok(mainStart < about && about < contact && contact < links && links < bottom);
   assert.equal((jsx.match(/<BrandLogo/g)||[]).length,1);
-  assert.equal((jsx.match(/<nav /g)||[]).length,1);
+  assert.equal((jsx.match(/<nav /g)||[]).length,2);
+  assert.match(jsx,/className="nfv-site-footer__socials"/);
 });
 
 test('Footer darkens the primary button base green rather than using hover color',()=>{
@@ -33,6 +34,6 @@ test('Footer links remain data-driven and responsive without horizontal list',()
   assert.match(css,/\.nfv-site-footer__nav\s*\{\s*display:\s*grid/);
   assert.match(css,/max-width:\s*1023px/);
   assert.match(css,/max-width:\s*680px/);
-  assert.match(jsx,/FOOTER_LINKS\.map/);
+  assert.match(jsx,/footerNavigationLinks\(settings\)\.map/);
   assert.doesNotMatch(css,/\.nfv-site-footer__upper/);
 });

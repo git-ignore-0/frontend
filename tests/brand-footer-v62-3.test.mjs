@@ -21,15 +21,13 @@ test('v2 logo is canonical asset reused by one BrandLogo in Header and Footer',(
 test('Footer reproduces v2 brand/contact/links/copyright grouping',()=>{
   const footer=file('src/components/layout/SiteFooter.tsx');
   const data=file('src/data/footer-navigation.ts');
-  for(const required of ['nfv-site-footer__about','nfv-site-footer__contact','nfv-site-footer__nav','nfv-site-footer__bottom','mailto:','tel:']){
+  for(const required of ['nfv-site-footer__about','nfv-site-footer__contact','nfv-site-footer__nav','nfv-site-footer__bottom','mailto:']){
     assert.ok(footer.includes(required),required);
   }
-  assert.match(data,/khanh@naturalfarmingvietnam\.com/);
-  assert.match(data,/\+84 988\.158\.285/);
   assert.match(data,/FOOTER_LINKS:[^=]+=/);
   const block=data.split('export const FOOTER_LINKS:')[1].split('];')[0];
   assert.equal((block.match(/\{id:/g)||[]).length,10);
-  assert.match(data,/MAIN_NAV_ITEMS\.find/);
+  assert.match(data,/mainNavigationItems\(settings\)\.find/);
   assert.match(data,/SITE_ORIGIN/);
   assert.match(data,/href:resolveMainNavHref\(shared,locale\)/);
 });

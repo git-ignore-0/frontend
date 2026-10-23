@@ -36,11 +36,13 @@ test('home CSS is imported only once and uses a dedicated namespace, not global 
   assert.doesNotMatch(css,/(^|\n)\s*(html|body|h1|\.site-header|\.nfv-site-footer|\.btn)(?=\s*[{,:])/m);
 });
 
-test('workshops and contacts share one public content endpoint and preserve optional data',()=>{
+test('Home loads workshops separately and reuses the shared site-settings loader',()=>{
   assert.match(source('src/screens/home/useHomeContent.ts'),/api\/home-content/);
+  assert.match(source('src/screens/home/HomePage.tsx'),/useSiteSettings/);
+  assert.doesNotMatch(source('app/api/home-content/route.ts'),/site-settings/);
   assert.match(source('src/lib/public-workshop.ts'),/CONTENT_API_ORIGIN/);
   assert.match(source('src/screens/home/HomeWorkshops.tsx'),/if\(!workshops.length\)return null/);
-  assert.match(source('src/components/editorial/ContactLinks.tsx'),/is_email_enabled/);
+  assert.match(source('src/lib/contact-settings.ts'),/is_email_enabled/);
   assert.doesNotMatch(source('src/screens/home/HomePage.tsx'),/\/api\/auth|useAuth/);
 });
 

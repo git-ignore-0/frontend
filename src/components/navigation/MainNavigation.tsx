@@ -4,7 +4,9 @@ import type {MouseEvent} from "react";
 import {Icon} from "@/components/UI";
 import {useAuth} from "@/auth/AuthProvider";
 import {GuestAuthActions} from "@/components/auth/GuestAuthActions";
-import {activeMainNavId, resolveMainNavHref, MAIN_NAV_ACCOUNT, MAIN_NAV_ITEMS, type MainNavItem} from "@/data/main-navigation";
+import {activeMainNavId,resolveMainNavHref,MAIN_NAV_ACCOUNT,mainNavigationItems,type MainNavItem} from "@/data/main-navigation";
+import {useSiteSettings} from "@/hooks/useSiteSettings";
+import {externalLinkLabel} from "@/lib/site-links";
 import {useNFV} from "@/state/NFVContext";
 
 type NavLinkProps = {
@@ -34,6 +36,7 @@ export function MainNavLink({item,variant,onNavigate}:NavLinkProps){
     onClick={follow}
     target={item.external?"_blank":undefined}
     rel={item.external?"noopener noreferrer":undefined}
+    aria-label={item.external?externalLinkLabel(label,ui.locale):undefined}
     aria-current={active?"page":undefined}
     className={`nfv-nav-link nfv-nav-link--${variant}${active?" is-active":""}`}
   >
@@ -45,16 +48,18 @@ export function MainNavLink({item,variant,onNavigate}:NavLinkProps){
 
 export function DesktopNavigation(){
   const {ui}=useNFV();
+  const settings=useSiteSettings(ui.locale);
   return <nav className="main-nav" aria-label={ui.locale==="vi"?"Điều hướng chính":"Main navigation"}>
-    {MAIN_NAV_ITEMS.map(item=><MainNavLink key={item.id} item={item} variant="desktop"/>) }
+    {mainNavigationItems(settings).map(item=><MainNavLink key={item.id} item={item} variant="desktop"/>) }
   </nav>;
 }
 
 export function MobileNavigationLinks({onNavigate}:{onNavigate:()=>void}){
   const {ui}=useNFV();
   const {status}=useAuth();
+  const settings=useSiteSettings(ui.locale);
   return <nav className="nfv-mobile-nav-list" aria-label={ui.locale==="vi"?"Điều hướng chính":"Main navigation"}>
-    {MAIN_NAV_ITEMS.map(item=><MainNavLink key={item.id} item={item} variant="drawer" onNavigate={onNavigate}/>) }
+    {mainNavigationItems(settings).map(item=><MainNavLink key={item.id} item={item} variant="drawer" onNavigate={onNavigate}/>) }
     <div className="nfv-mobile-nav-account">
       {status==="authenticated"?<MainNavLink item={MAIN_NAV_ACCOUNT} variant="drawer" onNavigate={onNavigate}/>:
         status==="guest"||status==="expired"?<GuestAuthActions locale={ui.locale} variant="drawer"/>:null}

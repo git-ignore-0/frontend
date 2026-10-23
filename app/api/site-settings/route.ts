@@ -6,7 +6,9 @@ export async function GET(request:Request){
   const origin=getPublicContentOrigin();
   if(!origin)return NextResponse.json(null);
   try{
-    const response=await fetch(`${origin}/api/v1/public/site-settings?locale=${locale}`,{next:{revalidate:300},signal:AbortSignal.timeout(5000)});
+    const response=await fetch(`${origin}/api/v1/public/site-settings?locale=${locale}`,{
+      cache:"no-store",signal:AbortSignal.timeout(5000)
+    });
     if(!response.ok)return NextResponse.json(null);
     const payload=await response.json();
     return NextResponse.json(parseSettings(payload?.data));

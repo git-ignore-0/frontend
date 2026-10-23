@@ -24,7 +24,7 @@ test('Scoped CSA stylesheet preserves V2 responsive structure and V62 tokens',()
  assert.match(css,/@media\(max-width:1023px\)/);
  assert.match(css,/@media\(min-width:768px\)/);
  assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
- assert.match(css,/var\(--radius\)/);
+ assert.match(css,/var\(--csa-surface-radius\)/);
  assert.match(css,/var\(--bg\)/);
  assert.match(css,/prefers-reduced-motion/);
  assert.match(read('app/layout.tsx'),/13-csa\.css/);

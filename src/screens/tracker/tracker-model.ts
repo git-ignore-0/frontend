@@ -110,18 +110,21 @@ function imageFrom(value: unknown): FarmImage | null {
   }
 
   const variants = Array.isArray(value.variants)
-    ? value.variants
-        .filter(
-          (variant): variant is { url: string; width: number; height: number } =>
-            isRecord(variant) &&
-            safeUrl(variant.url) &&
-            typeof variant.width === "number" &&
-            variant.width > 0 &&
-            typeof variant.height === "number" &&
-            variant.height > 0,
-        )
-        .map((variant) => ({ url: variant.url, width: variant.width, height: variant.height }))
+    ? value.variants.map((variant) =>
+        isRecord(variant) &&
+        safeUrl(variant.url) &&
+        typeof variant.width === "number" &&
+        Number.isInteger(variant.width) &&
+        variant.width > 0 &&
+        typeof variant.height === "number" &&
+        Number.isInteger(variant.height) &&
+        variant.height > 0
+          ? { url: variant.url, width: variant.width, height: variant.height }
+          : null,
+      )
     : [];
+
+  if (variants.some((variant) => variant === null)) return null;
 
   return {
     id: value.id,
@@ -129,7 +132,7 @@ function imageFrom(value: unknown): FarmImage | null {
     width: value.width,
     height: value.height,
     alt: typeof value.alt === "string" ? value.alt : "",
-    variants,
+    variants: variants as Array<{ url: string; width: number; height: number }>,
   };
 }
 
@@ -145,6 +148,8 @@ export function parseTrackerFarms(payload: unknown): TrackerFarm[] {
       !raw.id ||
       typeof raw.name !== "string" ||
       typeof raw.location !== "string" ||
+      typeof raw.sort_order !== "number" ||
+      !Number.isInteger(raw.sort_order) ||
       typeof raw.signup_count !== "number" ||
       !Number.isInteger(raw.signup_count) ||
       raw.signup_count < 0 ||
@@ -185,7 +190,7 @@ export function parseTrackerFarms(payload: unknown): TrackerFarm[] {
       signup_count: raw.signup_count,
       one_month_signup_count:
         typeof raw.one_month_signup_count === "number" ? raw.one_month_signup_count : 0,
-      sort_order: typeof raw.sort_order === "number" ? raw.sort_order : 0,
+      sort_order: raw.sort_order,
       image,
       images: images as FarmImage[],
     };

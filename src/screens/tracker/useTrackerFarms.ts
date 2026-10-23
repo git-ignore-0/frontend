@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Locale } from "@/types";
+import { trackerRetrySuffix } from "./tracker-api";
 import { parseTrackerFarms, type TrackerFarm } from "./tracker-model";
 
 type TrackerState = {
@@ -19,7 +20,7 @@ export function useTrackerFarms(locale: Locale) {
     const controller = new AbortController();
     setResult({ state: "loading", farms: [] });
 
-    fetch(`/api/tracker-farms?locale=${locale}`, {
+    fetch(`/api/tracker-farms?locale=${locale}${trackerRetrySuffix(retryNumber)}`, {
       cache: "no-store",
       signal: controller.signal,
     })

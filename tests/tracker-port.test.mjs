@@ -1,11 +1,32 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
-import {stripTypeScriptTypes} from 'node:module';
+import {createRequire,stripTypeScriptTypes} from 'node:module';
+import vm from 'node:vm';
 const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
+const require=createRequire(import.meta.url);
+const ts=require('typescript');
 const model=await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(read('src/screens/tracker/tracker-model.ts')))}`);
+const publicRequest={};
+vm.runInNewContext(ts.transpileModule(read('src/lib/public-request.ts'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:publicRequest,require:()=>({})});
+const api={};
+vm.runInNewContext(ts.transpileModule(read('src/screens/tracker/tracker-api.ts'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:api,require:id=>id==='@/lib/public-request'?publicRequest:{},process:{env:{NODE_ENV:'test'}}});
 const farm=(count,oneMonth=2)=>({id:'farm-1',name:'Farm',location:'Vietnam',description:'',signup_count:count,one_month_signup_count:oneMonth,sort_order:1,image:null,images:[]});
+function runTrackerRoute({origin='http://127.0.0.1:8000',upstreamOk=true}={}){
+ const code=ts.transpileModule(read('app/api/tracker-farms/route.ts'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const exp={},fetchCalls=[];
+ const fetch=async(url,init)=>{fetchCalls.push({url:String(url),init});return {ok:upstreamOk,status:upstreamOk?200:503,json:async()=>({data:[farm(10)]})};};
+ const requireStub=id=>{
+  if(id==='next/server')return {NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{...init,headers:{'Content-Type':'application/json',...(init.headers??{})}})}};
+  if(id==='@/lib/public-workshop')return {getPublicContentOrigin:()=>origin};
+  if(id==='@/screens/tracker/tracker-api')return api;
+  if(id==='@/screens/tracker/tracker-model')return model;
+  throw new Error(`Unexpected import ${id}`);
+ };
+ vm.runInNewContext(code,{exports:exp,require:requireStub,URL,AbortSignal,Response,fetch,process:{env:{NODE_ENV:'production'}}});
+ return {route:exp,fetchCalls};
+}
 
 test('tracker has exactly one local page and correct localized routes',()=>{
  assert.ok(existsSync(new URL('app/tracker/[locale]/page.tsx',root)));
@@ -28,13 +49,50 @@ test('public tracker contract rejects malformed payloads and unsafe images',()=>
  assert.deepEqual(model.parseTrackerFarms({data:[farm(10)]}),[farm(10)]);
  assert.throws(()=>model.parseTrackerFarms({wrong:[]}));
  assert.throws(()=>model.parseTrackerFarms({data:[{...farm(0),signup_count:'10'}]}));
+ assert.throws(()=>model.parseTrackerFarms({data:[{...farm(0),sort_order:1.5}]}));
  assert.throws(()=>model.parseTrackerFarms({data:[{...farm(0),image:{id:'i',url:'javascript:alert(1)',width:300,height:200}}]}));
+ assert.throws(()=>model.parseTrackerFarms({data:[{...farm(0),image:{id:'i',url:'https://example.test/farm.jpg',width:300,height:200,variants:[{url:'https://example.test/thumb.jpg',width:120.5,height:80}]}}]}));
 });
-test('tracker API uses only configured backend and distinguishes failure from empty',()=>{
- const route=read('app/api/tracker-farms/route.ts');
- assert.match(route,/getPublicContentOrigin/);assert.match(route,/\/api\/v1\/public\/tracker-farms\?locale=/);
- assert.match(route,/parseTrackerFarms/);assert.match(route,/status:\s*503/);assert.match(route,/status:\s*502/);
- assert.doesNotMatch(route,/Ka Sa Salime|Bến Tre Demonstration Farm|mockFarms/);
+test('tracker upstream cache is fresh locally, cached in production, and bypassed by retry',()=>{
+ assert.deepEqual(JSON.parse(JSON.stringify(api.trackerFetchOptions('development',false))),{cache:'no-store'});
+ assert.deepEqual(JSON.parse(JSON.stringify(api.trackerFetchOptions('production',false))),{next:{revalidate:300,tags:['tracker-farms']}});
+ assert.deepEqual(JSON.parse(JSON.stringify(api.trackerFetchOptions('production',true))),{cache:'no-store'});
+ assert.equal(api.trackerRetrySuffix(0),'');
+ assert.equal(api.trackerRetrySuffix(2),'&retry=2');
+});
+test('tracker request validation rejects bad locales and unbounded cache-bypass values',()=>{
+ assert.deepEqual(JSON.parse(JSON.stringify(api.parseTrackerRequest(new URL('http://localhost/api/tracker-farms?locale=en').searchParams))),{locale:'en',bypassCache:false});
+ assert.deepEqual(JSON.parse(JSON.stringify(api.parseTrackerRequest(new URL('http://localhost/api/tracker-farms?locale=vi&retry=2').searchParams))),{locale:'vi',bypassCache:true});
+ for(const url of [
+  'http://localhost/api/tracker-farms',
+  'http://localhost/api/tracker-farms?locale=fr',
+  'http://localhost/api/tracker-farms?locale=en&retry=',
+  'http://localhost/api/tracker-farms?locale=en&retry=0',
+  'http://localhost/api/tracker-farms?locale=en&retry=10001',
+  'http://localhost/api/tracker-farms?locale=en&retry=anything',
+ ]) assert.equal(api.parseTrackerRequest(new URL(url).searchParams),null,url);
+});
+test('tracker route rejects invalid input before contacting the backend',async()=>{
+ for(const url of [
+  'http://localhost/api/tracker-farms?locale=fr',
+  'http://localhost/api/tracker-farms?locale=en&retry=',
+  'http://localhost/api/tracker-farms?locale=en&retry=anything',
+ ]){
+  const {route,fetchCalls}=runTrackerRoute();
+  const response=await route.GET(new Request(url));
+  assert.equal(response.status,400,url);
+  assert.deepEqual(await response.json(),{error:'invalid_request'});
+  assert.equal(fetchCalls.length,0,url);
+ }
+});
+test('tracker route uses the configured backend and only bypasses cache for a valid retry',async()=>{
+ const initial=runTrackerRoute();
+ assert.equal((await initial.route.GET(new Request('http://localhost/api/tracker-farms?locale=en'))).status,200);
+ assert.equal(initial.fetchCalls[0].url,'http://127.0.0.1:8000/api/v1/public/tracker-farms?locale=en');
+ assert.deepEqual(JSON.parse(JSON.stringify(initial.fetchCalls[0].init.next)),{revalidate:300,tags:['tracker-farms']});
+ const retry=runTrackerRoute();
+ assert.equal((await retry.route.GET(new Request('http://localhost/api/tracker-farms?locale=vi&retry=2'))).status,200);
+ assert.equal(retry.fetchCalls[0].init.cache,'no-store');
 });
 test('tracker style is namespace-scoped and does not reset site header/footer',()=>{
  const css=read('app/styles/11-tracker.css');

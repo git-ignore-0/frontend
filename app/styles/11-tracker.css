@@ -41,7 +41,7 @@
   --tracker-ink: var(--ink);
   --tracker-muted: var(--muted);
   --tracker-line: var(--line);
-  --tracker-card-radius: var(--radius);
+  --tracker-card-radius: var(--nfv-surface-radius);
   width: min(100%,var(--max));
   margin: 0 auto;
   padding: clamp(22px,2.5vw,32px) clamp(15px,2.4vw,24px) clamp(38px,5vw,58px);
@@ -249,7 +249,7 @@
 }
 .nfv-tracker .tracker-farm-grid {
   display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-columns: repeat(4,minmax(0,1fr));
   gap: clamp(10px,1.6vw,14px);
   margin: clamp(18px,2.5vw,25px) 0 0;
   padding: 0;
@@ -704,6 +704,9 @@
     padding-top: 22px;
   }
   .nfv-tracker .tracker-stats {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .nfv-tracker .tracker-farm-grid {
     grid-template-columns: repeat(2,minmax(0,1fr));
   }
   .nfv-tracker .tracker-field-scroll ul {

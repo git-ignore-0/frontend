@@ -6,8 +6,9 @@ const source=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 test('Workshops uses shared v62 palette, typography and radius without a second design system',()=>{
   const css=source('app/styles/09-workshops.css');
   assert.match(css,/\.nfv-workshops\s*\{[^}]*background:\s*var\(--bg\)/s);
-  assert.match(css,/\.wk-calendar-card\s*\{[^}]*border-radius:\s*var\(--radius\)[^}]*background:\s*var\(--paper\)/s);
-  assert.match(css,/\.wk-date-tile\s*\{[^}]*border-radius:\s*var\(--radius\)/s);
+  assert.match(css,/\.nfv-workshops\s*\{[^}]*--workshop-surface-radius:\s*var\(--nfv-surface-radius\)/s);
+  assert.match(css,/\.wk-calendar-card\s*\{[^}]*border-radius:\s*var\(--workshop-surface-radius\)[^}]*background:\s*var\(--paper\)/s);
+  assert.match(css,/\.wk-date-tile\s*\{[^}]*border-radius:\s*var\(--workshop-surface-radius\)/s);
   assert.match(css,/\.wk-hero h1\s*\{[^}]*font-size:\s*clamp\(1\.625rem,[^}]*2\.1875rem\)/s);
   assert.doesNotMatch(css,/--wk-(cream|paper|forest|moss|straw|soil|terra|ink|muted|line)\s*:/);
   assert.doesNotMatch(css,/font-family:\s*["']/);

@@ -1,13 +1,41 @@
-import {NextResponse} from "next/server";
-import {fetchSiteStories} from "@/lib/testimonials-service";
-export const runtime="nodejs";
-export const dynamic="force-dynamic";
-const headers={"Cache-Control":"no-store"};
-export async function GET(request:Request){
-  const params=new URL(request.url).searchParams;
-  const locale=params.get("locale"),type=params.get("type")??"all",page=Number(params.get("page")??"1");
-  if((locale!=="vi"&&locale!=="en")||(type!=="all"&&type!=="customer"&&type!=="farmer")||!Number.isInteger(page)||page<1||page>10000||params.get("page_size")!=="12")
-    return NextResponse.json({error:"invalid_request"},{status:400,headers});
-  try{return NextResponse.json(await fetchSiteStories("list",{locale,type,page}),{headers});}
-  catch{return NextResponse.json({error:"upstream_unavailable"},{status:502,headers});}
+import { NextResponse } from "next/server";
+import {
+  parseBoundedInteger,
+  parseTestimonialFilter,
+  parseTestimonialLocale,
+} from "./validation";
+import { parseRetryCacheBypass } from "@/lib/public-request";
+import { fetchSiteStories, TestimonialsConfigurationError } from "@/lib/testimonials-service";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+const headers = { "Cache-Control": "no-store" };
+
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const locale = parseTestimonialLocale(params);
+  const type = parseTestimonialFilter(params);
+  const page = parseBoundedInteger(params, "page", 1, 10_000);
+  const pageSize = parseBoundedInteger(params, "page_size", 12, 50);
+  const bypassCache = parseRetryCacheBypass(params);
+  if (
+    locale === null ||
+    type === null ||
+    page === null ||
+    pageSize === null ||
+    bypassCache === null
+  ) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+  try {
+    return NextResponse.json(
+      await fetchSiteStories("list", { locale, type, page, pageSize, bypassCache }),
+      { headers },
+    );
+  } catch (error) {
+    if (error instanceof TestimonialsConfigurationError) {
+      return NextResponse.json({ error: "api_not_configured" }, { status: 503, headers });
+    }
+    return NextResponse.json({ error: "upstream_unavailable" }, { status: 502, headers });
+  }
 }

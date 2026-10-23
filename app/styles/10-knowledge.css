@@ -1,6 +1,6 @@
 /* Plants / Animals: shared article components. Colors and typography inherit the
    v62 foundations through .nfv-editorial; only knowledge-specific layout remains. */
-.nfv-knowledge { overflow: clip; }
+.nfv-knowledge { --knowledge-surface-radius: var(--nfv-surface-radius); overflow: clip; }
 .nfv-knowledge .knowledge-shell { width: min(calc(100% - 2rem), var(--max)); margin-inline: auto; }
 .nfv-knowledge .knowledge-layout { display: grid; gap: 2rem; padding-block: clamp(2.5rem,5vw,4.25rem); }
 .nfv-knowledge .knowledge-toc { position: sticky; top: 6.5rem; align-self: start; display: none; }
@@ -38,9 +38,9 @@
   clip-path: polygon(0 3%,96% 0,100% 94%,4% 100%);
 }
 .nfv-knowledge .knowledge-feature-figure.portrait img { aspect-ratio: 4/5; }
-.nfv-knowledge .knowledge-feature-figure.wide-reference img { aspect-ratio: 16/10; clip-path: none; border-radius: var(--radius); }
+.nfv-knowledge .knowledge-feature-figure.wide-reference img { aspect-ratio: 16/10; clip-path: none; border-radius: var(--knowledge-surface-radius); }
 .nfv-knowledge .knowledge-legacy-figure {
-  padding: clamp(.8rem,2vw,1.25rem); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: clamp(.8rem,2vw,1.25rem); border: 1px solid var(--line); border-radius: var(--knowledge-surface-radius);
   background: var(--paper); box-shadow: none;
 }
 .nfv-knowledge .knowledge-legacy-figure > span {
@@ -48,11 +48,11 @@
   border: 1px solid var(--line); border-radius: var(--radius); color: var(--green2);
   background: var(--soft); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
 }
-.nfv-knowledge .knowledge-legacy-figure img { border: 1px solid var(--line); border-radius: var(--radius); }
+.nfv-knowledge .knowledge-legacy-figure img { border: 1px solid var(--line); border-radius: var(--knowledge-surface-radius); }
 .nfv-knowledge .knowledge-legacy-figure figcaption { padding-left: .7rem; border-left: 2px solid var(--sage); }
 .nfv-knowledge .knowledge-table-wrap {
   max-width: 100%; overflow: auto; margin: 1.5rem 0; border: 1px solid var(--line);
-  border-radius: var(--radius); background: var(--paper);
+  border-radius: var(--knowledge-surface-radius); background: var(--paper);
   transition: box-shadow .25s var(--ed-ease),transform .25s var(--ed-ease);
 }
 .nfv-knowledge .knowledge-table-wrap:focus-within, .nfv-knowledge .knowledge-table-wrap:hover {
@@ -69,7 +69,7 @@
 .nfv-knowledge .knowledge-cards { display: grid; gap: .7rem; margin-top: clamp(1.4rem,4vw,2rem); }
 .nfv-knowledge .knowledge-card {
   padding: 1.1rem; border: 1px solid var(--line); border-top: 2px solid var(--green2);
-  border-radius: var(--radius); background: var(--paper);
+  border-radius: var(--knowledge-surface-radius); background: var(--paper);
   transition: transform .25s var(--ed-ease),box-shadow .25s var(--ed-ease),border-color .25s var(--ed-ease);
 }
 .nfv-knowledge .knowledge-card:hover { transform: translateY(-.24rem); border-color: var(--sage); box-shadow: var(--ed-shadow); }
@@ -81,7 +81,7 @@
   gap: .6rem; margin-top: clamp(1.2rem,3vw,1.75rem);
 }
 .nfv-knowledge .knowledge-inputs details {
-  min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper);
+  min-width: 0; border: 1px solid var(--line); border-radius: var(--knowledge-surface-radius); background: var(--paper);
   transition: transform .2s var(--ed-ease),box-shadow .2s var(--ed-ease),border-color .2s var(--ed-ease);
 }
 .nfv-knowledge .knowledge-inputs details[open], .nfv-knowledge .knowledge-inputs details:hover {
@@ -102,7 +102,7 @@
 .nfv-knowledge .knowledge-inputs details > p { margin: 0; padding: 0 .8rem 1rem; animation: kn-rise .24s var(--ed-ease-out) both; }
 .nfv-knowledge .knowledge-safety-panel {
   margin: 1.5rem 0; padding: clamp(1.1rem,3vw,2rem); border-left: 3px solid var(--sage);
-  border-radius: var(--radius); background: var(--green); color: white;
+  border-radius: var(--knowledge-surface-radius); background: var(--green); color: white;
   transition: transform .25s var(--ed-ease),box-shadow .25s var(--ed-ease);
 }
 .nfv-knowledge .knowledge-safety-panel:hover { transform: translateY(-.15rem); box-shadow: var(--ed-shadow); }

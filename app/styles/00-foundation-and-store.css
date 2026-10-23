@@ -32,7 +32,7 @@
 @media(max-width:340px){.welcome{grid-template-columns:minmax(0,1fr) 75px}.welcome-copy h1{font-size:18.5px}.welcome-copy{padding-left:12px}.cat-tile{flex-basis:105px}}
 
 /* v3 — Clean compact design language. Sans typography supports Vietnamese and English. */
-:root{--ink:#25332b;--ink2:#526059;--muted:#78847b;--line:#e3e9e2;--paper:#fff;--bg:#fcfdfa;--green:#28543a;--green2:#3d6b4d;--soft:#f6f9f3;--radius:4px;--max:1180px}
+:root{--ink:#25332b;--ink2:#526059;--muted:#78847b;--line:#e3e9e2;--paper:#fff;--bg:#fcfdfa;--green:#28543a;--green2:#3d6b4d;--soft:#f6f9f3;--nfv-surface-radius:10px;--radius:4px;--max:1180px}
 /* Reserve the vertical scrollbar gutter so opening a panel never shifts page content. */
 html{scroll-behavior:smooth;scrollbar-gutter:stable}
 body{background:var(--bg);font-family:'Inter','Noto Sans',Arial,sans-serif;font-size:13px;line-height:1.55;letter-spacing:-.005em}

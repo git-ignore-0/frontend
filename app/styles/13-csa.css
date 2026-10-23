@@ -1,6 +1,6 @@
 /* CSA: V2 section order/grid & interaction, scaled to V62 typography, palette, radius.
    All selectors scoped; V62 Header/Footer, Home, Store, Account remain untouched. */
-.nfv-csa{color:var(--ink);background:var(--bg);overflow:clip;isolation:isolate;padding:clamp(20px,3vw,32px) 0 clamp(42px,6vw,65px)}
+.nfv-csa{--csa-surface-radius:var(--nfv-surface-radius);color:var(--ink);background:var(--bg);overflow:clip;isolation:isolate;padding:clamp(20px,3vw,32px) 0 clamp(42px,6vw,65px)}
 .nfv-csa *, .nfv-csa *::before, .nfv-csa *::after{box-sizing:border-box}
 .nfv-csa .csa-v2-shell{max-width:var(--max);padding-inline:clamp(15px,2.3vw,28px);margin-inline:auto;min-width:0}
 .nfv-csa :is(h1,h2,h3,h4){font-family:inherit;color:var(--green);font-weight:650;line-height:1.25;letter-spacing:-.025em;margin:0}
@@ -13,7 +13,7 @@
 .nfv-csa .csa-v2-benefits li{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.5;font-weight:600;color:var(--green)}
 .nfv-csa .csa-v2-benefits .ico{color:var(--green2)}
 .nfv-csa .csa-v2-hero-actions{margin-top:22px;width:max-content;max-width:100%}
-.nfv-csa .csa-v2-hero-media{aspect-ratio:16/11;min-width:0;overflow:hidden;background:var(--soft);border:1px solid var(--line);border-radius:var(--radius);animation:csa-v2-appear .5s .1s cubic-bezier(.16,1,.3,1) both}
+.nfv-csa .csa-v2-hero-media{aspect-ratio:16/11;min-width:0;overflow:hidden;background:var(--soft);border:1px solid var(--line);border-radius:var(--csa-surface-radius);animation:csa-v2-appear .5s .1s cubic-bezier(.16,1,.3,1) both}
 .nfv-csa .csa-v2-hero-media img{height:100%;width:100%;object-fit:cover}
 .nfv-csa .csa-v2-comparison,.nfv-csa .csa-v2-packages,.nfv-csa .csa-v2-timeline{padding-block:clamp(40px,5vw,55px)}
 .nfv-csa .csa-v2-section-heading{max-width:660px;margin:0 0 clamp(22px,3vw,36px)}
@@ -34,17 +34,17 @@
 .nfv-csa .csa-v2-versus::before{content:"";width:100%;height:1px;grid-area:1/1;background:var(--line)}
 .nfv-csa .csa-v2-versus span{position:relative;grid-area:1/1;border-radius:999px;background:var(--honey);color:var(--green);font-size:11px;font-weight:800;letter-spacing:.06em;padding:5px 9px}
 .nfv-csa .csa-v2-comparison-tabs{display:none}
-.nfv-csa .csa-v2-conclusion{margin:clamp(28px,4vw,52px) auto 0;max-width:1024px;text-align:center;background:var(--green);color:var(--paper);padding:clamp(20px,3vw,28px);border-radius:var(--radius)}
+.nfv-csa .csa-v2-conclusion{margin:clamp(28px,4vw,52px) auto 0;max-width:1024px;text-align:center;background:var(--green);color:var(--paper);padding:clamp(20px,3vw,28px);border-radius:var(--csa-surface-radius)}
 .nfv-csa .csa-v2-conclusion p{color:var(--paper);font-size:14px;line-height:1.7;max-width:780px;margin:0 auto 8px}
 .nfv-csa .csa-v2-conclusion strong{color:var(--honey);font-size:clamp(15px,1.7vw,18px);font-weight:700}
 .nfv-csa .csa-v2-conclusion-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:17px}
 .nfv-csa .csa-v2-conclusion-actions .btn{border-color:var(--honey);background:var(--honey);color:var(--green)}
 .nfv-csa .csa-v2-conclusion-actions .btn-outline{border-color:#a2bea8;background:transparent;color:white}
-.nfv-csa .csa-v2-quote{position:relative;max-width:670px;margin:clamp(50px,6vw,75px) auto 0;text-align:center;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);padding:42px 23px 24px;box-shadow:0 8px 20px #183b2811;animation:csa-v2-appear .5s both}
+.nfv-csa .csa-v2-quote{position:relative;max-width:670px;margin:clamp(50px,6vw,75px) auto 0;text-align:center;border:1px solid var(--line);border-radius:var(--csa-surface-radius);background:var(--paper);padding:42px 23px 24px;box-shadow:0 8px 20px #183b2811;animation:csa-v2-appear .5s both}
 .nfv-csa .csa-v2-quote p{font-size:clamp(15px,1.6vw,18px);color:var(--green);font-weight:650;line-height:1.65;margin:0}
 .nfv-csa .csa-v2-quote-mark{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);background:var(--green);color:var(--honey);border-radius:50%;width:52px;height:52px;display:grid;place-items:center;font:48px/1 Georgia,serif;padding-top:16px;box-shadow:0 0 0 5px var(--bg)}
 .nfv-csa .csa-v2-package-list{display:flex;gap:14px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;padding:2px 2px 12px}
-.nfv-csa .csa-v2-package-card{flex:0 0 min(340px,calc(100vw - 46px));min-width:0;display:flex;flex-direction:column;scroll-snap-align:start;border:1px solid var(--line);background:var(--paper);border-radius:var(--radius);overflow:hidden;transition:box-shadow .2s,border-color .2s}
+.nfv-csa .csa-v2-package-card{flex:0 0 min(340px,calc(100vw - 46px));min-width:0;display:flex;flex-direction:column;scroll-snap-align:start;border:1px solid var(--line);background:var(--paper);border-radius:var(--csa-surface-radius);overflow:hidden;transition:box-shadow .2s,border-color .2s}
 .nfv-csa .csa-v2-package-card:hover,.nfv-csa .csa-v2-package-card:focus-within{border-color:#a9bfa9;box-shadow:0 5px 15px #132e1c12}
 .nfv-csa .csa-v2-package-summary{order:1;padding:16px}
 .nfv-csa .csa-v2-package-summary h3{margin:0}
@@ -60,7 +60,7 @@
 .nfv-csa .csa-v2-package-prices{order:5;border-top:1px solid var(--line);padding:15px 16px;display:grid;gap:10px}
 .nfv-csa .csa-v2-package-prices h4{font-size:12px;color:var(--muted)}
 .nfv-csa .csa-v2-package-prices ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.nfv-csa .csa-v2-package-prices li{border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--soft)}
+.nfv-csa .csa-v2-package-prices li{border:1px solid var(--line);border-radius:var(--csa-surface-radius);padding:12px;background:var(--soft)}
 .nfv-csa .csa-v2-price-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px}
 .nfv-csa .csa-v2-best-saving{background:var(--sage);color:var(--green);border-radius:999px;padding:3px 7px;font-size:10px;font-weight:700}
 .nfv-csa .csa-v2-package-prices dl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 0}
@@ -80,7 +80,7 @@
 /* Match V2 FAQ's single bordered paper panel and subtle row dividers. */
 .nfv-csa .csa-v2-faq{padding:clamp(30px,4vw,48px) 0}
 .nfv-csa .csa-v2-faq>h2{font-size:clamp(19px,1.7vw,22px);line-height:1.3;margin:0 0 20px}
-.nfv-csa .csa-v2-faq-list{padding:0 20px;background:var(--paper);border:1px solid color-mix(in srgb,var(--green2) 20%,var(--line));border-radius:var(--radius)}
+.nfv-csa .csa-v2-faq-list{padding:0 20px;background:var(--paper);border:1px solid color-mix(in srgb,var(--green2) 20%,var(--line));border-radius:var(--csa-surface-radius)}
 .nfv-csa .csa-v2-faq-item+.csa-v2-faq-item{border-top:1px solid color-mix(in srgb,var(--green2) 15%,var(--line))}
 .nfv-csa .csa-v2-faq-trigger.btn{display:flex;width:100%;height:auto;min-height:44px;padding:16px 0;border:0;border-radius:0;background:transparent;color:var(--green);font-size:14px;font-weight:600;line-height:1.5;white-space:normal;text-align:left;box-shadow:none;transform:none}
 .nfv-csa .csa-v2-faq-trigger.btn:hover{color:var(--green2);background:transparent;box-shadow:none;transform:none}
@@ -94,7 +94,7 @@
 @keyframes csa-v2-faq-reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 /* V2 Zalo help: dark full-width banner, light copy and contrasted action.
    Shared V62 button/link and radius tokens remain authoritative. */
-.nfv-csa .csa-v2-help{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:24px;overflow:hidden;margin-top:24px;padding:24px;background:var(--green);border-radius:var(--radius);text-align:center;animation:csa-v2-appear .6s ease-out both}
+.nfv-csa .csa-v2-help{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:24px;overflow:hidden;margin-top:24px;padding:24px;background:var(--green);border-radius:var(--csa-surface-radius);text-align:center;animation:csa-v2-appear .6s ease-out both}
 .nfv-csa .csa-v2-help::before{content:"";position:absolute;inset:0;background:rgba(255,255,255,.05);opacity:0;pointer-events:none;transition:opacity .4s ease}
 .nfv-csa .csa-v2-help:hover::before{opacity:1}
 .nfv-csa .csa-v2-help-copy{position:relative;z-index:1;max-width:576px;min-width:0}
@@ -136,7 +136,7 @@
  .nfv-csa .csa-v2-comparison-tabs .btn.is-active{background:var(--paper);box-shadow:0 2px 9px #123a1816;color:var(--green)}
  .nfv-csa .csa-v2-comparison-grid.active-left .csa-v2-column.is-right,.nfv-csa .csa-v2-comparison-grid.active-right .csa-v2-column.is-left,.nfv-csa .csa-v2-versus{display:none}
  .nfv-csa .csa-v2-center{text-align:left;margin-inline:0}
- .nfv-csa .csa-v2-column{padding:22px;border:1px solid var(--line);background:var(--paper);border-radius:var(--radius)}
+ .nfv-csa .csa-v2-column{padding:22px;border:1px solid var(--line);background:var(--paper);border-radius:var(--csa-surface-radius)}
  .nfv-csa .csa-v2-column h3{display:none}
  .nfv-csa .csa-v2-column.is-left{background:var(--soft)}
 }

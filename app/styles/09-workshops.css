@@ -1,6 +1,7 @@
 /* Workshops shares Store/Account tokens. All feature rules stay under .nfv-workshops.
    Its listing remains separate from the Home preview and the About editorial hero. */
 .nfv-workshops {
+  --workshop-surface-radius: var(--nfv-surface-radius);
   min-height: 60vh;
   padding: clamp(1.5rem, 4vw, 3rem) 0 clamp(2.5rem, 5vw, 4rem);
   background: var(--bg);
@@ -75,7 +76,7 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--workshop-surface-radius);
   background: var(--paper);
   transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
 }
@@ -92,7 +93,7 @@
   justify-items: center;
   padding: .375rem .25rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--workshop-surface-radius);
   background: var(--soft);
   line-height: 1.15;
   text-align: center;
@@ -201,7 +202,7 @@
 .nfv-workshops .wk-fallback-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   margin-top: 1.25rem; padding: .875rem 1rem; border: 1px solid var(--line);
-  border-left: 3px solid var(--green2); border-radius: var(--radius); background: var(--soft);
+  border-left: 3px solid var(--green2); border-radius: var(--workshop-surface-radius); background: var(--soft);
 }
 .nfv-workshops .wk-fallback-banner p { margin: 0; color: var(--ink2); font-size: .875rem; }
 .nfv-workshops .wk-fallback-banner a { flex: 0 0 auto; color: var(--green); font-size: .8125rem; font-weight: 700; }
@@ -227,11 +228,11 @@
   color: var(--green); font-size: 1.0625rem;
 }
 .nfv-workshops .wk-prose a { color: var(--green); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.nfv-workshops .wk-inline-image { width: 100%; height: auto; margin: 1.5rem 0; border-radius: var(--radius); }
+.nfv-workshops .wk-inline-image { width: 100%; height: auto; margin: 1.5rem 0; border-radius: var(--workshop-surface-radius); }
 .nfv-workshops .wk-body-empty { color: var(--muted); }
 .nfv-workshops .wk-detail-facts {
   position: sticky; top: 5.5rem; padding: 1rem; border: 1px solid var(--line);
-  border-radius: var(--radius); background: var(--paper);
+  border-radius: var(--workshop-surface-radius); background: var(--paper);
 }
 .nfv-workshops .wk-detail-facts dl { margin: 0; }
 .nfv-workshops .wk-detail-facts dl > div + div { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }

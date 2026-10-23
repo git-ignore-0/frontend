@@ -18,9 +18,11 @@ export type Testimonial = {
   image: TestimonialImageData | null;
 };
 export type TestimonialsPageData = {data:Testimonial[]; meta:{page:number;page_size:number;total:number}};
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LOCALES=new Set(["vi","en"]);
 
 function text(value: unknown, limit=5000): string {
-  return typeof value === "string" ? value.slice(0, limit) : "";
+  return typeof value === "string"&&value.length<=limit?value:"";
 }
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : null;
@@ -36,18 +38,27 @@ export function parseTestimonial(input: unknown): Testimonial | null {
   const row=object(input);
   if (!row) return null;
   const id=text(row.id,100);
-  const displayName=text(row.display_name,200);
-  if (!id || !displayName || (row.type !== "customer" && row.type !== "farmer")) return null;
+  const displayName=text(row.display_name,240);
+  const role=text(row.role,240),location=text(row.location,240),quote=text(row.quote,800);
+  const requestedLocale=text(row.requested_locale,2),contentLocale=text(row.content_locale,2);
+  const availableLocales=Array.isArray(row.available_locales)?row.available_locales:[];
+  if (!UUID.test(id)||!displayName||!role||!location||!quote||(row.type!=="customer"&&row.type!=="farmer")||
+      !LOCALES.has(requestedLocale)||!LOCALES.has(contentLocale)||availableLocales.length===0||availableLocales.some(value=>!LOCALES.has(String(value)))||
+      typeof row.is_fallback!=="boolean"||typeof row.published_at!=="string"||!Number.isFinite(Date.parse(row.published_at))) return null;
   const image=object(row.image);
+  if(row.image!==null&&!image)return null;
   const url=image?safeImageUrl(image.url):"";
-  const variants=image && Array.isArray(image.variants) ? image.variants.flatMap(item=>{
+  const width=image?Number(image.width):0,height=image?Number(image.height):0;
+  if(image&&(!url||!Number.isInteger(width)||width<1||!Number.isInteger(height)||height<1||!Array.isArray(image.variants)))return null;
+  const variants=image && Array.isArray(image.variants) ? image.variants.map(item=>{
     const variant=object(item);
     const src=variant?safeImageUrl(variant.url):"";
-    const width=variant?Number(variant.width):0;
-    return src && Number.isFinite(width) && width>0 ? [{url:src,width}] : [];
+    const variantWidth=variant?Number(variant.width):0,variantHeight=variant?Number(variant.height):0;
+    return src&&Number.isInteger(variantWidth)&&variantWidth>0&&Number.isInteger(variantHeight)&&variantHeight>0?{url:src,width:variantWidth}:null;
   }) : [];
-  return {id,type:row.type,display_name:displayName,role:text(row.role,300),location:text(row.location,300),
-    quote:text(row.quote),full_story:text(row.full_story,15000),image:url?{url,width:Math.max(1,Number(image?.width)||800),height:Math.max(1,Number(image?.height)||600),variants}:null};
+  if(variants.some(item=>item===null))return null;
+  return {id,type:row.type,display_name:displayName,role,location,quote,full_story:text(row.full_story,20000),
+    image:image?{url,width,height,variants:variants as Array<{url:string;width:number}>}:null};
 }
 export function parseTestimonialsPage(input: unknown): TestimonialsPageData {
   const record=object(input);
@@ -55,16 +66,20 @@ export function parseTestimonialsPage(input: unknown): TestimonialsPageData {
   if (!record || !Array.isArray(record.data) || !meta) throw new Error("invalid_testimonials_payload");
   const page=Number(meta.page),pageSize=Number(meta.page_size),total=Number(meta.total);
   if(!Number.isInteger(page)||page<1||!Number.isInteger(pageSize)||pageSize<1||pageSize>50||!Number.isInteger(total)||total<0)throw new Error("invalid_testimonials_pagination");
-  return {data:record.data.flatMap(item=>{const parsed=parseTestimonial(item);return parsed?[parsed]:[];}),meta:{page,page_size:pageSize,total}};
+  const data=record.data.map(parseTestimonial);
+  if(data.some(item=>item===null))throw new Error("invalid_testimonials_item");
+  return {data:data as Testimonial[],meta:{page,page_size:pageSize,total}};
 }
 export function parseFeaturedTestimonials(input:unknown):Testimonial[]{
   const record=object(input);
   if(!record||!Array.isArray(record.data))throw new Error("invalid_featured_payload");
-  return record.data.slice(0,3).flatMap(item=>{const parsed=parseTestimonial(item);return parsed?[parsed]:[];});
+  const data=record.data.slice(0,3).map(parseTestimonial);
+  if(data.some(item=>item===null))throw new Error("invalid_featured_item");
+  return data as Testimonial[];
 }
 export function parseTestimonialDetail(input:unknown):Testimonial {
   const record=object(input);
   const parsed=parseTestimonial(record?.data);
-  if(!parsed)throw new Error("invalid_story_payload");
+  if(!parsed||!parsed.full_story)throw new Error("invalid_story_payload");
   return parsed;
 }

@@ -32,7 +32,7 @@ test('Testimonials shares v62 typography, status tags and spacing without global
   const css=read('app/styles/12-testimonials.css');
   const presentation=read('src/components/testimonials/StoryPresentation.tsx');
   assert.match(css,/font-family: inherit/);
-  assert.match(css,/--story-card-radius: calc\(var\(--radius\) \+ 6px\)/);
+  assert.match(css,/--story-card-radius: var\(--nfv-surface-radius\)/);
   assert.match(presentation,/status testimonials-tag/);
   assert.doesNotMatch(css,/^\s*(body|html|:root|\.site-header|\.site-footer|\.account-layout|\.products-grid)\s*\{/m);
 });

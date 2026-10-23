@@ -1,6 +1,6 @@
 /* Testimonials inherits the Store/Account palette, type and controls. All styles are feature-scoped. */
 :is(.nfv-testimonials, .nfv-stories-widget, .story-detail-dialog) {
-  --story-card-radius: calc(var(--radius) + 6px);
+  --story-card-radius: var(--nfv-surface-radius);
   --story-panel-radius: calc(var(--radius) + 4px);
   --story-surface: var(--paper);
   --story-border: var(--line);

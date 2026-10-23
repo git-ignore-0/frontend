@@ -6,7 +6,7 @@ async function loadPeriod(origin:string,locale:string,period:"upcoming"|"past"){
   const all:PublicWorkshop[]=[];
   for(let page=1;page<=10;page++){
     const url=`${origin}/api/v1/public/workshops?locale=${locale}&period=${period}&page_size=50&page=${page}`;
-    const payload=await fetchPublicWorkshopJson(url);
+    const payload=await fetchPublicWorkshopJson(url,{tags:["workshops"]});
     const result=parsePublicWorkshops(payload,50);
     all.push(...result);
     const meta=payload&&typeof payload==="object"?((payload as {meta?:{total?:number;page_size?:number}}).meta):null;

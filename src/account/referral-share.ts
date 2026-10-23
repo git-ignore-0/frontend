@@ -1,7 +1,7 @@
 import type {Locale} from "@/types";
 
 export function buildReferralUrl(origin:string,code:string,locale:Locale):string{
-  const url=new URL(`/ref/${encodeURIComponent(code)}`,origin);
+  const url=new URL(`/share/ref/${encodeURIComponent(code)}`,origin);
   url.searchParams.set("locale",locale);
   return url.toString();
 }

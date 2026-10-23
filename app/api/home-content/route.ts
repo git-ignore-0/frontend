@@ -13,7 +13,7 @@ export async function GET(request:Request){
   if(!origin)return json(EMPTY);
   const workshopUrl=`${origin}/api/v1/public/workshops?locale=${locale}&period=upcoming&page_size=50&page=1`;
   try{
-    const workshopsBody=await fetchPublicWorkshopJson(workshopUrl);
+    const workshopsBody=await fetchPublicWorkshopJson(workshopUrl,{tags:["workshops"]});
     return json({workshops:parsePublicWorkshops(workshopsBody,3)});
   }catch{return json(EMPTY);}
 }

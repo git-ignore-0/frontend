@@ -5,12 +5,14 @@ import {formatAddress} from "@/lib/format";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
 import {localeFromPath,localScreenFromPath,navigationItemForPage,mainNavHref} from "@/data/main-navigation";
+import {syncBrowserRoute} from "@/lib/browser-navigation";
 import {initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
   data: CatalogData; setData: Dispatch<SetStateAction<CatalogData>>;
   ui: UIState; setUI: Dispatch<SetStateAction<UIState>>;
+  documentNavigation:boolean;
   patch: (update:Partial<UIState>)=>void; navigate:(page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>void;
   call: <T=unknown>(method:keyof Backend, arg?:unknown)=>Promise<T>;
   act: <T>(key:string, task:()=>Promise<T>, success?:string)=>Promise<T|undefined>;
@@ -29,7 +31,7 @@ function normalizeProducts(items:unknown):Product[] {
       categoryId:String(p.categoryId??p.category_id??""),unit:String(p.unit||""),farm:String(p.farm||""),
       description:String(p.description||""),note:String(p.note||""),image:String(p.image||""),price:Number(p.price),csa:!!p.csa}));
 }
-export function NFVProvider({children,initialPage="home",initialLocale="vi"}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale}){
+export function NFVProvider({children,initialPage="home",initialLocale="vi",documentNavigation=false}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;documentNavigation?:boolean}){
   const auth=useAuth();
   const [data,setData]=useState(initialData);
   const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountHubOpen:initialPage==="account"}));
@@ -68,17 +70,14 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi"}:{ch
     if(typeof window!=="undefined"){
       const item=navigationItemForPage(page);
       const href=item?mainNavHref(item,ui.locale):null;
-      if(href&&window.location.pathname!==href){
-        if(opts?.replace)window.history.replaceState({},"",href);
-        else window.history.pushState({},"",href);
-      }
+      if(syncBrowserRoute(window,href,{documentNavigation,replace:opts?.replace}))return;
     }
     setUI(s=>({...s,page,cartOpen:false,filterOpen:false,categoryOpen:false,
       accountTab:opts?.tab??(page==="account"?"orders":s.accountTab),
       accountHubOpen:opts?.hub??(page==="account"&&!opts?.tab),
       productId:opts?.productId??s.productId,detailQty:opts?.productId?1:s.detailQty,error:""}));
     if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"instant"});
-  },[ui.locale]);
+  },[documentNavigation,ui.locale]);
   useEffect(()=>{
     const handlePopState=()=>{
       const page=localScreenFromPath(window.location.pathname);
@@ -213,7 +212,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi"}:{ch
     ]);
     return ()=>{active=false;};
   },[auth.status,auth.session,call]);
-  const value=useMemo(()=>({data,setData,ui,setUI,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
-    [data,ui,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
+  const value=useMemo(()=>({data,setData,ui,setUI,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
+    [data,ui,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

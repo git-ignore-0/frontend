@@ -1,14 +1,12 @@
 import {NextResponse} from "next/server";
-import {getPublicContentOrigin,parsePublicWorkshops} from "@/lib/public-workshop";
+import {fetchPublicWorkshopJson,getPublicContentOrigin,parsePublicWorkshops} from "@/lib/public-workshop";
 import type {PublicWorkshop,WorkshopCollection} from "@/types/workshop";
 const EMPTY:WorkshopCollection={upcoming:[],past:[]};
 async function loadPeriod(origin:string,locale:string,period:"upcoming"|"past"){
   const all:PublicWorkshop[]=[];
   for(let page=1;page<=10;page++){
     const url=`${origin}/api/v1/public/workshops?locale=${locale}&period=${period}&page_size=50&page=${page}`;
-    const response=await fetch(url,{next:{revalidate:300},signal:AbortSignal.timeout(5000)});
-    if(!response.ok)throw new Error(`Public workshops returned ${response.status}`);
-    const payload:unknown=await response.json();
+    const payload=await fetchPublicWorkshopJson(url);
     const result=parsePublicWorkshops(payload,50);
     all.push(...result);
     const meta=payload&&typeof payload==="object"?((payload as {meta?:{total?:number;page_size?:number}}).meta):null;

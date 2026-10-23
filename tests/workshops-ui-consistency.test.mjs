@@ -13,15 +13,31 @@ test('Workshops uses shared v62 palette, typography and radius without a second 
   assert.doesNotMatch(css,/font-family:\s*["']/);
 });
 
-test('Workshop actions reuse Store button styles while retaining actual external detail links',()=>{
+test('Workshop actions reuse Store button styles and open the local detail route',()=>{
   const card=source('src/components/workshops/WorkshopCard.tsx');
-  assert.match(card,/sitePageHref\(locale,`workshops\/\$\{encodeURIComponent\(item\.slug\)\}`\)/);
+  assert.match(card,/workshopDetailHref\(locale,item\.slug\)/);
   assert.match(card,/className="btn btn-small nfv-button" href=\{href\}/);
   assert.match(card,/<Icon name="arrow" size=\{14\}/);
   assert.match(card,/variant==="preview"/);
   assert.match(card,/home-workshop-card/);
   assert.match(card,/home-workshop-detail/);
   assert.doesNotMatch(card,/<button[^>]+href/);
+});
+
+test('Workshop detail renders CMS content, facts, registration and fallback states',()=>{
+  const detail=source('src/screens/workshops/WorkshopDetail.tsx');
+  const richText=source('src/components/workshops/WorkshopRichText.tsx');
+  assert.match(detail,/workshop\.status==="upcoming"&&Boolean\(workshop\.registration_url\)/);
+  assert.match(detail,/<WorkshopRichText document=\{workshop\.body\}/);
+  assert.match(detail,/application\/ld\+json/);
+  assert.match(detail,/workshop\.is_fallback/);
+  for(const node of ['paragraph','heading','bulletList','orderedList','blockquote','image'])assert.ok(richText.includes(`node.type==="${node}"`),node);
+});
+
+test('Workshop pages do not render a floating stories control over their content',()=>{
+  const app=source('app/NFVApp.tsx');
+  const publicPages=app.match(/PUBLIC_STORY_PAGES = new Set<Screen>\(\[([^\]]+)\]\)/)?.[1]||'';
+  assert.doesNotMatch(publicPages,/workshops/);
 });
 
 test('Workshop loading, error and empty share DataState; legacy decoration is removed',()=>{

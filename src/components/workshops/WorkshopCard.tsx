@@ -2,14 +2,13 @@ import type {Locale} from "@/types";
 import type {PublicWorkshop} from "@/types/workshop";
 import {formatWorkshopDate} from "@/lib/workshop-date";
 import {WORKSHOP_COPY} from "@/data/workshop-copy";
-import {sitePageHref} from "@/lib/site-links";
+import {workshopDetailHref} from "@/lib/site-links";
 import {Icon} from "@/components/UI";
 /** Shared card: Home preview and the workshop calendar use the same data and formatter. */
 export function WorkshopCard({item,locale,variant="preview"}:{item:PublicWorkshop;locale:Locale;variant?:"preview"|"calendar"}){
   const c=WORKSHOP_COPY[locale];
   const date=formatWorkshopDate(item,locale);
-  // Workshop *details* have not been ported: preserve the real detail page on the public site.
-  const href=sitePageHref(locale,`workshops/${encodeURIComponent(item.slug)}`);
+  const href=workshopDetailHref(locale,item.slug);
   if(variant==="preview")return <article className="home-workshop-card">
     <time className="home-workshop-date-tile" dateTime={item.start_at} aria-label={date.label}>
       <span className="home-workshop-date-day">{date.day}</span><span>{date.month}</span>

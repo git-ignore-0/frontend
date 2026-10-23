@@ -7,7 +7,7 @@ const source=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 const routes=["about","workshops"];
 test("each page has one screen and two local language entrypoints",()=>{
   for(const page of routes){
-    for(const file of [`app/${page}/[locale]/page.tsx`]){
+    for(const file of [page==="workshops"?"app/workshops/[segment]/page.tsx":`app/${page}/[locale]/page.tsx`]){
       assert.ok(existsSync(new URL(`../${file}`,import.meta.url)),file);
       assert.match(source(file),new RegExp(`initialPage="${page}"`));
       assert.match(source(file),/notFound\(\)/);
@@ -40,8 +40,10 @@ test("Workshop Home and list reuse the same card and translated copy",()=>{
   assert.match(home,/WORKSHOP_COPY/);assert.match(list,/WORKSHOP_COPY/);
   assert.match(home,/if\(!workshops.length\)return null/);
   assert.match(list,/empty|<WorkshopSection/);
-  assert.match(source("src/components/workshops/WorkshopCard.tsx"),/sitePageHref\(locale,`workshops\//);
+  assert.match(source("src/components/workshops/WorkshopCard.tsx"),/workshopDetailHref\(locale,item\.slug\)/);
   assert.ok(existsSync(new URL("../src/lib/workshop-date.ts",import.meta.url)));
+  assert.ok(existsSync(new URL("../app/workshops/[segment]/[locale]/page.tsx",import.meta.url)));
+  assert.ok(existsSync(new URL("../src/screens/workshops/WorkshopDetail.tsx",import.meta.url)));
 });
 
 test("About and Workshop styles stay fully scoped; app shared shell styles are unchanged",()=>{
@@ -75,7 +77,14 @@ test("public Workshop parser rejects untrusted input and normalizes correct reco
   assert.equal(parser.parsePublicWorkshops({data:[{...item,start_at:"not a date"}]}).length,0);
   assert.equal(parser.parsePublicWorkshops({data:[{...item,slug:""}]}).length,0);
   assert.equal(parser.parsePublicWorkshops({data:[]}).length,0);
-  assert.equal(parser.parsePublicWorkshops({data:[{...item,status:"unexpected"}]} )[0].status,"upcoming");
+  assert.equal(parser.parsePublicWorkshops({data:[{...item,status:"unexpected"}]}).length,0);
+  assert.equal(parser.parsePublicWorkshop({...item,status:undefined}),null);
+  const detail=parser.parsePublicWorkshop({...item,requested_locale:"vi",content_locale:"en",available_locales:["vi","en","fr"],registration_url:"https://example.com/register",body:{type:"doc"}});
+  assert.equal(detail.content_locale,"en");
+  assert.deepEqual(detail.available_locales,["vi","en"]);
+  assert.equal(detail.registration_url,"https://example.com/register");
+  assert.deepEqual(detail.body,{type:"doc"});
+  assert.equal(parser.parsePublicWorkshop({...item,registration_url:"javascript:alert(1)"}).registration_url,null);
   const original=process.env.CONTENT_API_ORIGIN;
   delete process.env.CONTENT_API_ORIGIN;
   assert.equal(parser.getPublicContentOrigin(),null);
@@ -86,6 +95,30 @@ test("public Workshop parser rejects untrusted input and normalizes correct reco
   if(original===undefined)delete process.env.CONTENT_API_ORIGIN;else process.env.CONTENT_API_ORIGIN=original;
 });
 
+test("Workshop proxy bypasses the content cache in development",async()=>{
+  const js=stripTypeScriptTypes(source("src/lib/public-workshop.ts"));
+  const workshop=await import(`data:text/javascript,${encodeURIComponent(js)}`);
+  assert.equal(typeof workshop.workshopFetchOptions,"function");
+  assert.deepEqual(workshop.workshopFetchOptions("development"),{cache:"no-store"});
+  assert.deepEqual(workshop.workshopFetchOptions("production"),{next:{revalidate:300}});
+});
+
+test("Every workshop fetch uses the shared development and production cache policy",async()=>{
+  const js=stripTypeScriptTypes(source("src/lib/public-workshop.ts"));
+  const workshop=await import(`data:text/javascript,${encodeURIComponent(js)}`);
+  assert.equal(typeof workshop.fetchPublicWorkshopJson,"function");
+  const calls=[];
+  const fetcher=async(url,init)=>{calls.push({url,init});return {ok:true,status:200,json:async()=>({data:[]})};};
+  const signal=new AbortController().signal;
+
+  await workshop.fetchPublicWorkshopJson("https://api.example.org/api/v1/public/workshops",{environment:"development",fetcher,signal});
+  await workshop.fetchPublicWorkshopJson("https://api.example.org/api/v1/public/workshops/soil",{environment:"production",tags:["workshops","workshop:soil"],fetcher,signal});
+
+  assert.equal(calls[0].init.cache,"no-store");
+  assert.equal(calls[0].init.next,undefined);
+  assert.deepEqual(calls[1].init.next,{revalidate:300,tags:["workshops","workshop:soil"]});
+});
+
 test("Workshop date formatter is safe for invalid timezone and date",async()=>{
   const js=stripTypeScriptTypes(source("src/lib/workshop-date.ts"));
   const formatter=await import(`data:text/javascript,${encodeURIComponent(js)}`);
@@ -94,4 +127,16 @@ test("Workshop date formatter is safe for invalid timezone and date",async()=>{
   const valid={start_at:"2026-11-12T10:00:00+07:00",end_at:"2026-11-12T11:00:00+07:00",event_timezone:"bad/zone"};
   const result=formatter.formatWorkshopDate(valid,"vi");
   assert.equal(result.day,"12");assert.ok(result.label.includes("10:00"));
+});
+
+test("Workshop rich-text sanitizer preserves valid internal and remote images",async()=>{
+  let sanitizer;
+  try{
+    const js=stripTypeScriptTypes(source("src/lib/workshop-rich-text.ts"));
+    sanitizer=await import(`data:text/javascript,${encodeURIComponent(js)}`);
+  }catch(error){assert.fail(`Workshop rich-text sanitizer is unavailable: ${error instanceof Error?error.message:String(error)}`);}
+  assert.equal(sanitizer.safeWorkshopImage("/media/workshops/soil.webp"),"/media/workshops/soil.webp");
+  assert.equal(sanitizer.safeWorkshopImage("https://cdn.example.org/soil.webp"),"https://cdn.example.org/soil.webp");
+  assert.equal(sanitizer.safeWorkshopImage("//evil.example/soil.webp"),null);
+  assert.equal(sanitizer.safeWorkshopImage("javascript:alert(1)"),null);
 });

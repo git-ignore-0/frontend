@@ -7,3 +7,4 @@ export function sitePageHref(locale:Locale,path:string){
   if(isLocalPublicPage(path))return `/${path}/${locale}`;
   return `${SITE_ORIGIN}/${path}/${locale}`;
 }
+export function workshopDetailHref(locale:Locale,slug:string){return `/workshops/${encodeURIComponent(slug)}/${locale}`}

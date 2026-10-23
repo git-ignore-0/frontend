@@ -1,19 +1,15 @@
 "use client";
 
-import {localScreenFromPath,navigationItemForPage,mainNavHref} from "@/data/main-navigation";
+import {syncLocaleRoute} from "@/lib/browser-navigation";
 import {useNFV} from "@/state/NFVContext";
 
 /** Header and mobile drawer share the same locale-switch behavior. */
 export function LocaleToggle({variant}:{variant:"header"|"drawer"}){
-  const {ui,patch}=useNFV();
+  const {ui,patch,documentNavigation}=useNFV();
   const next=ui.locale==="vi"?"en":"vi";
 
   function switchLocale(){
-    const page=localScreenFromPath(window.location.pathname);
-    if(page){
-      const item=navigationItemForPage(page);
-      if(item)window.history.replaceState({},"",mainNavHref(item,next));
-    }
+    if(syncLocaleRoute(window,next,{documentNavigation}))return;
     patch({locale:next});
   }
 

@@ -11,6 +11,15 @@ const compiled=stripTypeScriptTypes(raw.replace(
 ));
 const nav=await import(`data:text/javascript,${encodeURIComponent(compiled)}`);
 
+async function loadBrowserNavigation(){
+  try {
+    const raw=readFileSync(new URL('../src/lib/browser-navigation.ts',import.meta.url),'utf8');
+    return await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(raw))}`);
+  } catch (error) {
+    assert.fail(`browser navigation helper is unavailable: ${error instanceof Error?error.message:String(error)}`);
+  }
+}
+
 test('desktop/drawer routing keeps ported pages local and tracker stay on local routes',()=>{
   const item=id=>nav.MAIN_NAV_ITEMS.find(x=>x.id===id);
   assert.equal(nav.resolveMainNavHref(item('home'),'vi'),'/vi');
@@ -32,6 +41,58 @@ test('local route mapping is canonical and does not send guest Account to v2',()
   assert.equal(nav.localScreenFromPath('/store/vi'),'store');
   assert.equal(nav.localScreenFromPath('/workshops/vi'),'workshops');
   assert.equal(nav.localScreenFromPath('/tracker/en'),'tracker');
+});
+
+test('server-rendered route content performs document navigation instead of only changing history',async()=>{
+  const {syncBrowserRoute}=await loadBrowserNavigation();
+  const calls=[];
+  const browser={
+    location:{pathname:'/workshops/soil-101/vi',assign:href=>calls.push(['assign',href]),replace:href=>calls.push(['replace',href])},
+    history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
+  };
+
+  assert.equal(syncBrowserRoute(browser,'/csa/vi',{documentNavigation:true}),true);
+  assert.deepEqual(calls,[['assign','/csa/vi']]);
+});
+
+test('normal app pages retain client-side history navigation',async()=>{
+  const {syncBrowserRoute}=await loadBrowserNavigation();
+  const calls=[];
+  const browser={
+    location:{pathname:'/workshops/vi',assign:href=>calls.push(['assign',href]),replace:href=>calls.push(['replace',href])},
+    history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
+  };
+
+  assert.equal(syncBrowserRoute(browser,'/csa/vi',{documentNavigation:false}),false);
+  assert.deepEqual(calls,[['push','/csa/vi']]);
+});
+
+test('locale navigation preserves a workshop detail slug and leaves server-rendered content',async()=>{
+  const {localizedRouteHref,syncLocaleRoute}=await loadBrowserNavigation();
+  assert.equal(typeof localizedRouteHref,'function');
+  assert.equal(typeof syncLocaleRoute,'function');
+  const calls=[];
+  const browser={
+    location:{pathname:'/workshops/soil-101/vi',assign:href=>calls.push(['assign',href]),replace:href=>calls.push(['replace',href])},
+    history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
+  };
+
+  assert.equal(localizedRouteHref('/workshops/soil-101/vi','en'),'/workshops/soil-101/en');
+  assert.equal(syncLocaleRoute(browser,'en',{documentNavigation:true}),true);
+  assert.deepEqual(calls,[['replace','/workshops/soil-101/en']]);
+});
+
+test('locale navigation keeps regular app pages on the History API',async()=>{
+  const {syncLocaleRoute}=await loadBrowserNavigation();
+  assert.equal(typeof syncLocaleRoute,'function');
+  const calls=[];
+  const browser={
+    location:{pathname:'/csa/vi',assign:href=>calls.push(['assign',href]),replace:href=>calls.push(['replace',href])},
+    history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
+  };
+
+  assert.equal(syncLocaleRoute(browser,'en',{documentNavigation:false}),false);
+  assert.deepEqual(calls,[['history-replace','/csa/en']]);
 });
 
 test('links are resolved by a shared function and obsolete wrappers are removed',()=>{

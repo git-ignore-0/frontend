@@ -183,6 +183,62 @@
 }
 .nfv-workshops .wk-page-state .nfv-data-state { width: 100%; }
 
+/* Detail keeps the same restrained calendar language while allowing long CMS content to breathe. */
+.nfv-workshops .wk-detail-shell { width: min(calc(100% - 2rem), 68rem); margin-inline: auto; }
+.nfv-workshops .wk-detail-hero {
+  max-width: 52rem; padding: clamp(1.25rem, 3vw, 2.5rem) 0 clamp(1.5rem, 3vw, 2.75rem);
+  border-bottom: 1px solid var(--line);
+}
+.nfv-workshops .wk-detail-hero h1 {
+  max-width: 48rem; margin: .75rem 0 0; color: var(--green);
+  font-size: clamp(1.75rem, 4vw, 3rem); font-weight: 700; letter-spacing: -.035em;
+  line-height: 1.12; overflow-wrap: anywhere; text-wrap: balance;
+}
+.nfv-workshops .wk-detail-hero p {
+  max-width: 42rem; margin: 1rem 0 0; color: var(--ink2);
+  font-size: clamp(.9375rem, 1.8vw, 1.125rem); line-height: 1.7;
+}
+.nfv-workshops .wk-fallback-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  margin-top: 1.25rem; padding: .875rem 1rem; border: 1px solid var(--line);
+  border-left: 3px solid var(--green2); border-radius: var(--radius); background: var(--soft);
+}
+.nfv-workshops .wk-fallback-banner p { margin: 0; color: var(--ink2); font-size: .875rem; }
+.nfv-workshops .wk-fallback-banner a { flex: 0 0 auto; color: var(--green); font-size: .8125rem; font-weight: 700; }
+.nfv-workshops .wk-detail-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+  gap: clamp(2rem, 5vw, 4.5rem); align-items: start; padding-top: clamp(1.75rem, 4vw, 3.5rem);
+}
+.nfv-workshops .wk-detail-body { min-width: 0; }
+.nfv-workshops .wk-prose { color: var(--ink2); font-size: 1rem; line-height: 1.78; overflow-wrap: anywhere; }
+.nfv-workshops .wk-prose > :first-child { margin-top: 0; }
+.nfv-workshops .wk-prose h2,
+.nfv-workshops .wk-prose h3,
+.nfv-workshops .wk-prose h4 { margin: 1.8em 0 .65em; color: var(--green); line-height: 1.25; text-wrap: balance; }
+.nfv-workshops .wk-prose h2 { font-size: clamp(1.35rem, 2.7vw, 1.8rem); }
+.nfv-workshops .wk-prose h3 { font-size: clamp(1.15rem, 2vw, 1.4rem); }
+.nfv-workshops .wk-prose h4 { font-size: 1.0625rem; }
+.nfv-workshops .wk-prose p { margin: 0 0 1.15rem; }
+.nfv-workshops .wk-prose ul,
+.nfv-workshops .wk-prose ol { margin: 0 0 1.25rem; padding-left: 1.35rem; }
+.nfv-workshops .wk-prose li + li { margin-top: .45rem; }
+.nfv-workshops .wk-prose blockquote {
+  margin: 1.5rem 0; padding: .25rem 0 .25rem 1rem; border-left: 3px solid var(--green2);
+  color: var(--green); font-size: 1.0625rem;
+}
+.nfv-workshops .wk-prose a { color: var(--green); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.nfv-workshops .wk-inline-image { width: 100%; height: auto; margin: 1.5rem 0; border-radius: var(--radius); }
+.nfv-workshops .wk-body-empty { color: var(--muted); }
+.nfv-workshops .wk-detail-facts {
+  position: sticky; top: 5.5rem; padding: 1rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--paper);
+}
+.nfv-workshops .wk-detail-facts dl { margin: 0; }
+.nfv-workshops .wk-detail-facts dl > div + div { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.nfv-workshops .wk-detail-facts dt { color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.nfv-workshops .wk-detail-facts dd { margin: .35rem 0 0; color: var(--ink2); font-size: .875rem; font-weight: 600; line-height: 1.55; }
+.nfv-workshops .wk-register { width: 100%; margin-top: 1.25rem; }
+
 @media (max-width: 767px) {
   .nfv-workshops { padding: 1.5rem 0 3rem; }
   .nfv-workshops .wk-calendar-card {
@@ -210,6 +266,9 @@
   .nfv-workshops .wk-card-meta .wk-status { display: none; }
   .nfv-workshops .wk-card-action { justify-self: stretch; }
   .nfv-workshops .wk-card-action .btn { width: 100%; }
+  .nfv-workshops .wk-detail-layout { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .nfv-workshops .wk-detail-facts { position: static; grid-row: 1; }
+  .nfv-workshops .wk-fallback-banner { align-items: flex-start; flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nfv-workshops *, .nfv-workshops *::before, .nfv-workshops *::after {

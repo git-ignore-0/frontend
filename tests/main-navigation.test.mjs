@@ -57,7 +57,6 @@ test("Store, CSA and Account are direct-entry Next routes",()=>{
   assert.match(source("app/csa/[locale]/page.tsx"),/initialPage="csa"/);
   assert.match(source("app/store/[locale]/page.tsx"),/initialPage="store"/);
   assert.match(source("src/state/NFVContext.tsx"),/window\.addEventListener\("popstate",handlePopState\)/);
-  assert.match(source("src/components/navigation/LocaleToggle.tsx"),/window\.history\.replaceState/);
   assert.ok(existsSync(new URL("../app/account/[locale]/page.tsx",import.meta.url)));
   assert.match(source("app/account/[locale]/page.tsx"),/initialPage="account"/);
 });

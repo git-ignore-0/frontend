@@ -9,7 +9,7 @@
 .hist-subhead{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin:13px 0 4px}
 .hist-subhead h3{font-size:14px;font-weight:650;margin:0}
 .hist-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:13px 0 4px;color:#829188;font-size:12px;border-top:1px solid #e9ede8;margin-top:10px}
-.hist-footer strong{color:#345740}.hist-footer button{min-height:36px}.hist-end{color:#8e9a90;font-size:12px}
+.hist-footer strong{color:#345740}.hist-footer button{min-height:36px}
 .hist-shrink{min-width:0;flex:1 1 auto;overflow-wrap:anywhere;word-break:normal}.acc-order-top>.hist-shrink{min-width:0}
 .acc-order-id{overflow-wrap:anywhere}.acc-subline{overflow-wrap:anywhere}
 .acc-order-names{overflow-wrap:anywhere;word-break:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

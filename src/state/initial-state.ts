@@ -1,4 +1,5 @@
 import type {AccountTab,CatalogData,FetchStatus,Locale,Recipient,Resource,Screen} from "@/types";
+import type {RedemptionIntent} from "@/account/redemption-intent";
 
 export interface UIState {
   page: Screen; productId: string; accountTab: AccountTab; accountHubOpen: boolean; locale: Locale;
@@ -7,15 +8,15 @@ export interface UIState {
   detailQty: number; checkoutStep: 0|1; checkoutEditRecipient: boolean; checkoutEditFromReview: boolean;
   recipient: Recipient; couponDraft: string; couponCode: string; couponAmount: number; couponError: string; applyCSA: Record<string,boolean>;
   orderSearch: string; orderStatus: string; orderStart: string; orderEnd: string; orderDateOpen: boolean;
-  visible: Record<string,number>; profileEditing: boolean; addressEditing: boolean;
-  referrerDraft: string; referrerError: string; giftId: string | null; giftPhase: "confirm"|"success"|"error";
+  visible: Record<string,number>; addressEditing: boolean;
+  referrerDraft: string; referrerError: string; giftIntent: RedemptionIntent | null;
   toast: string; busyKeys: string[]; error: string; accountFetchState: Partial<Record<Resource,FetchStatus>>;
   wardFetchState: Record<string,FetchStatus>;
 }
 export const recipientEmpty: Recipient = {name:"",phone:"",city:"",ward:"",detail:"",address:"",note:""};
 export const initialData: CatalogData = {
   products:[],categories:[],provinces:[],wards:{},orders:[],addresses:[],
-  profile:{name:"",phone:"",email:""},authenticated:false,hasCSA:false,csa:null,rewards:null,referrals:null
+  profile:{name:"",phone:"",email:"",dateOfBirth:null},authenticated:false,hasCSA:false,csa:null,rewards:null,referrals:null
 };
 function defaultDate(days:number) {
   const d=new Date(); d.setDate(d.getDate()-days);
@@ -28,6 +29,6 @@ export const initialUI: UIState = {
   checkoutEditRecipient:false,checkoutEditFromReview:false,recipient:recipientEmpty,
   couponDraft:"",couponCode:"",couponAmount:0,couponError:"",applyCSA:{},
   orderSearch:"",orderStatus:"all",orderStart:defaultDate(29),orderEnd:defaultDate(0),orderDateOpen:false,
-  visible:{},profileEditing:false,addressEditing:false,referrerDraft:"",referrerError:"",giftId:null,giftPhase:"confirm",
+  visible:{},addressEditing:false,referrerDraft:"",referrerError:"",giftIntent:null,
   toast:"",busyKeys:[],error:"",accountFetchState:{},wardFetchState:{}
 };

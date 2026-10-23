@@ -1,9 +1,17 @@
 import {notFound} from "next/navigation";
 import {NFVApp} from "../../NFVApp";
-import type {Locale} from "@/types";
+import type {AccountTab,Locale} from "@/types";
+import {isReferralCode,normalizeReferralCode} from "@/account/referral-presentation";
 
-export default async function Page({params}:{params:Promise<{locale:string}>}){
+const ACCOUNT_TABS:readonly AccountTab[]=["orders","address","profile","csa","rewards","redeem","referrals"];
+
+export default async function Page({params,searchParams}:{params:Promise<{locale:string}>;searchParams?:Promise<{tab?:string|string[];ref?:string|string[]}>}){
   const {locale}=await params;
   if(locale!=="vi"&&locale!=="en")notFound();
-  return <NFVApp initialPage="account" initialLocale={locale as Locale}/>;
+  const query=await searchParams;
+  const requested=query?.tab;
+  const hasRequestedTab=typeof requested==="string"&&ACCOUNT_TABS.includes(requested as AccountTab);
+  const initialAccountTab=hasRequestedTab?requested as AccountTab:"orders";
+  const referralCode=typeof query?.ref==="string"?normalizeReferralCode(query.ref):"";
+  return <NFVApp initialPage="account" initialLocale={locale as Locale} initialAccountTab={initialAccountTab} initialAccountHubOpen={!hasRequestedTab} initialReferrerCode={isReferralCode(referralCode)?referralCode:""}/>;
 }

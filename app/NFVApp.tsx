@@ -3,7 +3,7 @@ import {useEffect,type ReactNode} from "react";
 import {NFVProvider,useNFV} from "@/state/NFVContext";
 import {AuthProvider} from "@/auth/AuthProvider";
 import {AuthGate} from "@/components/auth/AuthGate";
-import type {Locale,Screen} from "@/types";
+import type {AccountTab,Locale,Screen} from "@/types";
 import {Header} from "@/components/navigation/SiteHeader";
 import {SiteFooter} from "@/components/layout/SiteFooter";
 import {HomePage} from "@/screens/home/HomePage";
@@ -43,4 +43,4 @@ function Body({children}:{children?:ReactNode}){
    {ui.toast&&!ui.cartOpen&&!ui.filterOpen&&<div className="toast" role="status"><Icon name="check" size={20}/> {ui.toast}</div>}
  </div>;
 }
-export function NFVApp({initialPage="home",initialLocale="vi",children}:{initialPage?:Screen;initialLocale?:Locale;children?:ReactNode}){return <AuthProvider><NFVProvider initialPage={initialPage} initialLocale={initialLocale} documentNavigation={children!=null}><Body>{children}</Body></NFVProvider></AuthProvider>;}
+export function NFVApp({initialPage="home",initialLocale="vi",initialAccountTab="orders",initialAccountHubOpen=true,initialReferrerCode="",children}:{initialPage?:Screen;initialLocale?:Locale;initialAccountTab?:AccountTab;initialAccountHubOpen?:boolean;initialReferrerCode?:string;children?:ReactNode}){return <AuthProvider><NFVProvider initialPage={initialPage} initialLocale={initialLocale} initialAccountTab={initialAccountTab} initialAccountHubOpen={initialAccountHubOpen} initialReferrerCode={initialReferrerCode} documentNavigation={children!=null}><Body>{children}</Body></NFVProvider></AuthProvider>;}

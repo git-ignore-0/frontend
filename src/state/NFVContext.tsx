@@ -1,11 +1,13 @@
 "use client";
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction} from "react";
-import type {AccountTab, Address, Backend, CatalogData, Category, Locale, Product, Resource, Screen, Profile, Order} from "@/types";
+import type {AccountTab, Address, Backend, CatalogData, Category, Locale, Product, Resource, Screen, Order} from "@/types";
 import {formatAddress} from "@/lib/format";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
 import {localeFromPath,localScreenFromPath,navigationItemForPage,mainNavHref} from "@/data/main-navigation";
 import {syncBrowserRoute} from "@/lib/browser-navigation";
+import * as rewardsService from "@/account/rewards-service";
+import * as referralsService from "@/account/referrals-service";
 import {initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
 
 export {initialUI} from "./initial-state";
@@ -31,10 +33,11 @@ function normalizeProducts(items:unknown):Product[] {
       categoryId:String(p.categoryId??p.category_id??""),unit:String(p.unit||""),farm:String(p.farm||""),
       description:String(p.description||""),note:String(p.note||""),image:String(p.image||""),price:Number(p.price),csa:!!p.csa}));
 }
-export function NFVProvider({children,initialPage="home",initialLocale="vi",documentNavigation=false}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;documentNavigation?:boolean}){
+export function NFVProvider({children,initialPage="home",initialLocale="vi",initialAccountTab="orders",initialAccountHubOpen=true,initialReferrerCode="",documentNavigation=false}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;initialAccountTab?:AccountTab;initialAccountHubOpen?:boolean;initialReferrerCode?:string;documentNavigation?:boolean}){
   const auth=useAuth();
+  const {expire}=auth;
   const [data,setData]=useState(initialData);
-  const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountHubOpen:initialPage==="account"}));
+  const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountTab:initialAccountTab,accountHubOpen:initialPage==="account"&&initialAccountHubOpen,referrerDraft:initialReferrerCode}));
   // Synchronous guards prevent double submits before React has committed the pending state.
   const activeActions=useRef(new Set<string>());
   const wardRequests=useRef(new Map<string,Promise<void>>());
@@ -44,11 +47,20 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",docu
   const toast=useCallback((message:string)=>setUI(s=>({...s,toast:message})),[]);
   useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,patch]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
-    const fn=typeof window!=="undefined" ? window.NFV_BACKEND?.[method] : undefined;
-    if(typeof fn!=="function")throw new Error(`Chưa kết nối API: ${method}`);
-    try {return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));}
-    catch(error){if(isUnauthorized(error))auth.expire();throw error;}
-  },[auth.expire]);
+    try {
+      if(method==="getRewards")return await rewardsService.getRewards(ui.locale) as T;
+      if(method==="getRewardGiftsPage")return await rewardsService.getRewardGiftsPage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
+      if(method==="getRewardHistoryPage")return await rewardsService.getRewardHistoryPage({...(arg as {type:"points"|"redemptions";cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
+      if(method==="redeemGift")return await rewardsService.redeemGift({...(arg as {giftId:string;idempotencyKey:string}),locale:ui.locale}) as T;
+      if(method==="getReferrals")return await referralsService.getReferrals() as T;
+      if(method==="getReferralsPage")return await referralsService.getReferralsPage(arg as {cursor?:string|null;limit?:number}) as T;
+      if(method==="applyReferralCode")return await referralsService.applyReferralCode(arg as {code:string}) as T;
+      const fn=typeof window!=="undefined" ? window.NFV_BACKEND?.[method] : undefined;
+      if(typeof fn!=="function")throw new Error(`Chưa kết nối API: ${method}`);
+      return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
+    }
+    catch(error){if(isUnauthorized(error))expire();throw error;}
+  },[expire,ui.locale]);
   const act=useCallback(async<T,>(key:string,task:()=>Promise<T>,success?:string):Promise<T|undefined>=>{
     if(activeActions.current.has(key))return undefined;
     activeActions.current.add(key);
@@ -142,7 +154,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",docu
     if(!data.authenticated)return;
     const epoch=authEpoch.current;
     const name=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[resource];
-    if(!window.NFV_BACKEND?.[name])return;
+    if(!["rewards","referrals"].includes(resource)&&!window.NFV_BACKEND?.[name])return;
     setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"loading"}}));
     try {
       const value=await call(name);
@@ -178,31 +190,29 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",docu
     const stillCurrent=()=>active&&epoch===authEpoch.current;
     if(auth.status!=="authenticated"){
       if(auth.status!=="checking"){
-        setData(s=>({...s,authenticated:false,hasCSA:false,profile:{name:"",phone:"",email:""},
+        setData(s=>({...s,authenticated:false,hasCSA:false,profile:{name:"",phone:"",email:"",dateOfBirth:null},
           addresses:[],orders:[],csa:null,rewards:null,referrals:null}));
         setUI(s=>({...s,recipient:{...recipientEmpty},accountFetchState:{},applyCSA:{},
-          couponCode:"",couponAmount:0,couponDraft:"",profileEditing:false,addressEditing:false,
-          giftId:null,referrerDraft:"",referrerError:"",visible:{}}));
+          couponCode:"",couponAmount:0,couponDraft:"",addressEditing:false,
+          giftIntent:null,referrerDraft:"",referrerError:"",visible:{}}));
       }
       return ()=>{active=false;};
     }
     setData(s=>({...s,authenticated:true,hasCSA:!!auth.session?.hasCSA,
-      profile:{name:"",phone:"",email:"",...auth.session?.profile},
+      profile:{name:"",phone:"",email:"",dateOfBirth:null,...auth.session?.profile},
       addresses:[],orders:[],csa:null,rewards:null,referrals:null}));
     const backend=window.NFV_BACKEND;
-    if(!backend)return ()=>{active=false;};
     const safe=async<T,>(method:keyof Backend,apply:(value:T)=>void)=>{
-      if(typeof backend[method]!=="function")return;
+      if(typeof backend?.[method]!=="function")return;
       try{const value=await call<T>(method);if(stillCurrent())apply(value);}
       catch(error){if(stillCurrent())console.error("NFV account data:",method,error);}
     };
     void Promise.all([
-      safe<Profile|null>("getProfile",v=>{if(v)setData(s=>({...s,profile:{...s.profile,...v}}));}),
       safe<Address|null>("getAddress",v=>setData(s=>({...s,addresses:v?[v]:[]}))),
       safe<Order[]>("getOrders",v=>setData(s=>({...s,orders:Array.isArray(v)?v:[]}))),
       ...(["csa","rewards","referrals"] as Resource[]).map(kind=>{
         const method=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[kind];
-        if(!backend[method])return Promise.resolve();
+        if(!["rewards","referrals"].includes(kind)&&!backend?.[method])return Promise.resolve();
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"loading"}}));
         return call(method).then(v=>{if(stillCurrent()){
           setData(s=>({...s,[kind]:v}));
@@ -211,7 +221,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",docu
       })
     ]);
     return ()=>{active=false;};
-  },[auth.status,auth.session,call]);
+  },[auth.status,auth.session,call,ui.locale]);
   const value=useMemo(()=>({data,setData,ui,setUI,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
     [data,ui,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;

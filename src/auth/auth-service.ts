@@ -1,7 +1,7 @@
 import type {Session} from "@/types";
 
 /** the site's canonical GET /api/auth/session response: {data:{user:CoreUser|null}}. */
-type SessionUser = {sub:string;name:string;email:string};
+type SessionUser = {sub:string;name:string;email:string;phone_number:string;date_of_birth:string|null};
 type SessionResponse = {data:{user:SessionUser|null}};
 
 export function isUnauthorized(error:unknown):boolean {
@@ -27,9 +27,14 @@ export async function getSession():Promise<Session|null> {
   if(!data || !("user" in data))throw new Error("Phản hồi phiên từ hệ thống xác thực không hợp lệ.");
   if(data.user===null)return null;
   const user=data.user;
-  if(!user || typeof user.sub!=="string" || typeof user.name!=="string" || typeof user.email!=="string") {
+  if(!user || typeof user.sub!=="string" || typeof user.name!=="string" || typeof user.email!=="string" ||
+    typeof user.phone_number!=="string" || !(user.date_of_birth===null||typeof user.date_of_birth==="string")) {
     throw new Error("Dữ liệu người dùng từ hệ thống xác thực không hợp lệ.");
   }
-  // the site's public CoreUser does not contain phone or CSA membership.
-  return {authenticated:true,profile:{name:user.name,email:user.email}};
+  return {authenticated:true,profile:{
+    name:user.name,
+    phone:user.phone_number,
+    email:user.email,
+    dateOfBirth:user.date_of_birth,
+  }};
 }

@@ -11,7 +11,7 @@ export function PagedList<T>({kind,items,render,emptyTitle,nextCursor=null,total
   const shownTotal=total??(nextCursor?null:items.length);
   return <><div className={className}>{items.slice(0,visible).map(render)}</div><div className="hist-footer" aria-live="polite">
     <span>{ui.locale==="en"?"Showing":"Đang hiển thị"} <strong>{visible}</strong>{shownTotal!=null&&<> / <strong>{shownTotal}</strong></>} {ui.locale==="en"?"items":"mục"}</span>
-    {hasNext?<Button small variant="outline" loading={pending} onClick={onMore||(()=>patch({visible:{...ui.visible,[kind]:visible+pageSize}}))}>{failed?"Thử lại":`Xem thêm ${Math.min(pageSize,Math.max(0,(shownTotal??visible+pageSize)-visible))} mục`}</Button>:<span className="hist-end">{ui.locale==="en"?"All items shown":"Đã hiển thị hết"}</span>}
+    {hasNext&&<Button small variant="outline" loading={pending} onClick={onMore||(()=>patch({visible:{...ui.visible,[kind]:visible+pageSize}}))}>{failed?"Thử lại":`Xem thêm ${Math.min(pageSize,Math.max(0,(shownTotal??visible+pageSize)-visible))} mục`}</Button>}
     {failed&&<span className="hist-page-error" role="alert">Không tải được thêm lịch sử. Hãy thử lại.</span>}
   </div></>;
 }

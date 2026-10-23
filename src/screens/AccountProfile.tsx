@@ -1,34 +1,22 @@
 "use client";
 import {useState, type FormEvent} from "react";
 import {useWardOptions} from "@/hooks/useWardOptions";
-import {Button,DataState,FormField,FormInput,FormSelect,Icon,Section} from "@/components/UI";
+import {ActionLink,Button,DataState,FormField,FormInput,FormSelect,Icon,Section} from "@/components/UI";
 import {useNFV} from "@/state/NFVContext";
 import {digits,formatAddress,validPhone} from "@/lib/format";
-import type {Address,Profile} from "@/types";
+import {copyText} from "@/data/account-copy";
+import {siteAccountHref} from "@/auth/site-auth";
+import {profileBirthDate} from "@/screens/profile-presentation";
+import type {Address} from "@/types";
 
 export function ProfileView(){
- const {data,ui,patch,setData,act,call}=useNFV();
+ const {data,ui}=useNFV();
  const p=data.profile;
- return <Section title="Hồ sơ cá nhân" description="Thông tin liên hệ" actions={!ui.profileEditing&&<Button small onClick={()=>patch({profileEditing:true})}><Icon name="edit" size={14}/> {p.name?"Chỉnh sửa":"Bổ sung thông tin"}</Button>}>
-   {ui.profileEditing?<ProfileEditor initial={p} cancel={()=>patch({profileEditing:false})} save={async value=>{
-     const result=await act("save:profile",async()=>{const confirmed=await call<Profile|void>("saveProfile",value);return confirmed||value;},"Đã cập nhật hồ sơ");
-     if(result){setData(s=>({...s,profile:{...s.profile,...(result||value)}}));patch({profileEditing:false});}
-   }} busy={ui.busyKeys.includes("save:profile")}/>:
-   <div className="acc-profile-info"><div><span>Họ và tên</span><strong>{p.name||"Chưa cập nhật"}</strong></div><div><span>Số điện thoại</span><strong>{p.phone||"Chưa cập nhật"}</strong></div><div><span>Email đăng nhập</span><strong>{p.email||"Chưa có thông tin"}</strong></div></div>}
+ const editHref=siteAccountHref(ui.locale,`/account/${ui.locale}?tab=profile`);
+ const missing=copyText(ui.locale,"common.na");
+ return <Section title={copyText(ui.locale,"profile.title")} description={copyText(ui.locale,"profile.description")} actions={<ActionLink small href={editHref}><Icon name="edit" size={14}/> {copyText(ui.locale,"profile.edit")}</ActionLink>}>
+   <div className="acc-profile-info"><div><span>{copyText(ui.locale,"profile.name")}</span><strong>{p.name||missing}</strong></div><div><span>{copyText(ui.locale,"profile.phone")}</span><strong>{p.phone||missing}</strong></div><div><span>{copyText(ui.locale,"profile.birthDate")}</span><strong>{profileBirthDate(p.dateOfBirth,ui.locale)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.email")}</span><strong>{p.email||copyText(ui.locale,"profile.noInformation")}</strong></div></div>
  </Section>;
-}
-function ProfileEditor({initial,cancel,save,busy}:{initial:Profile;cancel:()=>void;save:(value:Profile)=>Promise<void>;busy:boolean}){
- const [value,setValue]=useState({...initial}),[touched,setTouched]=useState(false);
- const valid=value.name.trim().length>=2&&validPhone(value.phone);
- const changed=value.name!==initial.name||value.phone!==initial.phone;
- const update=(key:"name"|"phone",text:string)=>{setValue(s=>({...s,[key]:text}));setTouched(true);};
- return <form id="accountProfileForm" onSubmit={e=>{e.preventDefault();if(valid&&changed)void save(value);}}>
-   <div className="acc-form-grid"><FormField label="Họ và tên *"><FormInput name="name" maxLength={80} required value={value.name} onChange={e=>update("name",e.target.value)}/></FormField>
-   <FormField label="Số điện thoại *"><FormInput name="phone" type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={10} placeholder="09xxxxxxxx" required value={value.phone} onChange={e=>update("phone",digits(e.target.value))}/></FormField>
-   <FormField label="Email đăng nhập" className="acc-wide"><FormInput readOnly value={initial.email}/></FormField></div>
-   <div className="help-error" role="alert">{touched&&!valid?"Vui lòng điền đầy đủ thông tin hợp lệ.":""}</div>
-   <div className="acc-form-actions"><Button type="submit" small disabled={!changed||!valid} loading={busy}>Lưu thay đổi</Button><Button small variant="outline" disabled={busy} onClick={cancel}>Hủy</Button></div>
- </form>;
 }
 export function AddressView(){
  const {data,ui,patch,setData,act,call}=useNFV();

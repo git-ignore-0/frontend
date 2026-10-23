@@ -10,15 +10,13 @@ test("header does not call an undeclared useAuth hook",()=>{
   assert.match(header,/export function Header\(/);
 });
 
-test("external session access is disabled by default in UI-only mode",()=>{
-  const config=read("src/auth/auth-config.ts");
+test("the local BFF session is checked on initial load and browser return",()=>{
   const provider=read("src/auth/AuthProvider.tsx");
-  assert.match(config,/NEXT_PUBLIC_SESSION_ENABLED/);
-  assert.match(config,/NEXT_PUBLIC_V2_SESSION_ENABLED/);
-  assert.match(provider,/SESSION_ENABLED\?"checking":"guest"/);
-  assert.match(provider,/const refresh=useCallback\(async\(\)=>\{\s*if\(!SESSION_ENABLED\)return;/);
-  assert.match(provider,/useEffect\(\(\)=>\{\s*if\(!SESSION_ENABLED\)return;/);
-  assert.match(provider,/const expire=useCallback\(\(\)=>\{\s*if\(!SESSION_ENABLED\)return;/);
+  assert.match(provider,/status:"checking"/);
+  assert.doesNotMatch(provider,/SESSION_ENABLED|NEXT_PUBLIC_SESSION_ENABLED|NEXT_PUBLIC_V2_SESSION_ENABLED/);
+  assert.match(provider,/void refresh\(\)/);
+  assert.match(provider,/window\.addEventListener\("pageshow",onPageShow\)/);
+  assert.match(provider,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.doesNotMatch(read("src/components/auth/AuthEntry.tsx"),/fetch\(/);
 });
 

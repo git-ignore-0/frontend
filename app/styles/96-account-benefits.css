@@ -4,11 +4,11 @@
 .benefit-balance{background:#f3f8f1;border:1px solid #e1eadf;border-radius:4px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
 .benefit-balance>span{font-size:13px;color:#647c67}.benefit-balance>strong{color:#315e3a;font-size:26px;line-height:1.2;font-weight:720}
 .benefit-balance>strong small{font-size:13px;font-weight:500}
-.benefit-gift-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.benefit-gift-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .benefit-gift{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:auto auto;column-gap:11px;row-gap:10px;border:1px solid var(--line);border-radius:4px;padding:10px;min-width:0;align-items:start}
 .benefit-gift-thumb{grid-row:1/3;position:relative;overflow:hidden;border-radius:4px;background:#f1f3ee;border:1px solid #e4e9df;width:76px;height:76px;display:flex;align-items:center;justify-content:center;color:#749479;flex:none}
 .benefit-gift-thumb img{width:100%;height:100%;object-fit:cover}.benefit-gift-thumb img+.benefit-gift-fallback{display:none}
-.benefit-gift-body{min-width:0}.benefit-gift-body>strong{display:block;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.benefit-gift-body{min-width:0}.benefit-gift-body>strong{display:-webkit-box;font-size:13px;line-height:1.45;overflow:hidden;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .benefit-gift-cost{font-size:12px;color:var(--ink2);margin-top:3px}.benefit-gift-availability{margin-top:6px}
 .benefit-gift>.btn{grid-column:2;justify-self:start;white-space:normal;text-align:center;min-height:32px;height:auto;padding-block:6px}
 .benefit-plan-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin-bottom:12px}
@@ -29,7 +29,7 @@
 .benefit-invite-count{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f7f9f5;border:1px solid #e8ede6;padding:10px 12px;margin-bottom:6px;border-radius:4px}
 .benefit-invite-count>span{font-size:12px;color:#738274}.benefit-invite-count>strong{font-size:17px;color:#385f42}
 .benefit-ref-form p{font-size:12px;color:#7a897c;margin:0 0 9px}.benefit-ref-form .nfv-control{width:100%;max-width:430px}.benefit-ref-form>.btn{margin-top:8px}.benefit-ref-form .help-error{min-height:0}
-.benefit-how{margin:0;padding-left:19px}.benefit-how li{padding:4px 0;font-size:13px;color:var(--ink2)}.benefit-terms{margin-top:12px;border-top:1px solid #e9eee7;padding-top:11px}.benefit-terms strong{font-size:13px}.benefit-terms p{font-size:12px;color:#788579;line-height:1.55;margin:3px 0 0}
+.benefit-how{margin:0;padding-left:19px}.benefit-how li{padding:4px 0;font-size:13px;color:var(--ink2)}
 .benefit-modal-backdrop{position:fixed;inset:0;z-index:105;background:#1f3327a8;display:flex;align-items:center;justify-content:center;padding:16px}
 .benefit-modal{background:#fffefb;border:1px solid #dce5da;border-radius:5px;width:min(420px,100%);max-height:85vh;overflow-y:auto;padding:17px;box-shadow:0 12px 34px #1c2c1c16}
 .benefit-modal-head{display:flex;align-items:center;justify-content:space-between;gap:9px}.benefit-modal-head h2{font-size:17px;margin:0}.benefit-modal-head .icon-btn{min-width:30px;min-height:30px}
@@ -64,33 +64,37 @@
 [data-benefit-gifts]>.hist-footer{margin-top:12px;gap:10px}
 [data-benefit-gifts] .hist-page-error{flex-basis:100%;font-size:12px;color:#a94736}
 
-/* Referral v61 — a single compact account panel for both referral codes.
-   Same FormControl and Button variants for every viewport. */
+/* Referral program card keeps the personal code, rewards and one-time
+   referrer state in one stable surface. */
 .referral-benefits-page{container-type:inline-size}
-.referral-code-box{padding:0;margin-bottom:16px;min-width:0}
-.referral-code-part{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:12px;align-items:center;padding:14px 17px;min-width:0}
-.referral-code-part+.referral-code-part{border-top:1px solid var(--line)}
+.referral-program-card{padding:0;min-width:0;overflow:hidden}
+.referral-personal-row,.referral-referrer-row{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:12px;align-items:center;padding:14px 17px;min-width:0}
+.referral-referrer-row{border-top:1px solid var(--line)}
 .referral-part-title{margin:0;font-size:14px;font-weight:650;line-height:1.45;letter-spacing:0;overflow-wrap:anywhere}
 .referral-part-body{min-width:0}
 .referral-part-body .benefit-info-row:first-child{padding-top:0}
 .referral-part-body .benefit-info-row:last-child{padding-bottom:0}
 .referral-code-entry{display:flex;align-items:center;gap:8px;min-width:0}
 .referral-code-entry .nfv-control{min-width:0;max-width:none;flex:1 1 auto;width:0}
-.referral-code-entry>.btn{margin:0;flex:0 0 auto;white-space:nowrap}
+.referral-code-entry>.btn{margin:0;flex:0 1 auto;min-width:0;max-width:100%;height:auto;white-space:normal;text-align:center;overflow-wrap:anywhere}
 .referral-part-body .benefit-ref-code-line{display:flex;gap:9px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .referral-part-body .benefit-ref-code-line code{font-size:15px;min-width:0}
-.referral-part-body .benefit-code-actions{display:flex;gap:6px;width:auto;flex:0 0 auto;justify-content:flex-end}
-.referral-part-body .benefit-code-actions .btn{flex:0 0 auto}
+.referral-part-body .benefit-code-actions{display:flex;gap:6px;width:auto;min-width:0;max-width:100%;flex:0 1 auto;justify-content:flex-end}
+.referral-part-body .benefit-code-actions .btn{flex:0 1 auto;min-width:0;max-width:100%;height:auto;white-space:normal;text-align:center;overflow-wrap:anywhere}
 .referral-muted-note{font-size:12px;color:var(--ink2);line-height:1.5;margin:3px 0 0}
-.referral-how-compact{display:grid;gap:1px}
-.referral-how-compact li{padding:2px 0}
-.referral-benefits-page .benefit-terms{margin-top:8px;padding-top:9px}
+.referral-earnings-row{border-top:1px solid var(--line);padding:14px 17px;min-width:0}.referral-earnings-row>.referral-part-title{margin-bottom:9px}.referral-earnings-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;background:#f7f9f5;border:1px solid #e8ede6;border-radius:4px;overflow:hidden}.referral-earnings-list>div{padding:11px 13px;min-width:0}.referral-earnings-list>div+div{border-left:1px solid var(--line)}.referral-earnings-list dt{color:var(--green);font-size:20px;font-weight:750;line-height:1.2}.referral-earnings-list dd{margin:3px 0 0;color:var(--ink2);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.referral-program-list{display:grid;gap:1px;color:var(--ink2);font-size:13px;line-height:1.55}
+.referral-program-list li{padding:4px 0;font-size:inherit;line-height:inherit}.referral-program-list li strong,.referral-program-list li span{display:block}.referral-program-list li strong{color:var(--ink);font-size:inherit}.referral-program-list li span{margin-top:2px}
 .referral-history-summary{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--ink2)}
 .referral-history-summary strong{color:var(--ink);font-weight:700}
 .referral-benefits-page [data-benefit-history="referrals"]{min-width:0}
+@container (max-width:760px){
+ .referral-personal-row,.referral-referrer-row{grid-template-columns:minmax(0,1fr);gap:8px}
+}
 @container (max-width:559px){
- .referral-code-box{margin-bottom:14px}
- .referral-code-part{grid-template-columns:minmax(0,1fr);gap:8px;padding:12px 14px}
+ .referral-earnings-list{grid-template-columns:minmax(0,1fr)}
+ .referral-personal-row,.referral-referrer-row,.referral-earnings-row{padding:12px 14px}
+ .referral-earnings-list>div+div{border-left:0;border-top:1px solid var(--line)}
  .referral-part-title{font-size:14px}
 }
 /* Extremely narrow account content may wrap, but never stretch buttons. */
@@ -98,4 +102,29 @@
  .referral-code-entry{flex-wrap:wrap}
  .referral-code-entry .nfv-control{flex:1 1 100%;width:100%}
  .referral-part-body .benefit-ref-code-line{flex-wrap:wrap}
+}
+
+/* Referral sharing composes the existing responsive dialog and button primitives. */
+.referral-share-dialog .filter-sheet-inner{width:min(560px,100%)}
+.referral-share-dialog .nfv-dialog-body{display:grid;gap:16px}
+.referral-share-description{margin:0;color:var(--ink2);font-size:13px;line-height:1.6}
+.referral-share-field{display:grid;gap:8px;min-width:0}
+.referral-share-field>label,.referral-share-platform-section h3{margin:0;color:var(--ink);font-size:13px;font-weight:650;line-height:1.45}
+.referral-share-copy-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch;min-width:0}
+.referral-share-copy-row .nfv-control{width:100%;min-width:0}
+.referral-share-message{display:block;width:100%;max-width:none;min-height:128px;height:auto;resize:vertical;line-height:1.55;padding-block:10px}
+.referral-share-platform-section{display:grid;gap:8px;margin-top:2px}
+.referral-share-platforms,.referral-share-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.referral-share-platforms .btn,.referral-share-actions .btn{height:auto;min-height:34px;white-space:normal;text-align:center}
+.referral-share-actions{justify-content:flex-end;margin-top:2px}
+.referral-share-feedback{margin:0;font-size:12px;line-height:1.45}
+.referral-share-feedback.is-copied{color:var(--green)}
+.referral-share-feedback.is-failed{color:#a94736}
+@media(max-width:600px){
+ .referral-share-dialog{align-items:flex-end;padding:0}
+ .referral-share-dialog .filter-sheet-inner{width:100%;max-width:100%;max-height:88vh;border-radius:12px 12px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom))}
+ .referral-share-copy-row{grid-template-columns:minmax(0,1fr)}
+ .referral-share-copy-row .btn{justify-self:start}
+ .referral-share-actions{justify-content:stretch}
+ .referral-share-actions .btn{flex:1 1 auto}
 }

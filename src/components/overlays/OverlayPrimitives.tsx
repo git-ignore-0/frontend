@@ -14,6 +14,7 @@ type OverlayProps = {
   returnRef?:RefObject<HTMLElement|null>;
   className?:string;
   closeLabel:string;
+  descriptionId?:string;
 };
 
 /** Store cart, store filters and Stories use the same overlay/focus contract. */
@@ -34,11 +35,11 @@ export function SideDrawer({title,onClose,children,returnRef,className="",closeL
 }
 
 /** Desktop centered dialog, mobile bottom sheet; uses Store surface/color tokens. */
-export function ResponsiveDialog({title,onClose,children,returnRef,className="",closeLabel}:OverlayProps){
+export function ResponsiveDialog({title,onClose,children,returnRef,className="",closeLabel,descriptionId}:OverlayProps){
   const panelRef=useRef<HTMLElement>(null),titleId=useId();
   useOverlayDialog({panelRef,returnRef,onClose});
   return <div className={`filter-sheet nfv-responsive-dialog ${className}`.trim()} onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}>
-    <section className="filter-sheet-inner" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={panelRef}>
+    <section className="filter-sheet-inner" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1} ref={panelRef}>
       <div className="nfv-dialog-head"><h2 id={titleId}>{title}</h2><IconButton label={closeLabel} onClick={onClose}/></div>
       <div className="nfv-dialog-body">{children}</div>
     </section>

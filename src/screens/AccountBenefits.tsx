@@ -1,5 +1,6 @@
 "use client";
 import {PagedList} from "@/components/account/PagedList";
+import {ReferralShareDialog} from "@/components/account/ReferralShareDialog";
 /* eslint-disable @next/next/no-img-element -- exact v61 gift-image DOM and unknown backend image URLs. */
 import {useRef,useState, type FormEvent, type ReactNode} from "react";
 import {IconButton} from "@/components/overlays/OverlayPrimitives";
@@ -8,7 +9,13 @@ import {Button,DataState,Icon,Section,localized} from "@/components/UI";
 import {useNFV} from "@/state/NFVContext";
 import {copyText} from "@/data/account-copy";
 import {dateLabel,money} from "@/lib/format";
-import type {AccountTab,CSAPayment,CSAQuota,Gift,Invitee,RewardEntry,Resource,Paged} from "@/types";
+import {beginRedemptionIntent,redemptionRequest} from "@/account/redemption-intent";
+import {redemptionErrorCopyKey,redemptionStatus} from "@/account/redemption-presentation";
+import {applyRedemptionResult} from "@/account/redemption-state";
+import {isReferralCode,normalizeReferralCode,referralErrorCopyKey,referralInvitePresentation} from "@/account/referral-presentation";
+import {mergeReferralSummary} from "@/account/referral-state";
+import {copyTextToClipboard} from "@/account/referral-share";
+import type {AccountTab,CSAPayment,CSAQuota,Gift,Invitee,RewardEntry,Resource,Paged,Referrals} from "@/types";
 
 function MetricBadge({children,tone="neutral"}:{children:ReactNode;tone?:string}){
  return <span className={`acc-status ${({active:"completed",done:"completed",pending:"processing",error:"cancelled",neutral:"neutral"} as Record<string,string>)[tone]||"neutral"}`}>{children}</span>;
@@ -87,10 +94,9 @@ function PointRow({item}:{item:RewardEntry}){
 }
 function RedemptionRow({item}:{item:RewardEntry}){
  const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);
- const map:Record<string,[string,string]>={pending:["statusPending","pending"],processing:["statusPending","pending"],completed:["statusDone","done"],rejected:["statusRejected","error"],cancelled:["statusCancelled","neutral"]};
- const [label,tone]=map[item.status||""]||["statusPending","neutral"];
+ const {copyKey,tone}=redemptionStatus(item.status);
  return <BenefitTransactionRow title={localized(item as unknown as Record<string,unknown>,"giftName",ui.locale)||item.giftName||"—"}
-   meta={[dateLabel(item.date),item.id].join(" · ")} badge={<><MetricBadge tone={tone}>{L("rewards."+label)}</MetricBadge><small>−{item.points??0} {L("common.points")}</small></>}/>;
+   meta={[dateLabel(item.date),item.id].join(" · ")} badge={<><MetricBadge tone={tone}>{L(copyKey)}</MetricBadge><small>−{item.points??0} {L("common.points")}</small></>}/>;
 }
 function RewardsPoints(){
  const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);
@@ -106,27 +112,28 @@ function GiftRow({gift}:{gift:Gift}){
  const enough=balance!=null&&Number.isFinite(+balance)&&+balance>=needed;
  return <article className="benefit-gift" data-gift-id={gift.id}><GiftThumb gift={gift}/><div className="benefit-gift-body"><strong>{localized(gift as unknown as Record<string,unknown>,"name",ui.locale)}</strong><div className="benefit-gift-cost">{L("rewards.need",{points:needed})}</div>
    <div className="benefit-gift-availability"><MetricBadge tone={enough?"active":"neutral"}>{enough?L("rewards.enough"):L("rewards.notEnough",{points:Math.max(0,needed-Number(balance||0))})}</MetricBadge></div></div>
-   <Button small variant={enough?"primary":"outline"} disabled={!enough} onClick={()=>patch({giftId:gift.id,giftPhase:"confirm"})}>{enough?L("rewards.redeem"):L("rewards.unavailable")}</Button></article>;
+   <Button small variant={enough?"primary":"outline"} disabled={!enough} onClick={()=>patch({giftIntent:beginRedemptionIntent(gift.id)})}>{enough?L("rewards.redeem"):L("rewards.unavailable")}</Button></article>;
 }
 function GiftModal(){
- const {data,ui,patch,setData,call,act}=useNFV();const gift=data.rewards?.gifts?.find(g=>g.id===ui.giftId);
+ const {data,ui,patch,setData,call,act}=useNFV();const intent=ui.giftIntent;const gift=data.rewards?.gifts?.find(g=>g.id===intent?.giftId);
  const panelRef=useRef<HTMLElement>(null);
- const close=()=>{if(!ui.busyKeys.includes("gift:redeem"))patch({giftId:null});};
+ const close=()=>{if(!ui.busyKeys.includes("gift:redeem"))patch({giftIntent:null});};
  useOverlayDialog({panelRef,onClose:close});
- if(!gift)return null;
- const L=(key:string)=>copyText(ui.locale,key),done=ui.giftPhase==="success",error=ui.giftPhase==="error";
+ if(!gift||!intent)return null;
+ const L=(key:string)=>copyText(ui.locale,key),done=intent.phase==="success",error=intent.phase==="error";
  const balance=Number(data.rewards?.balance||0),points=Number(gift.points||0);
  const confirm=async()=>{
-   const res=await act("gift:redeem",()=>call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",{giftId:gift.id}));
-   if(res?.accepted!==true){patch({giftPhase:"error"});return;}
-   setData(s=>({...s,rewards:res.rewards||{...s.rewards,balance:res.balance??s.rewards?.balance,redemptions:res.redemption?[res.redemption,...(s.rewards?.redemptions||[])]:s.rewards?.redemptions}}));
-   patch({giftPhase:"success"});
+   const request=redemptionRequest(intent);
+   const res=await act("gift:redeem",()=>call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",request));
+   if(res?.accepted!==true){patch({giftIntent:{...intent,phase:"error"}});return;}
+   setData(s=>({...s,rewards:res.rewards||(res.redemption&&typeof res.balance==="number"?applyRedemptionResult(s.rewards,{balance:res.balance,redemption:res.redemption}):s.rewards)}));
+   patch({giftIntent:{...intent,phase:"success"}});
  };
  return <div className="benefit-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}><section ref={panelRef} className="benefit-modal" role="dialog" aria-modal="true" aria-labelledby="giftModalTitle" tabIndex={-1}>
    <div className="benefit-modal-head"><h2 id="giftModalTitle">{L(done?"rewards.successTitle":error?"rewards.errorTitle":"rewards.modalTitle")}</h2><IconButton onClick={close} label={L("common.close")}/></div>
-   {done?<p className="benefit-modal-copy">{L("rewards.successDesc")}</p>:error?<p className="benefit-modal-copy" role="alert">{L("rewards.errorDesc")}</p>:
+   {done?<p className="benefit-modal-copy">{L("rewards.successDesc")}</p>:error?<p className="benefit-modal-copy" role="alert">{L(redemptionErrorCopyKey(ui.error))}</p>:
    <><p className="benefit-modal-copy">{L("rewards.modalHint")}</p><div className="benefit-modal-gift"><GiftThumb gift={gift}/><div><strong>{localized(gift as unknown as Record<string,unknown>,"name",ui.locale)}</strong><small>{L("rewards.modalCost")}: {points} {L("common.points")}</small></div></div><BenefitInfoRow title={L("rewards.modalRemain")} value={`${Math.max(0,balance-points)} ${L("common.points")}`}/></>}
-   <div className="benefit-modal-actions"><Button small variant="outline" disabled={ui.busyKeys.includes("gift:redeem")} onClick={()=>patch({giftId:null})}>{done?L("common.close"):L("common.cancel")}</Button>{!done&&<Button small loading={ui.busyKeys.includes("gift:redeem")} onClick={()=>void confirm()}>{error?L("rewards.retry"):L("common.confirm")}</Button>}</div>
+   <div className="benefit-modal-actions"><Button small variant="outline" disabled={ui.busyKeys.includes("gift:redeem")} onClick={close}>{done?L("common.close"):L("common.cancel")}</Button>{!done&&<Button small loading={ui.busyKeys.includes("gift:redeem")} onClick={()=>void confirm()}>{error?L("rewards.retry"):L("common.confirm")}</Button>}</div>
  </section></div>;
 }
 function RewardsGifts(){
@@ -137,7 +144,7 @@ function RewardsGifts(){
      <div data-benefit-gifts="true"><PagedList kind="gifts" items={gifts} pageSize={8} className="benefit-gift-list" emptyTitle={L("rewards.noGifts")}
        nextCursor={meta.nextCursor} total={meta.total} pending={pending.includes("page:gifts")} failed={!!error.gifts} onMore={()=>void next("gifts",meta.nextCursor)} render={g=><GiftRow gift={g} key={g.id}/>} /></div>
    </BenefitSection><BenefitSection title={L("rewards.history")}><div className="benefit-history-host"><RewardsHistory kind="redemptions"/></div></BenefitSection>
-   {ui.giftId&&<GiftModal/>}</div>;
+   {ui.giftIntent&&<GiftModal/>}</div>;
 }
 function QuotaRow({quota:q}:{quota:CSAQuota}){
  const {ui}=useNFV();const L=(key:string,vars:Record<string,string|number>)=>copyText(ui.locale,key,vars);
@@ -175,29 +182,34 @@ function ReferralBenefits(){
  const ref=data.referrals||{},invites=ref.invitees||ref.history||[],person=ref.referrer;
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
  const code=String(ref.code||"");const eligible=!!ref.canEnterReferrer&&!person;
- const inputValid=/^[A-Z0-9_-]{4,24}$/.test(ui.referrerDraft);
+ const inputValid=isReferralCode(ui.referrerDraft);
  const attach=async(e:FormEvent)=>{e.preventDefault();if(!inputValid||!eligible)return;
-   const result=await act("referral:apply",()=>call<{referrer:{code:string;name?:string;linkedAt?:string};canEnterReferrer:boolean}>("applyReferralCode",{code:ui.referrerDraft.trim().toUpperCase()}));
-   if(result?.referrer){setData(s=>({...s,referrals:{...s.referrals,...result}}));patch({referrerDraft:"",referrerError:""});toast(L("ref.attachSuccess"));}
-   else patch({referrerError:L("ref.attachErrorDesc")});
+   let failureCode="";
+   const result=await act("referral:apply",async()=>{
+     try{return await call<Referrals>("applyReferralCode",{code:normalizeReferralCode(ui.referrerDraft)});}
+     catch(error){failureCode=error instanceof Error?error.message:"";throw error;}
+   });
+   if(result?.referrer){setData(s=>({...s,referrals:mergeReferralSummary(s.referrals,result)}));patch({referrerDraft:"",referrerError:""});toast(L("ref.attachSuccess"));}
+   else patch({referrerError:L(referralErrorCopyKey(failureCode))});
  };
  const copy=async()=>{
    if(!code)return;
-   try {await navigator.clipboard.writeText(code);toast(L("ref.copied"));}catch {toast(L("ref.copyFail"));}
+   try {await copyTextToClipboard(code);toast(L("ref.copied"));}catch {toast(L("ref.copyFail"));}
  };
- const share=async()=>{if(!code)return;if(navigator.share){try{await navigator.share({title:L("ref.personalCode"),text:code});}catch{}}else void copy();};
  const page=ref.pagination?.invitees||ref.pagination?.referrals||{};
  const count=Number.isFinite(Number(ref.invitedCount))?Number(ref.invitedCount):invites.length;
  return <div className="benefits-page referral-benefits-page">
-   <section className="acc-section benefit-section referral-code-box" aria-label={L("ref.codeLabel")}>
-     <div className="referral-code-part"><h2 className="referral-part-title">{person?L("ref.attached"):L("ref.enterTitle")}</h2>
-       <div className="referral-part-body">{person?<div className="referral-linked-details"><BenefitInfoRow title={L("ref.codeLabel")} value={person.code}/>{person.name&&<BenefitInfoRow title={L("ref.attached")} value={person.name}/>}<BenefitInfoRow title={L("ref.dateLinked")} value={dateLabel(person.linkedAt)}/></div>:
+   <section className="acc-section benefit-section referral-program-card" aria-label={L("ref.title")}>
+     <div className="referral-personal-row"><h2 className="referral-part-title">{L("ref.personalCode")}</h2><div className="referral-part-body">{code?<div className="benefit-ref-code-line"><code id="referralPersonalCode">{code}</code><div className="benefit-code-actions"><Button small variant="outline" onClick={()=>void copy()}>{L("ref.copy")}</Button><ReferralShareDialog code={code} locale={ui.locale}/></div></div>:<p className="referral-muted-note">{L("ref.noCode")}</p>}</div></div>
+     <section className="referral-earnings-row" aria-labelledby="referralEarningsTitle"><h2 id="referralEarningsTitle" className="referral-part-title">{L("ref.earningsTitle")}</h2><dl className="referral-earnings-list"><div><dt>{L("ref.successfulPoints")}</dt><dd>{L("ref.successfulLabel")}</dd></div><div><dt>{L("ref.secondOrderBonus")}</dt><dd>{L("ref.secondOrderLabel")}</dd></div></dl></section>
+     <div className="referral-referrer-row"><h2 className="referral-part-title">{person?L("ref.attached"):L("ref.enterTitle")}</h2>
+       <div className="referral-part-body">{person?<div className="referral-linked-details">{person.code&&<BenefitInfoRow title={L("ref.codeLabel")} value={person.code}/>} {person.name&&<BenefitInfoRow title={L("ref.attached")} value={person.name}/>} {person.linkedAt&&<BenefitInfoRow title={L("ref.dateLinked")} value={dateLabel(person.linkedAt)}/>}</div>:
        !eligible?<p className="referral-muted-note">{L("ref.notEligible")}</p>:
-       <form className="benefit-ref-form" onSubmit={attach} id="referrerAttachForm"><div className="referral-code-entry"><input className="nfv-control" name="referrerCode" maxLength={24} autoComplete="off" placeholder={L("ref.enterPlaceholder")} aria-label={L("ref.enterPlaceholder")} value={ui.referrerDraft} onChange={e=>patch({referrerDraft:e.target.value.toUpperCase(),referrerError:""})}/>
+       <form className="benefit-ref-form" onSubmit={attach} id="referrerAttachForm"><div className="referral-code-entry"><input className="nfv-control" name="referrerCode" maxLength={10} autoComplete="off" placeholder={L("ref.enterPlaceholder")} aria-label={L("ref.enterPlaceholder")} value={ui.referrerDraft} onChange={e=>patch({referrerDraft:normalizeReferralCode(e.target.value).slice(0,10),referrerError:""})}/>
          <Button small type="submit" disabled={!inputValid} loading={ui.busyKeys.includes("referral:apply")}>{L("ref.attach")}</Button></div><div className="help-error" role="alert">{ui.referrerError}</div></form>}</div></div>
-     <div className="referral-code-part"><h2 className="referral-part-title">{L("ref.personalCode")}</h2><div className="referral-part-body">{code?<div className="benefit-ref-code-line"><code id="referralPersonalCode">{code}</code><div className="benefit-code-actions"><Button small variant="outline" onClick={()=>void copy()}>{L("ref.copy")}</Button><Button small onClick={()=>void share()}>{L("ref.share")}</Button></div></div>:<p className="referral-muted-note">{L("ref.noCode")}</p>}</div></div>
    </section>
-   <BenefitSection title={L("ref.howTitle")}><ol className="benefit-how referral-how-compact"><li>{L("ref.howOne")}</li><li>{L("ref.howTwo")}</li><li>{L("ref.howThree")}</li></ol><div className="benefit-terms"><strong>{L("ref.terms")}</strong><p>{(ui.locale==="en"&&ref.termsEn)||ref.terms||L("ref.termsDefault")}</p></div></BenefitSection>
+   <BenefitSection title={L("ref.howTitle")} description={L("ref.howSubtitle")}><ol className="benefit-how referral-program-list referral-how-compact"><li><strong>{L("ref.howOneTitle")}</strong><span>{L("ref.howOneBody")}</span></li><li><strong>{L("ref.howTwoTitle")}</strong><span>{L("ref.howTwoBody")}</span></li><li><strong>{L("ref.howThreeTitle")}</strong><span>{L("ref.howThreeBody")}</span></li></ol></BenefitSection>
+   <BenefitSection title={L("ref.terms")}><ul className="benefit-how referral-program-list referral-condition-list"><li>{L("ref.conditionOne")}</li><li>{L("ref.conditionTwo")}</li><li>{L("ref.conditionThree")}</li><li>{L("ref.conditionFour")}</li><li>{L("ref.conditionFive")}</li></ul></BenefitSection>
    <BenefitSection title={L("ref.listTitle")}><div className="referral-history-summary"><span>{L("ref.invitedCount")}</span><strong>{count.toLocaleString(ui.locale==="en"?"en-US":"vi-VN")}</strong></div>
      <div className="benefit-history-host"><PagedList kind="referrals" items={invites} emptyTitle={L("ref.noInvites")} nextCursor={page.nextCursor} total={page.total??count} pending={pending.includes("page:referrals")} failed={!!error.referrals} onMore={()=>void next("referrals",page.nextCursor)} render={invite=><InviteRow key={invite.id} invite={invite}/>}/></div>
    </BenefitSection>
@@ -207,5 +219,6 @@ function InviteRow({invite}:{invite:Invitee}){
  const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);
  const statuses:Record<string,[string,string]>={pending:["statusPending","pending"],recorded:["statusRecorded","done"],invalid:["statusInvalid","error"]};
  const [key,tone]=statuses[invite.status]||["statusPending","neutral"];
- return <BenefitTransactionRow title={invite.name||invite.label||invite.maskedName||"—"} meta={[dateLabel(invite.date),invite.id].filter(Boolean).join(" · ")} badge={<MetricBadge tone={tone}>{L("ref."+key)}</MetricBadge>}/>;
+ const row=referralInvitePresentation(invite,dateLabel(invite.date));
+ return <BenefitTransactionRow title={row.title} meta={row.meta} badge={<MetricBadge tone={tone}>{L("ref."+key)}</MetricBadge>}/>;
 }

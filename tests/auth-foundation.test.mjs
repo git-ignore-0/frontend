@@ -11,7 +11,7 @@ const runScript=(script,env={})=>{
   assert.equal(result.status,0,result.stderr||result.stdout);
 };
 
-test("v62 delegates identity to v2 and never renders local login/register forms",()=>{
+test("v1 delegates identity to the Core OAuth BFF and never renders local login/register forms",()=>{
   const app=read("app/NFVApp.tsx"),context=read("src/state/NFVContext.tsx");
   const provider=read("src/auth/AuthProvider.tsx"),gate=read("src/components/auth/AuthGate.tsx");
   const buttons=read("src/components/auth/GuestAuthActions.tsx"),guest=read("src/components/auth/AuthEntry.tsx");
@@ -33,7 +33,7 @@ test("v62 delegates identity to v2 and never renders local login/register forms"
   assert.doesNotMatch(context,/authReturnTo|auth.pending|const signOut|login\(|register\(/);
 });
 
-test("v2 auth URLs preserve locale and safe same-origin returnTo",()=>{
+test("same-origin auth URLs preserve locale and safe returnTo",()=>{
   const authUrl=new URL("../src/auth/site-auth.ts",import.meta.url).href;
   runScript(`
     import assert from 'node:assert/strict';
@@ -47,14 +47,27 @@ test("v2 auth URLs preserve locale and safe same-origin returnTo",()=>{
     assert.equal(register.searchParams.get('returnTo'),'/store/en');
     assert.equal(new URL(auth.siteAuthHref('login','vi','https://evil.example'),'https://example.com').searchParams.get('returnTo'),'/account/vi');
     assert.equal(auth.siteLogoutHref('en'),'/api/auth/logout?locale=en');
-    assert.equal(auth.externalSiteAccountHref('vi'),null);
-  `,{NEXT_PUBLIC_V2_SITE_ORIGIN:""});
+    const account=new URL(auth.siteAccountHref('vi','/account/vi?tab=profile'),'https://example.com');
+    assert.equal(account.pathname,'/api/auth/account');
+    assert.equal(account.searchParams.get('returnTo'),'/account/vi?tab=profile');
+    assert.equal(new URL(auth.siteAccountHref('en','https://evil.example'),'https://example.com').searchParams.get('returnTo'),'/account/en');
+  `);
+});
+
+test("profile presentation localizes birth dates and missing values",()=>{
+  const presentationUrl=new URL("../src/screens/profile-presentation.ts",import.meta.url).href;
+  const copyUrl=new URL("../src/data/account-copy.ts",import.meta.url).href;
   runScript(`
     import assert from 'node:assert/strict';
-    const auth=await import(${JSON.stringify(authUrl)});
-    assert.ok(auth.siteAuthHref('login','vi').startsWith('https://naturalfarmingvietnam.com/api/auth/login?'));
-    assert.equal(auth.externalSiteAccountHref('vi'),'https://naturalfarmingvietnam.com/account/vi');
-  `,{NEXT_PUBLIC_V2_SITE_ORIGIN:"https://naturalfarmingvietnam.com"});
+    const presentation=await import(${JSON.stringify(presentationUrl)});
+    const copy=await import(${JSON.stringify(copyUrl)});
+    assert.equal(presentation.profileBirthDate('1990-06-15','vi'),'15/06/1990');
+    assert.equal(presentation.profileBirthDate('1990-06-15','en'),'15 Jun 1990');
+    assert.equal(presentation.profileBirthDate(null,'vi'),'');
+    assert.equal(copy.copyText('vi','profile.phone'),'Số điện thoại');
+    assert.equal(copy.copyText('en','profile.birthDate'),'Date of birth');
+    assert.equal(copy.copyText('en','profile.edit'),'Edit');
+  `);
 });
 
 test("session adapter actually consumes v2 data.user instead of the old mock bridge",()=>{
@@ -63,10 +76,10 @@ test("session adapter actually consumes v2 data.user instead of the old mock bri
     import assert from 'node:assert/strict';
     const service=await import(${JSON.stringify(authUrl)});
     const requests=[];
-    globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return new Response(JSON.stringify({data:{user:{sub:'uuid',name:'NFV Customer',email:'x@y.com'}}}),{status:200});};
+    globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return new Response(JSON.stringify({data:{user:{sub:'uuid',name:'NFV Customer',email:'x@y.com',phone_number:'+84 912 345 678',date_of_birth:'1990-06-15'}}}),{status:200});};
     const user=await service.getSession();
     assert.equal(user.authenticated,true);
-    assert.deepEqual(user.profile,{name:'NFV Customer',email:'x@y.com'});
+    assert.deepEqual(user.profile,{name:'NFV Customer',email:'x@y.com',phone:'+84 912 345 678',dateOfBirth:'1990-06-15'});
     assert.equal(requests[0].path,'/api/auth/session');
     assert.equal(requests[0].opts.credentials,'same-origin');
     assert.equal(requests[0].opts.cache,'no-store');
@@ -82,14 +95,14 @@ test("session adapter actually consumes v2 data.user instead of the old mock bri
   assert.doesNotMatch(read("src/auth/auth-service.ts"),/window\.NFV_BACKEND|localStorage|sessionStorage|document\.cookie|mockUsers|login\(|register\(/);
 });
 
-test("the v2 OAuth entry and logout are native navigation with server-side origin checks",()=>{
+test("OAuth entry and logout are same-origin native navigation",()=>{
   const header=read("src/components/navigation/SiteHeader.tsx"),nav=read("src/components/navigation/MainNavigation.tsx");
   const logout=read("src/components/auth/LogoutButton.tsx");
   assert.match(header,/onClick=\{\(\)=>navigate\("account"\)\}/);
   assert.match(nav,/status==="authenticated"\?<MainNavLink item=\{MAIN_NAV_ACCOUNT\}/);
   assert.match(nav,/<GuestAuthActions locale=\{ui.locale\} variant="drawer"\/>/);
   assert.match(logout,/<form method="post" action=\{siteLogoutHref\(ui.locale\)\}>/);
-  assert.match(logout,/externalSiteAccountHref/);
+  assert.doesNotMatch(logout,/externalSiteAccountHref/);
   assert.match(read("app/login/[locale]/page.tsx"),/redirect\(siteAuthHref\("login"/);
   assert.match(read("app/register/[locale]/page.tsx"),/redirect\(siteAuthHref\("register"/);
 });

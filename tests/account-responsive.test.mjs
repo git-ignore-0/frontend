@@ -4,6 +4,7 @@ import {test} from "node:test";
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const navigation = read("app/styles/30-account-navigation.css");
+const benefits = read("app/styles/96-account-benefits.css");
 const account = read("src/screens/Account.tsx");
 
 test("Account navigation has only mobile and desktop layouts", () => {
@@ -29,4 +30,11 @@ test("Old tablet navigation overrides were removed from shared styles", () => {
     assert.doesNotMatch(css, /\.account-side\s*\{[^}]*display:\s*flex/);
     assert.doesNotMatch(css, /\.acc-mobile-picker|\.acc-picker-arrow/);
   }
+});
+
+test("Gift catalog uses three desktop columns and clamps long titles to two lines", () => {
+  assert.match(benefits, /\.benefit-gift-list\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(benefits, /\.benefit-gift-body>strong\s*\{[^}]*-webkit-line-clamp:2/);
+  assert.match(benefits, /\.benefit-gift-body>strong\s*\{[^}]*overflow:hidden/);
+  assert.match(benefits, /@media\(max-width:900px\)\{\.benefit-gift-list\{grid-template-columns:1fr\}\}/);
 });

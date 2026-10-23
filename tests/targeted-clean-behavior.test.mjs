@@ -49,3 +49,7 @@ test('Business pagination and catalog logic are not duplicated inside UI primiti
  assert.match(read('src/lib/catalog-categories.ts'),/export function getTree/);
  assert.doesNotMatch(read('app/styles/00-foundation-and-store.css'),/\.drawer-head h2\{/);
 });
+test('Paged lists do not repeat an end message after the visible total',()=>{
+ const pagedList=read('src/components/account/PagedList.tsx');
+ assert.doesNotMatch(pagedList,/Đã hiển thị hết|All items shown|hist-end/);
+});

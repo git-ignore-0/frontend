@@ -8,6 +8,7 @@ const drawer=source("src/components/navigation/MobileNavDrawer.tsx");
 const data=source("src/data/main-navigation.ts");
 const context=source("src/state/NFVContext.tsx");
 const account=source("src/screens/Account.tsx");
+const profile=source("src/screens/AccountProfile.tsx");
 const logout=source("src/components/auth/LogoutButton.tsx");
 
 test("drawer shows only site links, Account and language selector",()=>{
@@ -22,14 +23,14 @@ test("drawer shows only site links, Account and language selector",()=>{
   assert.ok(existsSync(new URL("../app/account/[locale]/page.tsx",import.meta.url)));
 });
 
-test("the single logout UI uses v2's POST route on the same origin",()=>{
+test("the single logout UI uses the local BFF POST route on the same origin",()=>{
   assert.match(account,/<LogoutButton variant="hub"\/>/);
   assert.match(account,/<LogoutButton variant="sidebar"\/>/);
   assert.doesNotMatch(account,/AccountLogout/);
   assert.match(logout,/export function LogoutButton/);
   const button=source("src/components/auth/LogoutButton.tsx");
   assert.match(button,/method="post" action=\{siteLogoutHref\(ui.locale\)\}/);
-  assert.match(button,/externalSiteAccountHref/);
+  assert.doesNotMatch(button,/externalSiteAccountHref/);
   assert.doesNotMatch(button,/await signOut|auth\.logout|window\.NFV_BACKEND/);
 });
 
@@ -46,4 +47,11 @@ test("orders list receives dedicated top spacing, including mobile",()=>{
   const css=source("app/styles/20-history-and-catalog.css");
   assert.match(css,/\.nfv-orders-section \.account-orders-list \{ margin-block-start: 16px; \}/);
   assert.match(css,/\.nfv-orders-section \.account-orders-list \{ margin-block-start: 14px; \}/);
+});
+
+test("profile is read-only and delegates editing to the Core account form",()=>{
+  assert.match(profile,/siteAccountHref\(ui\.locale,`\/account\/\$\{ui\.locale\}\?tab=profile`\)/);
+  assert.match(profile,/<ActionLink[^>]*href=\{editHref\}/);
+  assert.match(profile,/profileBirthDate\(p\.dateOfBirth,ui\.locale\)/);
+  assert.doesNotMatch(profile,/ProfileEditor|accountProfileForm|saveProfile|profileEditing/);
 });

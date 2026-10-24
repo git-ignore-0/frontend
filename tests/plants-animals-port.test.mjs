@@ -12,7 +12,7 @@ test('Plants and Animals have one screen and a valid VI/EN direct route each',()
     assert.ok(existsSync(path.join(root,`app/${name}/[locale]/page.tsx`)));
     assert.match(read(`app/${name}/[locale]/page.tsx`),/locale!=="vi"&&locale!=="en"/);
   }
-  const shell=read('app/NFVApp.tsx');
+  const shell=read('app/NFVClientApp.tsx');
   assert.match(shell,/ui\.page==="plants"\?<PlantsPage\/>/);
   assert.match(shell,/ui\.page==="animals"\?<AnimalsPage\/>/);
 });

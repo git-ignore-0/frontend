@@ -5,11 +5,11 @@ import {useNFV} from "@/state/NFVContext";
 
 /** Header and mobile drawer share the same locale-switch behavior. */
 export function LocaleToggle({variant}:{variant:"header"|"drawer"}){
-  const {ui,patch,documentNavigation}=useNFV();
+  const {ui,patch}=useNFV();
   const next=ui.locale==="vi"?"en":"vi";
 
   function switchLocale(){
-    if(syncLocaleRoute(window,next,{documentNavigation}))return;
+    if(syncLocaleRoute(window,next))return;
     patch({locale:next});
   }
 

@@ -1,12 +1,18 @@
 "use client";
-import {useEffect,useState} from "react";
+import {useContext,useEffect,useState} from "react";
 import type {Locale} from "@/types";
 import type {PublicSiteSettings} from "@/types/site-settings";
+import {SiteSettingsContext} from "@/context/SiteSettingsContext";
 
 const cache=new Map<Locale,PublicSiteSettings>();
 type PendingRequest={promise:Promise<PublicSiteSettings|null>;refresh:boolean};
 const pending=new Map<Locale,PendingRequest>();
 const queuedRefresh=new Map<Locale,Promise<PublicSiteSettings|null>>();
+
+/** Seeds SSR data before client descendants render, avoiding an empty head and duplicate startup request. */
+function primeSiteSettings(locale:Locale,settings:PublicSiteSettings|null):void{
+  if(settings)cache.set(locale,settings);else cache.delete(locale);
+}
 
 function requestSiteSettings(locale:Locale,refresh:boolean):Promise<PublicSiteSettings|null>{
   const request=fetch(`/api/site-settings?locale=${locale}`)
@@ -46,12 +52,15 @@ export function fetchSiteSettings(locale:Locale,{refresh=false}:{refresh?:boolea
 }
 
 export function useSiteSettings(locale:Locale){
+  const initial=useContext(SiteSettingsContext);
+  const hasInitial=initial?.locale===locale;
   const [state,setState]=useState<{locale:Locale;settings:PublicSiteSettings|null}>(()=>({
     locale,
-    settings:cache.get(locale)??null
+    settings:hasInitial?initial.settings:cache.get(locale)??null
   }));
   useEffect(()=>{
     let mounted=true;
+    if(hasInitial)primeSiteSettings(locale,initial.settings);
     const update=(refresh=false)=>{
       void fetchSiteSettings(locale,{refresh}).then(settings=>{
         if(mounted)setState({locale,settings});
@@ -64,6 +73,6 @@ export function useSiteSettings(locale:Locale){
       mounted=false;
       window.removeEventListener("focus",refresh);
     };
-  },[locale]);
+  },[hasInitial,initial,locale]);
   return state.locale===locale?state.settings:null;
 }

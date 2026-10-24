@@ -9,12 +9,12 @@ import {syncBrowserRoute} from "@/lib/browser-navigation";
 import * as rewardsService from "@/account/rewards-service";
 import * as referralsService from "@/account/referrals-service";
 import {initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
+import {loadCart,saveCart} from "./cart-persistence";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
   data: CatalogData; setData: Dispatch<SetStateAction<CatalogData>>;
   ui: UIState; setUI: Dispatch<SetStateAction<UIState>>;
-  documentNavigation:boolean;
   patch: (update:Partial<UIState>)=>void; navigate:(page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>void;
   call: <T=unknown>(method:keyof Backend, arg?:unknown)=>Promise<T>;
   act: <T>(key:string, task:()=>Promise<T>, success?:string)=>Promise<T|undefined>;
@@ -33,11 +33,12 @@ function normalizeProducts(items:unknown):Product[] {
       categoryId:String(p.categoryId??p.category_id??""),unit:String(p.unit||""),farm:String(p.farm||""),
       description:String(p.description||""),note:String(p.note||""),image:String(p.image||""),price:Number(p.price),csa:!!p.csa}));
 }
-export function NFVProvider({children,initialPage="home",initialLocale="vi",initialAccountTab="orders",initialAccountHubOpen=true,initialReferrerCode="",documentNavigation=false}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;initialAccountTab?:AccountTab;initialAccountHubOpen?:boolean;initialReferrerCode?:string;documentNavigation?:boolean}){
+export function NFVProvider({children,initialPage="home",initialLocale="vi",initialAccountTab="orders",initialAccountHubOpen=true,initialReferrerCode=""}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;initialAccountTab?:AccountTab;initialAccountHubOpen?:boolean;initialReferrerCode?:string}){
   const auth=useAuth();
   const {expire}=auth;
   const [data,setData]=useState(initialData);
   const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountTab:initialAccountTab,accountHubOpen:initialPage==="account"&&initialAccountHubOpen,referrerDraft:initialReferrerCode}));
+  const [cartReady,setCartReady]=useState(false);
   // Synchronous guards prevent double submits before React has committed the pending state.
   const activeActions=useRef(new Set<string>());
   const wardRequests=useRef(new Map<string,Promise<void>>());
@@ -45,6 +46,13 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   const authEpoch=useRef(0);
   const patch=useCallback((change:Partial<UIState>)=>setUI(s=>({...s,...change})),[]);
   const toast=useCallback((message:string)=>setUI(s=>({...s,toast:message})),[]);
+  useEffect(()=>{
+    setUI(state=>({...state,cart:loadCart(window.sessionStorage)}));
+    setCartReady(true);
+  },[]);
+  useEffect(()=>{
+    if(cartReady)saveCart(window.sessionStorage,ui.cart);
+  },[cartReady,ui.cart]);
   useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,patch]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
     try {
@@ -82,14 +90,14 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     if(typeof window!=="undefined"){
       const item=navigationItemForPage(page);
       const href=item?mainNavHref(item,ui.locale):null;
-      if(syncBrowserRoute(window,href,{documentNavigation,replace:opts?.replace}))return;
+      if(syncBrowserRoute(window,href,{replace:opts?.replace}))return;
     }
     setUI(s=>({...s,page,cartOpen:false,filterOpen:false,categoryOpen:false,
       accountTab:opts?.tab??(page==="account"?"orders":s.accountTab),
       accountHubOpen:opts?.hub??(page==="account"&&!opts?.tab),
       productId:opts?.productId??s.productId,detailQty:opts?.productId?1:s.detailQty,error:""}));
     if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"instant"});
-  },[documentNavigation,ui.locale]);
+  },[ui.locale]);
   useEffect(()=>{
     const handlePopState=()=>{
       const page=localScreenFromPath(window.location.pathname);
@@ -222,7 +230,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     ]);
     return ()=>{active=false;};
   },[auth.status,auth.session,call,ui.locale]);
-  const value=useMemo(()=>({data,setData,ui,setUI,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
-    [data,ui,documentNavigation,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
+  const value=useMemo(()=>({data,setData,ui,setUI,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
+    [data,ui,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

@@ -64,7 +64,7 @@ function runTestimonialsRoute(path,{result={data:[]},error=null}={}){
 }
 test("one canonical Testimonials screen and locale routes",()=>{
  assert.match(source("app/testimonials/[locale]/page.tsx"),/initialPage="testimonials"/);
- assert.match(source("app/NFVApp.tsx"),/ui\.page==="testimonials"\?<TestimonialsPage key=\{ui\.locale\}/);
+ assert.match(source("app/NFVClientApp.tsx"),/ui\.page==="testimonials"\?<TestimonialsPage key=\{ui\.locale\}/);
  assert.match(source("src/data/main-navigation.ts"),/return "testimonials"/);
  assert.match(source("src/lib/site-links.ts"),/path==="testimonials"/);
  assert.equal(source("src/components/navigation/SiteHeader.tsx").includes("TestimonialsPage"),false);
@@ -76,8 +76,8 @@ test("floating Stories uses a drawer with shared story detail, not a redundant p
  assert.match(widget,/StoryCard/);
  assert.match(widget,/className="testimonials-launcher"/);
  assert.doesNotMatch(widget,/testimonials-launcher-desktop|testimonials-launcher-mobile/);
- assert.match(source("app/NFVApp.tsx"),/PUBLIC_STORY_PAGES\.has\(ui\.page\)&&<StoriesWidget key=\{ui\.locale\}\/>/);
- assert.doesNotMatch(source("app/NFVApp.tsx"),/PUBLIC_STORY_PAGES = new Set<Screen>\([^)]*"checkout"/);
+ assert.match(source("app/NFVClientApp.tsx"),/PUBLIC_STORY_PAGES\.has\(ui\.page\)&&<StoriesWidget key=\{ui\.locale\}\/>/);
+ assert.doesNotMatch(source("app/NFVClientApp.tsx"),/PUBLIC_STORY_PAGES = new Set<Screen>\([^)]*"checkout"/);
 });
 test("new routes use the real relative app import, never the aliased missing src\/app",()=>{
  assert.match(source("app/testimonials/[locale]/page.tsx"),/from "\.\.\/\.\.\/NFVApp"/);

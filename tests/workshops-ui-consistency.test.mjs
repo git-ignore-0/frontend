@@ -36,7 +36,7 @@ test('Workshop detail renders CMS content, facts, registration and fallback stat
 });
 
 test('Workshop pages do not render a floating stories control over their content',()=>{
-  const app=source('app/NFVApp.tsx');
+  const app=source('app/NFVClientApp.tsx');
   const publicPages=app.match(/PUBLIC_STORY_PAGES = new Set<Screen>\(\[([^\]]+)\]\)/)?.[1]||'';
   assert.doesNotMatch(publicPages,/workshops/);
 });

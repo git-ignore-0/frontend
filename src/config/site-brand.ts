@@ -1,4 +1,4 @@
-/** Canonical brand image owned by the public website. Use the configured public site for local/staging previews. */
+/** Canonical origin for absolute public URLs such as metadata and share links. */
 const DEFAULT_SITE_ORIGIN = "https://naturalfarmingvietnam.com";
 const configuredOrigin = (process.env.NEXT_PUBLIC_SITE_ORIGIN || process.env.NEXT_PUBLIC_V2_SITE_ORIGIN)?.trim();
 
@@ -12,10 +12,9 @@ function sitePublicOrigin(): string {
   return DEFAULT_SITE_ORIGIN;
 }
 
-/** The images are intentionally different in source site: header lockup vs. footer mark.
- * Keep asset mapping in one place, and never recreate its artwork with CSS/icons. */
+/** Header lockup and footer mark are local public assets, shared through one mapping. */
 export const SITE_ORIGIN = sitePublicOrigin();
 export const BRAND_IMAGES = {
-  header: `${SITE_ORIGIN}/images/logo-horizontal.png`,
-  footer: `${SITE_ORIGIN}/images/logo-mark.png`,
+  header: "/images/logo-horizontal.png",
+  footer: "/images/logo-mark.png",
 } as const;

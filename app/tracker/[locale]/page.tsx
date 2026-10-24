@@ -1,14 +1,15 @@
 import { NFVApp } from "../../NFVApp";
-import { trackerCopy } from "@/screens/tracker/tracker-copy";
+import {notFound} from "next/navigation";
 import type { Locale } from "@/types";
+import {publicPageMetadata} from "@/lib/public-metadata";
 export async function generateMetadata({ params }: {
     params: Promise<{
         locale: string;
     }>;
 }) {
     const { locale } = await params;
-    const copy = trackerCopy(locale === "en" ? "en" : "vi");
-    return { title: copy.title, description: copy.intro };
+    if(locale!=="vi"&&locale!=="en")return {};
+    return publicPageMetadata("tracker",locale);
 }
 export default async function Page({ params }: {
     params: Promise<{
@@ -16,5 +17,6 @@ export default async function Page({ params }: {
     }>;
 }) {
     const { locale } = await params;
-    return <NFVApp initialPage="tracker" initialLocale={(locale === "en" ? "en" : "vi") as Locale}/>;
+    if(locale!=="vi"&&locale!=="en")notFound();
+    return <NFVApp initialPage="tracker" initialLocale={locale as Locale}/>;
 }

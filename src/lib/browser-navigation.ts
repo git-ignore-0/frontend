@@ -4,33 +4,23 @@ type BrowserRouteTarget = {
     assign: (href:string)=>void;
     replace: (href:string)=>void;
   };
-  history: {
-    pushState: (data:unknown,unused:string,url?:string|URL|null)=>void;
-    replaceState: (data:unknown,unused:string,url?:string|URL|null)=>void;
-  };
 };
 
 type BrowserRouteOptions = {
-  documentNavigation: boolean;
   replace?: boolean;
 };
 
 type Locale = "vi"|"en";
 
 /**
- * Server-rendered route content cannot be swapped by the in-app screen state.
- * It must leave the document; regular app screens keep the faster History API path.
+ * Every public URL owns server-rendered content and metadata, so changing routes must
+ * leave the current document instead of only changing History API state.
  */
-export function syncBrowserRoute(browser:BrowserRouteTarget,href:string|null,options:BrowserRouteOptions):boolean {
+export function syncBrowserRoute(browser:BrowserRouteTarget,href:string|null,options:BrowserRouteOptions={}):boolean {
   if(!href||browser.location.pathname===href)return false;
-  if(options.documentNavigation){
-    if(options.replace)browser.location.replace(href);
-    else browser.location.assign(href);
-    return true;
-  }
-  if(options.replace)browser.history.replaceState({},"",href);
-  else browser.history.pushState({},"",href);
-  return false;
+  if(options.replace)browser.location.replace(href);
+  else browser.location.assign(href);
+  return true;
 }
 
 export function localizedRouteHref(pathname:string,locale:Locale):string|null {
@@ -38,6 +28,6 @@ export function localizedRouteHref(pathname:string,locale:Locale):string|null {
   return /\/(vi|en)$/.test(normalized)?normalized.replace(/\/(vi|en)$/,`/${locale}`):null;
 }
 
-export function syncLocaleRoute(browser:BrowserRouteTarget,locale:Locale,options:Pick<BrowserRouteOptions,"documentNavigation">):boolean {
-  return syncBrowserRoute(browser,localizedRouteHref(browser.location.pathname,locale),{...options,replace:true});
+export function syncLocaleRoute(browser:BrowserRouteTarget,locale:Locale):boolean {
+  return syncBrowserRoute(browser,localizedRouteHref(browser.location.pathname,locale),{replace:true});
 }

@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 
 test("App Router root and TSX composition are present",()=>{
   const layout=readFileSync(new URL("../app/layout.tsx",import.meta.url),"utf8");
-  const app=readFileSync(new URL("../app/NFVApp.tsx",import.meta.url),"utf8");
-  assert.match(layout,/export default function RootLayout/);
+  const app=readFileSync(new URL("../app/NFVClientApp.tsx",import.meta.url),"utf8");
+  assert.match(layout,/export default async function RootLayout/);
   for(const name of ["Store","ProductDetail","Checkout","Account","CSAProgram","OrderDetail"]){
     assert.ok(app.includes(name),name);
   }

@@ -12,10 +12,10 @@ test("each page has one screen and two local language entrypoints",()=>{
       assert.match(source(file),new RegExp(`initialPage="${page}"`));
       assert.match(source(file),/notFound\(\)/);
     }
-    assert.match(source("app/NFVApp.tsx"),new RegExp(`ui\.page==="${page}"`));
+    assert.match(source("app/NFVClientApp.tsx"),new RegExp(`ui\.page==="${page}"`));
   }
-  assert.match(source("app/NFVApp.tsx"),/<Header\/>/);
-  assert.match(source("app/NFVApp.tsx"),/<SiteFooter\/>/);
+  assert.match(source("app/NFVClientApp.tsx"),/<Header\/>/);
+  assert.match(source("app/NFVClientApp.tsx"),/<SiteFooter\/>/);
   assert.equal(source("src/components/navigation/SiteHeader.tsx").includes("AboutPage"),false);
 });
 

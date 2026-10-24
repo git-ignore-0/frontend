@@ -52,11 +52,11 @@ test('server-rendered route content performs document navigation instead of only
     history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
   };
 
-  assert.equal(syncBrowserRoute(browser,'/csa/vi',{documentNavigation:true}),true);
+  assert.equal(syncBrowserRoute(browser,'/csa/vi'),true);
   assert.deepEqual(calls,[['assign','/csa/vi']]);
 });
 
-test('normal app pages retain client-side history navigation',async()=>{
+test('normal public pages also perform document navigation so route metadata is refreshed',async()=>{
   const {syncBrowserRoute}=await loadBrowserNavigation();
   const calls=[];
   const browser={
@@ -64,8 +64,8 @@ test('normal app pages retain client-side history navigation',async()=>{
     history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
   };
 
-  assert.equal(syncBrowserRoute(browser,'/csa/vi',{documentNavigation:false}),false);
-  assert.deepEqual(calls,[['push','/csa/vi']]);
+  assert.equal(syncBrowserRoute(browser,'/csa/vi'),true);
+  assert.deepEqual(calls,[['assign','/csa/vi']]);
 });
 
 test('locale navigation preserves a workshop detail slug and leaves server-rendered content',async()=>{
@@ -79,11 +79,11 @@ test('locale navigation preserves a workshop detail slug and leaves server-rende
   };
 
   assert.equal(localizedRouteHref('/workshops/soil-101/vi','en'),'/workshops/soil-101/en');
-  assert.equal(syncLocaleRoute(browser,'en',{documentNavigation:true}),true);
+  assert.equal(syncLocaleRoute(browser,'en'),true);
   assert.deepEqual(calls,[['replace','/workshops/soil-101/en']]);
 });
 
-test('locale navigation keeps regular app pages on the History API',async()=>{
+test('locale navigation refreshes the document on regular public pages',async()=>{
   const {syncLocaleRoute}=await loadBrowserNavigation();
   assert.equal(typeof syncLocaleRoute,'function');
   const calls=[];
@@ -92,8 +92,8 @@ test('locale navigation keeps regular app pages on the History API',async()=>{
     history:{pushState:(_state,_title,href)=>calls.push(['push',href]),replaceState:(_state,_title,href)=>calls.push(['history-replace',href])}
   };
 
-  assert.equal(syncLocaleRoute(browser,'en',{documentNavigation:false}),false);
-  assert.deepEqual(calls,[['history-replace','/csa/en']]);
+  assert.equal(syncLocaleRoute(browser,'en'),true);
+  assert.deepEqual(calls,[['replace','/csa/en']]);
 });
 
 test('links are resolved by a shared function and obsolete wrappers are removed',()=>{

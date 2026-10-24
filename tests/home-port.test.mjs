@@ -8,7 +8,7 @@ test('Home has real local routes and remains inside existing shared Header/Foote
   for(const route of ['app/page.tsx','app/vi/page.tsx','app/en/page.tsx']){
     assert.match(source(route),/initialPage="home"/);
   }
-  const app=source('app/NFVApp.tsx');
+  const app=source('app/NFVClientApp.tsx');
   assert.match(app,/ui\.page==="home"\?<HomePage\/>/);
   assert.match(app,/<Header\/>/);assert.match(app,/<SiteFooter\/>/);
   assert.match(source('src/components/brand/BrandLogo.tsx'),/href=\{`\/\$\{locale\}`\}/);

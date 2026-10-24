@@ -5,6 +5,7 @@ import {FOOTER_COPY,footerNavigationLinks,resolveFooterLink} from "@/data/footer
 import {useSiteSettings} from "@/hooks/useSiteSettings";
 import {contactPresentation} from "@/lib/contact-settings";
 import {externalLinkLabel} from "@/lib/site-links";
+import {organizationJsonLd,serializeJsonLd} from "@/lib/organization-json-ld";
 import {useNFV} from "@/state/NFVContext";
 
 /** Keeps the brand/footer sections together in one content grid, themed with shared design tokens. */
@@ -13,7 +14,7 @@ export function SiteFooter(){
   const copy=FOOTER_COPY[ui.locale];
   const settings=useSiteSettings(ui.locale);
   const {email,phone,phoneHref,facebook,youtube}=contactPresentation(settings);
-  return <footer className="nfv-site-footer">
+  return <><footer className="nfv-site-footer">
     <div className="container nfv-site-footer__inner">
       <div className="nfv-site-footer__main">
         <section className="nfv-site-footer__about" aria-label="Natural Farming Vietnam">
@@ -49,5 +50,5 @@ export function SiteFooter(){
         <span>{copy.closing}</span>
       </div>
     </div>
-  </footer>;
+  </footer><script type="application/ld+json" dangerouslySetInnerHTML={{__html:serializeJsonLd(organizationJsonLd(settings))}}/></>;
 }

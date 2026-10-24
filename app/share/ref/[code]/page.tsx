@@ -1,5 +1,4 @@
 import type {Metadata} from "next";
-import Link from "next/link";
 import {notFound} from "next/navigation";
 import {isReferralCode,normalizeReferralCode} from "@/account/referral-presentation";
 import {referralShareContent} from "@/account/referral-share-content";
@@ -46,9 +45,9 @@ export default async function ReferralShareLanding(props:RouteProps){
         <p className="eyebrow">{copy.eyebrow}</p>
         <h1>{copy.title}</h1>
         <p className="referral-public-landing-description">{copy.description}</p>
-        <Link className="btn nfv-button referral-public-landing-cta" href={directReferralUrl}>
+        <a className="btn nfv-button referral-public-landing-cta" href={directReferralUrl}>
           <span className="nfv-button-content">{copy.cta}<svg className="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></span>
-        </Link>
+        </a>
       </section>
       <div aria-hidden="true" className="referral-public-landing-visual">
         <span className="referral-public-landing-sun"/>

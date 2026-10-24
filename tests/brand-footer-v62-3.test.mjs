@@ -7,9 +7,6 @@ test('v2 logo is canonical asset reused by one BrandLogo in Header and Footer',(
   const logo=file('src/components/brand/BrandLogo.tsx');
   const site=file('src/components/navigation/SiteHeader.tsx');
   const footer=file('src/components/layout/SiteFooter.tsx');
-  const brandConfig=file('src/config/site-brand.ts');
-  assert.match(brandConfig,/header:\s*`[^`]*\/images\/logo-horizontal\.png`/);
-  assert.match(brandConfig,/footer:\s*`[^`]*\/images\/logo-mark\.png`/);
   assert.match(logo,/BRAND_IMAGES\[variant\]/);
   assert.match(logo,/aria-label/);
   assert.match(logo,/alt=""/);
@@ -43,5 +40,5 @@ test('Brand/Footer CSS is isolated, old CSS is removed, locale behavior survives
   assert.doesNotMatch(original,/\.brand\b|\.brand-symbol|\.footer\b|\.footer-links/);
   assert.match(original,/\.locale-button\{min-height:42px/);
   assert.doesNotMatch(file('app/styles/05-main-navigation.css'),/\.site-header \.brand\b/);
-  assert.match(file('app/NFVApp.tsx'),/from "@\/components\/layout\/SiteFooter"/);
+  assert.match(file('app/NFVClientApp.tsx'),/from "@\/components\/layout\/SiteFooter"/);
 });

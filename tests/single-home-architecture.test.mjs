@@ -7,7 +7,7 @@ test("one Home page, reused by all three locale entrypoints",()=>{
   assert.ok(existsSync(new URL("../src/screens/home/HomePage.tsx",import.meta.url)));
   assert.ok(!existsSync(new URL("../src/screens/V2Home.tsx",import.meta.url)));
   assert.deepEqual(readdirSync(new URL("../src/screens/home/",import.meta.url)).filter(n=>/^(?:V2Home|HomePage)\.tsx$/.test(n)),["HomePage.tsx"]);
-  assert.match(read("app/NFVApp.tsx"),/ui\.page==="home"\?<HomePage\/>/);
+  assert.match(read("app/NFVClientApp.tsx"),/ui\.page==="home"\?<HomePage\/>/);
   for(const route of ["app/page.tsx","app/vi/page.tsx","app/en/page.tsx"])
     assert.match(read(route),/initialPage="home"/);
 });

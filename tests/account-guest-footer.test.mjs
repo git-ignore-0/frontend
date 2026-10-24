@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const file=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 
 test('guest Account stays inside the shared app shell before the shared footer',()=>{
-  const root=file('app/NFVApp.tsx');
+  const root=file('app/NFVClientApp.tsx');
   const gate=file('src/components/auth/AuthGate.tsx');
   const entry=file('src/components/auth/AuthEntry.tsx');
   assert.match(root,/nfv-app--auth-route/);

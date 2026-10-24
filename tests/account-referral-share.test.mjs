@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import {createRequire} from "node:module";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const require=createRequire(import.meta.url);
+const ts=require("typescript");
 
 const shareUrl = new URL(
   "../src/account/referral-share.ts",
@@ -85,6 +89,35 @@ test("public referral landing keeps social preview separate from referral captur
   assert.match(image,/new ImageResponse/);
   assert.match(image,/width:\s*1200/);
   assert.match(image,/height:\s*630/);
+});
+
+test("referral landing uses a plain anchor so OAuth capture cannot be prefetched",async()=>{
+  const code=ts.transpileModule(readFileSync(join(root,"app/share/ref/[code]/page.tsx"),"utf8"),{
+    compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX},
+  }).outputText;
+  const exports={};
+  const Link=()=>null;
+  vm.runInNewContext(code,{exports,require:id=>{
+    if(id==="react/jsx-runtime")return require("react/jsx-runtime");
+    if(id==="next/link")return {default:Link};
+    if(id==="next/navigation")return {notFound:()=>{throw new Error("NEXT_NOT_FOUND")}};
+    if(id==="@/account/referral-presentation")return {isReferralCode:()=>true,normalizeReferralCode:value=>value};
+    if(id==="@/account/referral-share-content")return {referralShareContent:()=>({eyebrow:"Invite",title:"Title",description:"Description",cta:"Continue",visualNote:"Note",imageAlt:"Alt"})};
+    if(id==="@/auth/server/config")return {publicSiteOrigin:()=>"https://site.test"};
+    throw new Error(`Unexpected import ${id}`);
+  }});
+  const tree=await exports.default({params:Promise.resolve({code:"NFV12345678"}),searchParams:Promise.resolve({locale:"en"})});
+  const nodes=[];
+  const visit=node=>{
+    if(!node||typeof node!=="object")return;
+    nodes.push(node);
+    const children=node.props?.children;
+    for(const child of Array.isArray(children)?children:[children])visit(child);
+  };
+  visit(tree);
+  const capture=nodes.find(node=>node.props?.href==="/ref/NFV12345678?locale=en");
+  assert.ok(capture,"missing referral capture action");
+  assert.equal(capture.type,"a");
 });
 
 test("referral share landing copy is complete in both locales",()=>{

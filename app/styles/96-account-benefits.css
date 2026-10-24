@@ -43,6 +43,20 @@
  .benefit-gift-body>strong{font-size:13px}.benefit-tx-end{max-width:48%}.benefit-quota-top span{font-size:12px}
 }
 
+/* Public referral entry follows v1 button geometry and yields to every dialog. */
+.referral-floating-action{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:44;display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:8px 14px;border:1px solid #cf9b52;border-radius:999px;background:var(--honey);color:var(--green);box-shadow:0 8px 24px #19352626;font-size:13px;font-weight:750;line-height:1.2;transition:transform .14s ease,box-shadow .14s ease}
+.referral-floating-action:hover{transform:translateY(-1px);box-shadow:0 10px 28px #19352632}
+.referral-floating-action-icon{display:grid;place-items:center;flex:none}
+.nfv-app:has([role="dialog"])>.referral-floating-action{display:none}
+.nfv-app:has(.csa-v2-floating)>.referral-floating-action{bottom:78px}
+@media(max-width:560px){
+ .referral-floating-action{right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));width:44px;height:44px;min-height:44px;padding:0;justify-content:center}
+ .referral-floating-action-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+ .nfv-app:has(.mobile-sticky)>.referral-floating-action{bottom:82px}
+ .nfv-app:has(.csa-v2-floating)>.referral-floating-action{bottom:78px}
+}
+@media(prefers-reduced-motion:reduce){.referral-floating-action{transition:none}}
+
 
 
 /* Long histories use existing HistoryList; each can paginate independently. */

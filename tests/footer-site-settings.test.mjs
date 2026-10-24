@@ -23,6 +23,19 @@ function loadContactPresentation() {
   return exports.contactPresentation;
 }
 
+function loadOrganizationJsonLd() {
+  const exports = {};
+  vm.runInNewContext(transpile("src/lib/organization-json-ld.ts"), {
+    exports,
+    URL,
+    require: (id) => {
+      if (id === "../config/site-brand.ts") return { SITE_ORIGIN: "https://site.example" };
+      throw new Error(`Unexpected import ${id}`);
+    },
+  });
+  return exports;
+}
+
 function loadSiteSettingsHook(fetcher) {
   const path = join(root, "src/hooks/useSiteSettings.ts");
   const code = ts.transpileModule(readFileSync(path, "utf8"), {
@@ -33,11 +46,41 @@ function loadSiteSettingsHook(fetcher) {
     exports,
     fetch: fetcher,
     require: (id) => {
-      if (id === "react") return { useEffect: () => {}, useState: () => [null, () => {}] };
+      if (id === "react") return { useContext:()=>undefined,useEffect: () => {}, useState: () => [null, () => {}] };
+      if(id==="@/context/SiteSettingsContext")return {SiteSettingsContext:{}};
       throw new Error(`Unexpected import ${id}`);
     },
   });
-  return exports.fetchSiteSettings;
+  return exports;
+}
+
+function loadServerSettingsRenderer(){
+  const contextExports={};
+  vm.runInNewContext(transpile("src/context/SiteSettingsContext.tsx",true),{
+    exports:contextExports,
+    require:id=>{
+      if(id==="react")return React;
+      if(id==="react/jsx-runtime")return require("react/jsx-runtime");
+      throw new Error(`Unexpected import ${id}`);
+    },
+  });
+  const hookExports={};
+  vm.runInNewContext(transpile("src/hooks/useSiteSettings.ts"),{
+    exports:hookExports,
+    fetch:async()=>{throw new Error("effects must not run during SSR")},
+    require:id=>{
+      if(id==="react")return React;
+      if(id==="@/context/SiteSettingsContext")return contextExports;
+      throw new Error(`Unexpected import ${id}`);
+    },
+  });
+  function Consumer(){
+    const value=hookExports.useSiteSettings("vi");
+    return React.createElement("span",null,value?.email||"none");
+  }
+  return initial=>renderToStaticMarkup(React.createElement(
+    contextExports.SiteSettingsProvider,{locale:"vi",settings:initial},React.createElement(Consumer)
+  ));
 }
 
 function transpile(path,jsx=false) {
@@ -105,6 +148,7 @@ function renderFooter(siteSettings) {
   }).outputText;
   const exports = {};
   const contactPresentation = loadContactPresentation();
+  const organizationJsonLd = loadOrganizationJsonLd();
   vm.runInNewContext(code, {
     exports,
     require: (id) => {
@@ -124,6 +168,7 @@ function renderFooter(siteSettings) {
       if (id === "@/state/NFVContext") return { useNFV: () => ({ ui: { locale: "vi" } }) };
       if (id === "@/hooks/useSiteSettings") return { useSiteSettings: () => siteSettings };
       if (id === "@/lib/contact-settings") return { contactPresentation };
+      if (id === "@/lib/organization-json-ld") return organizationJsonLd;
       if (id === "@/lib/site-links") return { externalLinkLabel: (label,locale) => `${label} (${locale==="vi"?"mở trong tab mới":"opens in a new tab"})` };
       throw new Error(`Unexpected import ${id}`);
     },
@@ -201,7 +246,7 @@ test("footer renders backend contacts and socials without hardcoded fallback val
 
 test("site settings loader deduplicates concurrent and cached requests per locale", async () => {
   let calls = 0;
-  const load = loadSiteSettingsHook(async () => {
+  const {fetchSiteSettings:load} = loadSiteSettingsHook(async () => {
     calls += 1;
     return { ok: true, json: async () => settings };
   });
@@ -215,7 +260,7 @@ test("site settings loader deduplicates concurrent and cached requests per local
 
 test("site settings loader can refresh a cached locale after an admin change", async () => {
   let calls = 0;
-  const load = loadSiteSettingsHook(async () => {
+  const {fetchSiteSettings:load} = loadSiteSettingsHook(async () => {
     calls += 1;
     return {
       ok: true,
@@ -230,7 +275,7 @@ test("site settings loader can refresh a cached locale after an admin change", a
 test("a forced refresh queued during an older request still fetches fresh settings once", async () => {
   let releaseFirst;
   let calls = 0;
-  const load = loadSiteSettingsHook(async () => {
+  const {fetchSiteSettings:load} = loadSiteSettingsHook(async () => {
     calls += 1;
     if(calls===1){
       await new Promise(resolve=>{releaseFirst=resolve});
@@ -251,7 +296,7 @@ test("a forced refresh queued during an older request still fetches fresh settin
 
 test("site settings loader does not cache failures", async () => {
   let calls = 0;
-  const load = loadSiteSettingsHook(async () => {
+  const {fetchSiteSettings:load} = loadSiteSettingsHook(async () => {
     calls += 1;
     if (calls === 1) throw new Error("offline");
     return { ok: true, json: async () => settings };
@@ -259,6 +304,27 @@ test("site settings loader does not cache failures", async () => {
   assert.equal(await load("en"), null);
   assert.equal((await load("en")).email, "hello@example.com");
   assert.equal(calls, 2);
+});
+
+test("shared app shell fetches settings on the server and passes them into the client shell",()=>{
+  const server=readFileSync(join(root,"app/NFVApp.tsx"),"utf8");
+  const client=readFileSync(join(root,"app/NFVClientApp.tsx"),"utf8");
+  assert.match(server,/getPublicSiteSettings/);
+  assert.match(server,/initialSiteSettings=\{settings\}/);
+  assert.match(client,/<SiteSettingsProvider locale=\{initialLocale\} settings=\{initialSiteSettings\}>/);
+});
+
+test("request-local settings provider does not leak a prior success into a later null SSR render",()=>{
+  const contextSource=readFileSync(join(root,"src/context/SiteSettingsContext.tsx"),"utf8");
+  assert.match(contextSource,/SiteSettingsContext\.Provider value=\{value\}/);
+  const hookSource=readFileSync(join(root,"src/hooks/useSiteSettings.ts"),"utf8");
+  assert.match(hookSource,/useContext\(SiteSettingsContext\)/);
+  assert.match(hookSource,/hasInitial\?initial\.settings/);
+  const client=readFileSync(join(root,"app/NFVClientApp.tsx"),"utf8");
+  assert.doesNotMatch(client,/primeSiteSettings\(/);
+  const renderSettings=loadServerSettingsRenderer();
+  assert.equal(renderSettings(settings),"<span>hello@example.com</span>");
+  assert.equal(renderSettings(null),"<span>none</span>");
 });
 
 test("header and footer expose Forum only when public settings contain its link", () => {

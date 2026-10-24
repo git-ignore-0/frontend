@@ -12,7 +12,7 @@ const runScript=(script,env={})=>{
 };
 
 test("v1 delegates identity to the Core OAuth BFF and never renders local login/register forms",()=>{
-  const app=read("app/NFVApp.tsx"),context=read("src/state/NFVContext.tsx");
+  const app=read("app/NFVClientApp.tsx"),context=read("src/state/NFVContext.tsx");
   const provider=read("src/auth/AuthProvider.tsx"),gate=read("src/components/auth/AuthGate.tsx");
   const buttons=read("src/components/auth/GuestAuthActions.tsx"),guest=read("src/components/auth/AuthEntry.tsx");
   assert.match(app,/<AuthProvider><NFVProvider/);

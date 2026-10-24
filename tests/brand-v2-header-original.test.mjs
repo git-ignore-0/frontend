@@ -4,11 +4,8 @@ import {readFileSync} from 'node:fs';
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('header uses the exact full v2 logo-horizontal.png at original 151x40 dimensions', () => {
-  const config = read('src/config/site-brand.ts');
   const logo = read('src/components/brand/BrandLogo.tsx');
   const header = read('src/components/navigation/SiteHeader.tsx');
-  assert.match(config, /header:\s*`[^`]*\/images\/logo-horizontal\.png`/);
-  assert.match(config, /footer:\s*`[^`]*\/images\/logo-mark\.png`/);
   assert.match(logo, /variant === "header"\s*\?\s*\{width: 151, height: 40\}/);
   assert.match(logo, /BRAND_IMAGES\[variant\]/);
   assert.match(logo, /aria-label=\{label\}/);

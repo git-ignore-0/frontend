@@ -28,11 +28,31 @@ function runTrackerRoute({origin='http://127.0.0.1:8000',upstreamOk=true}={}){
  return {route:exp,fetchCalls};
 }
 
+function loadTrackerPage(){
+ const code=ts.transpileModule(read('app/tracker/[locale]/page.tsx'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+ const exp={};
+ const notFound=()=>{throw new Error('NEXT_NOT_FOUND')};
+ vm.runInNewContext(code,{exports:exp,require:id=>{
+  if(id==='react/jsx-runtime')return require('react/jsx-runtime');
+  if(id==='next/navigation')return {notFound};
+  if(id==='../../NFVApp')return {NFVApp:()=>null};
+  if(id==='@/lib/public-metadata')return {publicPageMetadata:()=>({})};
+  throw new Error(`Unexpected import ${id}`);
+ }});
+ return exp.default;
+}
+
 test('tracker has exactly one local page and correct localized routes',()=>{
  assert.ok(existsSync(new URL('app/tracker/[locale]/page.tsx',root)));
  assert.match(read('app/tracker/[locale]/page.tsx'),/initialPage="tracker"/);
  assert.match(read('src/data/main-navigation.ts'),/screen:"tracker"/);
- assert.match(read('app/NFVApp.tsx'),/ui\.page==="tracker"\?<TrackerPage\/>/);
+ assert.match(read('app/NFVClientApp.tsx'),/ui\.page==="tracker"\?<TrackerPage\/>/);
+});
+test('tracker page returns not found for unsupported locale segments',async()=>{
+ const page=loadTrackerPage();
+ await assert.rejects(()=>page({params:Promise.resolve({locale:'fr'})}),/NEXT_NOT_FOUND/);
+ const english=await page({params:Promise.resolve({locale:'en'})});
+ assert.equal(english.props.initialLocale,'en');
 });
 test('farm milestone transitions match original 0 10 20 30 rules',()=>{
  for(const [count,key,next,remaining] of [[0,'seedPlanted','gettingStarted',10],[9,'seedPlanted','gettingStarted',1],[10,'gettingStarted','providingForFamily',10],[20,'providingForFamily','communityLeader',10],[30,'communityLeader',null,0],[80,'communityLeader',null,0]]){

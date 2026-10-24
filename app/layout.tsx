@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import {headers} from "next/headers";
+import {SITE_ORIGIN} from "@/config/site-brand";
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/noto-sans/wght.css";
 import "./styles/00-foundation-and-store.css";
@@ -29,11 +31,13 @@ import "./styles/13-csa.css";
 import "./styles/14-referral-share.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_ORIGIN),
   title: "Natural Farming Vietnam",
-  description: "Natural Farming Vietnam – Sự sống bắt đầu từ đất sống."
+  description: "Natural Farming Vietnam – Sự sống bắt đầu từ đất sống.",
 };
 export const viewport: Viewport = { themeColor: "#f7f6ef" };
 
-export default function RootLayout({ children }: Readonly<{children: React.ReactNode}>) {
-  return <html lang="vi"><body>{children}</body></html>;
+export default async function RootLayout({ children }: Readonly<{children: React.ReactNode}>) {
+  const locale=(await headers()).get("x-nfv-locale")==="en"?"en":"vi";
+  return <html lang={locale}><body>{children}</body></html>;
 }

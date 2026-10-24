@@ -2,14 +2,12 @@ import {notFound} from "next/navigation";
 import {NFVApp} from "../../NFVApp";
 import type {Locale} from "@/types";
 import type {Metadata} from "next";
-import {WORKSHOP_COPY} from "@/data/workshop-copy";
+import {publicPageMetadata} from "@/lib/public-metadata";
 
 export async function generateMetadata({params}:{params:Promise<{segment:string}>}):Promise<Metadata>{
   const {segment}=await params;
   if(segment!=="vi"&&segment!=="en")return {};
-  const c=WORKSHOP_COPY[segment];
-  return {title:`${c.title} | Natural Farming Vietnam`,description:c.intro,
-    alternates:{canonical:`/workshops/${segment}`,languages:{vi:"/workshops/vi",en:"/workshops/en"}}};
+  return publicPageMetadata("workshops",segment);
 }
 export default async function Page({params}:{params:Promise<{segment:string}>}){
   const {segment}=await params;

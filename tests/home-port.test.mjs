@@ -5,9 +5,10 @@ import {stripTypeScriptTypes} from 'node:module';
 const source=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 
 test('Home has real local routes and remains inside existing shared Header/Footer',()=>{
-  for(const route of ['app/page.tsx','app/vi/page.tsx','app/en/page.tsx']){
+  for(const route of ['app/vi/page.tsx','app/en/page.tsx']){
     assert.match(source(route),/initialPage="home"/);
   }
+  assert.match(source('app/page.tsx'),/permanentRedirect\("\/vi"\)/);
   const app=source('app/NFVClientApp.tsx');
   assert.match(app,/ui\.page==="home"\?<HomePage\/>/);
   assert.match(app,/<Header\/>/);assert.match(app,/<SiteFooter\/>/);

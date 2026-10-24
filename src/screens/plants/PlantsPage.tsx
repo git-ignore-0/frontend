@@ -8,7 +8,7 @@ import {useNFV} from "@/state/NFVContext";
 const ids=["context","systems","soil","cycle","inputs","practice"] as const;
 /** The sole Plants screen; all editorial sections are under the scoped knowledge theme. */
 export function PlantsPage(){
-  const {ui,navigate}=useNFV();
+  const {ui}=useNFV();
   const locale=ui.locale;
   const c=PLANTS_COPY[locale];
   const toc=ids.map((id,i)=>({id,label:c.toc[i]}));
@@ -32,7 +32,7 @@ export function PlantsPage(){
         </details>)}
       </div></KnowledgeSection>
       <KnowledgeSection id={ids[5]} index={c.sections[5].index} title={c.sections[5].title}><div className="knowledge-prose"><p>{c.paragraphs[6]}</p><p>{c.paragraphs[7]}</p></div>
-        <a className="knowledge-text-link" href={`/about/${locale}`} onClick={event=>{event.preventDefault();navigate("about");}}>{c.cta}<span aria-hidden="true">↗</span></a>
+        <a className="knowledge-text-link" href={`/about/${locale}`}>{c.cta}<span aria-hidden="true">↗</span></a>
       </KnowledgeSection>
     </KnowledgeLayout>
   </main>;

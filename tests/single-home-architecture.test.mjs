@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import {readFileSync, existsSync, readdirSync} from "node:fs";
 
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
-test("one Home page, reused by all three locale entrypoints",()=>{
+test("one Home page, reused by localized entrypoints with a canonical root redirect",()=>{
   assert.ok(existsSync(new URL("../src/screens/home/HomePage.tsx",import.meta.url)));
   assert.ok(!existsSync(new URL("../src/screens/V2Home.tsx",import.meta.url)));
   assert.deepEqual(readdirSync(new URL("../src/screens/home/",import.meta.url)).filter(n=>/^(?:V2Home|HomePage)\.tsx$/.test(n)),["HomePage.tsx"]);
   assert.match(read("app/NFVClientApp.tsx"),/ui\.page==="home"\?<HomePage\/>/);
-  for(const route of ["app/page.tsx","app/vi/page.tsx","app/en/page.tsx"])
+  for(const route of ["app/vi/page.tsx","app/en/page.tsx"])
     assert.match(read(route),/initialPage="home"/);
+  assert.match(read("app/page.tsx"),/permanentRedirect\("\/vi"\)/);
 });
 test("Home names and CSS namespace describe the page, not its source version",()=>{
   const home=read("src/screens/home/HomePage.tsx");

@@ -40,15 +40,20 @@ export function getPublicContentOrigin():string|null{
   try{const url=new URL(value);return ["http:","https:"].includes(url.protocol)&&!url.username&&!url.password&&url.pathname==="/"&&!url.search&&!url.hash?url.origin:null}catch{return null}
 }
 /** Local CMS edits must be visible immediately; production keeps the public list cacheable. */
-export function workshopFetchOptions(environment:string|undefined=process.env.NODE_ENV,tags:string[]=[]){
-  return environment==="development"?{cache:"no-store" as const}:{next:{revalidate:300,...(tags.length?{tags}:{})}};
+export function workshopFetchOptions(environment:string|undefined=process.env.NODE_ENV,tags:string[]=[],bypassCache=false){
+  return environment==="development"||bypassCache?{cache:"no-store" as const}:{next:{revalidate:300,...(tags.length?{tags}:{})}};
 }
 
-type PublicWorkshopFetchOptions={environment?:string;tags?:string[];fetcher?:typeof fetch;signal?:AbortSignal};
+export class PublicWorkshopFetchError extends Error{
+  readonly status:number;
+  constructor(status:number){super(`Public workshops returned ${status}`);this.name="PublicWorkshopFetchError";this.status=status;}
+}
+
+type PublicWorkshopFetchOptions={environment?:string;tags?:string[];bypassCache?:boolean;fetcher?:typeof fetch;signal?:AbortSignal};
 /** One transport path keeps Home, list and detail freshness consistent. */
 export async function fetchPublicWorkshopJson(url:string,options:PublicWorkshopFetchOptions={}):Promise<unknown>{
-  const {environment=process.env.NODE_ENV,tags=[],fetcher=fetch,signal=AbortSignal.timeout(5000)}=options;
-  const response=await fetcher(url,{...workshopFetchOptions(environment,tags),signal});
-  if(!response.ok)throw new Error(`Public workshops returned ${response.status}`);
+  const {environment=process.env.NODE_ENV,tags=[],bypassCache=false,fetcher=fetch,signal=AbortSignal.timeout(5000)}=options;
+  const response=await fetcher(url,{...workshopFetchOptions(environment,tags,bypassCache),signal});
+  if(!response.ok)throw new PublicWorkshopFetchError(response.status);
   return response.json();
 }

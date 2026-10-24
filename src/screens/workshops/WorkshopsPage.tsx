@@ -17,12 +17,12 @@ function WorkshopSection({items,locale,past=false}:{items:PublicWorkshop[];local
 export function WorkshopsPage(){
   const {ui}=useNFV();
   const c=WORKSHOP_COPY[ui.locale];
-  const {upcoming,past,state}=useWorkshops(ui.locale);
+  const {upcoming,past,state,retry}=useWorkshops(ui.locale);
   return <main id="main-content" className="nfv-workshops">
     <div className="wk-shell">
       <header className="wk-hero"><h1>{c.title}</h1><p>{c.intro}</p></header>
       {state==="loading"?<div className="wk-page-state"><DataState kind="loading" title={c.loading}/></div>:
-        state==="error"?<div className="wk-page-state"><DataState kind="error" title={c.unavailable}/></div>:<>
+        state==="error"?<div className="wk-page-state"><DataState kind="error" title={c.unavailable} action={{label:c.retry,onClick:retry}}/></div>:<>
           <WorkshopSection items={upcoming} locale={ui.locale}/>
           <WorkshopSection items={past} locale={ui.locale} past/>
         </>}

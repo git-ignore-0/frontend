@@ -20,14 +20,14 @@ export interface Invitee { id: string; name?: string; maskedName?: string; label
 export interface Referrals { code?: string; canEnterReferrer?: boolean; referrer?: ReferralPerson | null; invitedCount?: number; invitees?: Invitee[]; history?: Invitee[]; terms?: string; termsEn?: string; pagination?: {invitees?: PageMeta; referrals?: PageMeta} }
 export interface CSAQuota {productName?: string; productNameEn?: string; name?: string; total: number; remaining: number; unit?: string; unitEn?: string}
 export interface CSAPayment {id: string; date?: string; dueDate?: string; amount: number; status: string; method?: string; methodEn?: string}
-export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string}
-export interface CSA {planName: string; planNameEn?: string; status: string; startDate?: string; endDate?: string; contract?: {number?: string; signedAt?: string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[]}
+export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
+export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
 export interface Session {authenticated?: boolean; hasCSA?: boolean; profile?: Partial<Profile>}
 export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
  getAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;
- getCSA?(): Promise<CSA | null>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
+ getCSA?(): Promise<CSA | null>; getCsaUsagePage?(arg:{cursor:string;limit:number}):Promise<Paged<CSAUsage>>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
  getRewardGiftsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Gift>>;
  getRewardHistoryPage?(arg:{type:"points"|"redemptions";cursor:string;limit:number}):Promise<Paged<RewardEntry>>;
  getReferralsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Invitee>>;

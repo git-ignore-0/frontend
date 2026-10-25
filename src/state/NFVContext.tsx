@@ -8,6 +8,7 @@ import {localeFromPath,localScreenFromPath,navigationItemForPage,mainNavHref} fr
 import {syncBrowserRoute} from "@/lib/browser-navigation";
 import * as rewardsService from "@/account/rewards-service";
 import * as referralsService from "@/account/referrals-service";
+import * as csaService from "@/account/csa-service";
 import {initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
 import {loadCart,saveCart} from "./cart-persistence";
 
@@ -56,6 +57,8 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(method==="getReferrals")return await referralsService.getReferrals() as T;
       if(method==="getReferralsPage")return await referralsService.getReferralsPage(arg as {cursor?:string|null;limit?:number}) as T;
       if(method==="applyReferralCode")return await referralsService.applyReferralCode(arg as {code:string}) as T;
+      if(method==="getCSA")return await csaService.getCSA(ui.locale) as T;
+      if(method==="getCsaUsagePage")return await csaService.getCsaUsagePage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
       const fn=typeof window!=="undefined" ? window.NFV_BACKEND?.[method] : undefined;
       if(typeof fn!=="function")throw new Error(`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
@@ -155,7 +158,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     if(!data.authenticated)return;
     const epoch=authEpoch.current;
     const name=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[resource];
-    if(!["rewards","referrals"].includes(resource)&&!window.NFV_BACKEND?.[name])return;
+    if(!["csa","rewards","referrals"].includes(resource)&&!window.NFV_BACKEND?.[name])return;
     setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"loading"}}));
     try {
       const value=await call(name);
@@ -211,7 +214,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       safe<Order[]>("getOrders",v=>setData(s=>({...s,orders:Array.isArray(v)?v:[]}))),
       ...(["csa","rewards","referrals"] as Resource[]).map(kind=>{
         const method=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[kind];
-        if(!["rewards","referrals"].includes(kind)&&!backend?.[method])return Promise.resolve();
+        if(!["csa","rewards","referrals"].includes(kind)&&!backend?.[method])return Promise.resolve();
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"loading"}}));
         return call(method).then(v=>{if(stillCurrent()){
           setData(s=>({...s,[kind]:v}));

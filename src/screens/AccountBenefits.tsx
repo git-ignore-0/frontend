@@ -5,17 +5,18 @@ import {ReferralShareDialog} from "@/components/account/ReferralShareDialog";
 import {useRef,useState, type FormEvent, type ReactNode} from "react";
 import {IconButton} from "@/components/overlays/OverlayPrimitives";
 import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
-import {Button,DataState,Icon,Section,localized} from "@/components/UI";
+import {ActionLink,Button,DataState,Icon,Section,localized} from "@/components/UI";
 import {useNFV} from "@/state/NFVContext";
 import {copyText} from "@/data/account-copy";
-import {dateLabel,money} from "@/lib/format";
+import {AccountCsaPackageSelection} from "@/screens/account-csa/AccountCsaPackageSelection";
+import {dateLabel} from "@/lib/format";
 import {beginRedemptionIntent,redemptionRequest} from "@/account/redemption-intent";
 import {redemptionErrorCopyKey,redemptionStatus} from "@/account/redemption-presentation";
 import {applyRedemptionResult} from "@/account/redemption-state";
 import {isReferralCode,normalizeReferralCode,referralErrorCopyKey,referralInvitePresentation} from "@/account/referral-presentation";
 import {mergeReferralSummary} from "@/account/referral-state";
 import {copyTextToClipboard} from "@/account/referral-share";
-import type {AccountTab,CSAPayment,CSAQuota,Gift,Invitee,RewardEntry,Resource,Paged,Referrals} from "@/types";
+import type {AccountTab,CSAQuota,CSAUsage,Gift,Invitee,RewardEntry,Resource,Paged,Referrals} from "@/types";
 
 function MetricBadge({children,tone="neutral"}:{children:ReactNode;tone?:string}){
  return <span className={`acc-status ${({active:"completed",done:"completed",pending:"processing",error:"cancelled",neutral:"neutral"} as Record<string,string>)[tone]||"neutral"}`}>{children}</span>;
@@ -23,8 +24,8 @@ function MetricBadge({children,tone="neutral"}:{children:ReactNode;tone?:string}
 function BenefitInfoRow({title,value}:{title:string;value?:string|number|null}){
  return <div className="benefit-info-row"><span>{title}</span><strong>{value===null||value===undefined||value===""?"—":value}</strong></div>;
 }
-export function BenefitTransactionRow({title,meta="",badge,amount}:{title:string;meta?:string;badge?:ReactNode;amount?:string}){
- return <article className="benefit-transaction"><div className="benefit-tx-main"><strong>{title||"—"}</strong><small>{meta}</small></div><div className="benefit-tx-end">{amount&&<strong>{amount}</strong>}{badge}</div></article>;
+export function BenefitTransactionRow({title,meta="",action,badge,amount}:{title:string;meta?:string;action?:ReactNode;badge?:ReactNode;amount?:string}){
+ return <article className="benefit-transaction"><div className="benefit-tx-main"><strong>{title||"—"}</strong><small>{meta}</small>{action}</div><div className="benefit-tx-end">{amount&&<strong>{amount}</strong>}{badge}</div></article>;
 }
 function BenefitSection({title,description,children}:{title:string;description?:string;children:ReactNode}){
  return <Section title={title} description={description} className="benefit-section">{children}</Section>;
@@ -36,7 +37,7 @@ export function BenefitsView({kind}:{kind:Exclude<AccountTab,"orders"|"address"|
  const {ui,refreshResource}=useNFV();
  const resource:Resource=kind==="csa"?"csa":kind==="referrals"?"referrals":"rewards";
  const status=ui.accountFetchState[resource];
- const L=(key:string)=>copyText(ui.locale,key);
+ const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
  if(status==="loading")return <section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>;
  if(status==="error")return <section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource(resource)}}/></section>;
  if(kind==="csa")return <CSABenefits/>;
@@ -147,34 +148,21 @@ function RewardsGifts(){
    {ui.giftIntent&&<GiftModal/>}</div>;
 }
 function QuotaRow({quota:q}:{quota:CSAQuota}){
- const {ui}=useNFV();const L=(key:string,vars:Record<string,string|number>)=>copyText(ui.locale,key,vars);
- const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),used=total-remaining,unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
- const pct=total?Math.min(100,100*remaining/total):0;
- return <div className="benefit-quota"><div className="benefit-quota-top"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><span>{L("csa.remaining",{remaining,total,unit})}</span></div>
-   <div className="benefit-quota-bar" aria-label={`${Math.round(pct)}%`}><span style={{width:`${pct}%`}}/></div><small>{L("csa.used",{used,unit})}</small></div>;
-}
-function PaymentRow({item}:{item:CSAPayment}){
- const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);
- const tones:Record<string,[string,string]>={paid:["paid","done"],upcoming:["due","pending"],due:["due","pending"],overdue:["overdue","error"],pending:["pending","pending"],failed:["failed","error"]};
- const [label,tone]=tones[item.status]||["pending","neutral"];
- return <BenefitTransactionRow title={dateLabel(item.dueDate||item.date)} meta={[item.id,(ui.locale==="en"?item.methodEn:item.method)||item.method].filter(Boolean).join(" · ")}
-   amount={money(Number(item.amount)||0)} badge={<MetricBadge tone={tone}>{L("csa."+label)}</MetricBadge>}/>;
+ const {ui}=useNFV();
+ const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
+ return <div className="csa-rights-row" role="row"><div className="csa-rights-product" role="cell"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><small>{total} {unit} / {ui.locale==="en"?"cycle":"kỳ"}</small></div><div className="csa-rights-metric is-available" role="cell"><strong>{remaining}</strong><small className="mobile-only">{ui.locale==="en"?"Available":"Còn có thể đặt"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Used":"Đã sử dụng"}</small></div></div>;
 }
 function CSABenefits(){
- const {data,ui,navigate}=useNFV();const c=data.csa;
- const L=(key:string)=>copyText(ui.locale,key);
- if(!c?.planName)return <BenefitSection title={L("csa.title")}><Empty icon="leaf" title={L("csa.noPackage")} description={L("csa.noPackageDesc")}/><div className="benefit-inline-actions"><Button small variant="outline" onClick={()=>navigate("csa")}>{L("csa.explore")}</Button></div></BenefitSection>;
- const quotas=c.quotas||[],schedule=c.paymentSchedule||[],payments=c.payments||[],usage=c.usage||c.history||[],contract=c.contract||{};
+ const {data,ui,setData,call,act,navigate}=useNFV();const c=data.csa;
+ const [pageError,setPageError]=useState(false);
+ const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
+ if(!c?.planName)return <AccountCsaPackageSelection/>;
+ const quotas=c.quotas||[],usage=c.usage||c.history||[],contract=c.contract||{},page=c.pagination?.usage||{};
  const tone=({active:"active",upcoming:"pending",ended:"neutral",revoked:"error"} as Record<string,string>)[c.status]||"neutral";
- const paymentList=(kind:string,entries:CSAPayment[],empty:string)=>entries.length?<PagedList kind={kind} items={entries} emptyTitle={empty} render={p=><PaymentRow key={p.id} item={p}/>}/>:<Empty title={empty} icon="bag"/>;
+ const loadMore=async()=>{if(!page.nextCursor)return;const result=await act("page:csa",()=>call<Paged<CSAUsage>>("getCsaUsagePage",{cursor:page.nextCursor,limit:30}));if(!result){setPageError(true);return;}const known=new Set(usage.map(item=>item.id));setData(state=>({...state,csa:state.csa?{...state.csa,usage:[...(state.csa.usage||[]),...result.items.filter(item=>!item.id||!known.has(item.id))],pagination:{...state.csa.pagination,usage:{nextCursor:result.nextCursor,total:result.total}}}:null}));setPageError(false);};
  return <div className="benefits-page csa-benefits-page">
-   <BenefitSection title={L("csa.current")}><div className="benefit-plan-title"><strong>{localized(c as unknown as Record<string,unknown>,"planName",ui.locale)}</strong><MetricBadge tone={tone}>{L("csa."+c.status)}</MetricBadge></div><div className="benefit-detail-grid"><BenefitInfoRow title={L("csa.start")} value={dateLabel(c.startDate)}/><BenefitInfoRow title={L("csa.end")} value={dateLabel(c.endDate)}/></div></BenefitSection>
-   <BenefitSection title={L("csa.quota")}>{quotas.length?<div className="benefit-quota-list">{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>}</BenefitSection>
-   <BenefitSection title={L("csa.contract")}>{contract.number||contract.signedAt||contract.downloadUrl?<><BenefitInfoRow title={L("csa.contractNo")} value={contract.number}/><BenefitInfoRow title={L("csa.signed")} value={dateLabel(contract.signedAt)}/>
-     {typeof contract.downloadUrl==="string"&&/^https:\/\//.test(contract.downloadUrl)&&<div className="benefit-inline-actions"><a className="btn btn-outline btn-small" href={contract.downloadUrl} target="_blank" rel="noopener noreferrer">{L("csa.viewContract")}</a></div>}</>:<Empty title={L("csa.noContract")} icon="bag"/>}</BenefitSection>
-   <BenefitSection title={L("csa.paymentSchedule")}>{paymentList("csaSchedule",schedule,L("csa.noSchedule"))}</BenefitSection>
-   <BenefitSection title={L("csa.payments")}>{paymentList("csaPayments",payments,L("csa.noPayments"))}</BenefitSection>
-   <BenefitSection title={L("csa.usage")}>{usage.length?<PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} render={(u,i)=><BenefitTransactionRow key={u.id||i} title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={[dateLabel(u.date),u.orderId?`${L("csa.orderRef")}: ${u.orderId}`:""].filter(Boolean).join(" · ")} amount={`−${u.quantity} ${ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"")}`}/>}/>:<Empty title={L("csa.noUsage")}/>}</BenefitSection>
+   <BenefitSection title={localized(c as unknown as Record<string,unknown>,"planName",ui.locale)||L("csa.current")}><div className="csa-plan-meta"><span><MetricBadge tone={tone}>{L("csa."+c.status)}</MetricBadge></span><span><span className="csa-meta-key">{L("csa.start")}</span><strong>{dateLabel(c.startDate)||"—"}</strong></span><span><span className="csa-meta-key">{L("csa.end")}</span><strong>{dateLabel(c.endDate)||"—"}</strong></span>{c.durationMonths&&<span><span className="csa-meta-key">{L("csa.duration")}</span><strong>{L("csa.monthCount",{count:c.durationMonths})}</strong></span>}</div><div className="csa-contract-inline"><div className="csa-contract-meta"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{contract.number||L("csa.contractPending")}</strong>{contract.signedAt&&<span className="csa-contract-subtle">{L("csa.signed")} {dateLabel(contract.signedAt)}</span>}</div>{contract.downloadUrl?<ActionLink small variant="outline" className="csa-contract-action" href={contract.downloadUrl}><Icon name="file" size={14}/>{L("csa.viewContract")}</ActionLink>:<Button small variant="outline" className="csa-contract-action" disabled><Icon name="file" size={14}/>{L("csa.viewContract")}</Button>}</div>{quotas.length?<div className="csa-rights" role="table" aria-label={L("csa.quota")}><div className="csa-rights-header" role="row"><span role="columnheader">{ui.locale==="en"?"Produce group":"Nhóm nông sản"}</span><span role="columnheader">{ui.locale==="en"?"Available":"Còn có thể đặt"}</span><span role="columnheader">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</span><span role="columnheader">{ui.locale==="en"?"Used":"Đã sử dụng"}</span></div>{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>}</BenefitSection>
+   <BenefitSection title={L("csa.usage")}><div className="benefit-history-host csa-history-footer"><PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} nextCursor={page.nextCursor} total={page.total} pending={ui.busyKeys.includes("page:csa")} failed={pageError} onMore={()=>void loadMore()} render={(u,i)=><BenefitTransactionRow key={u.id||i} title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={dateLabel(u.date)} action={u.orderId?<button type="button" className="acc-text-link" onClick={()=>navigate("order-detail",{productId:u.orderId})}>{L("csa.viewOrder")} {u.orderId}<Icon name="chev" size={13}/></button>:undefined} amount={`−${u.quantity} ${ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"")}`}/>}/></div></BenefitSection>
  </div>;
 }
 function ReferralBenefits(){

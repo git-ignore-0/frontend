@@ -24,6 +24,7 @@ const paths: Record<string,ReactNode> = {
  refresh:<><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></>,
  truck:<><path d="M3 7h11v11H3V7Zm11 4h4l3 3v4h-7v-7Z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></>,
  box:<><path d="M3 7l9-4 9 4v10l-9 4-9-4V7Z"/><path d="M3 7l9 5 9-5M12 12v9"/></>,
+ file:<><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4M9 11h6M9 15h6"/></>,
  star:<path d="m12 2 3.3 6.7 7.4 1.1-5.4 5.3 1.3 7.4-6.6-3.5-6.6 3.5 1.3-7.4-5.4-5.3 7.4-1.1L12 2Z"/>,
  "log-out":<><path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"/><path d="M15 16l4-4-4-4m4 4H9"/></>,
  menu:<path d="M4 6h16M4 12h16M4 18h16"/>,chev:<path d="m9 18 6-6-6-6"/>,

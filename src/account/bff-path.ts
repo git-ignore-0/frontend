@@ -33,6 +33,9 @@ export function accountUpstreamTarget(
   if (path[0] === "csa-confirm-transfer" && method === "POST") {
     return {path:"/api/v1/public/csa-purchase-requests/confirm-transfer",session:"required",query:"none"};
   }
+  if (path[0] === "csa-purchase-status" && method === "POST") {
+    return {path:"/api/v1/public/csa-contract-tracker/lookup",session:"required",query:"none"};
+  }
   if (path[0] === "rewards" && method === "GET") {
     return {
       path: "/api/v1/public/rewards",

@@ -51,7 +51,8 @@ function loadComponent(){
   if(id==="@/components/UI")return UI;
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
-  if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({})};
+  if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
+  if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
   if(id==="./csa-terms")return {CSA_TERM_IDS:Array.from({length:11},(_,index)=>`csa-term-${index+1}`),CSA_TERMS:{vi:Array(11).fill("Điều khoản"),en:Array(11).fill("Term")}};
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
   if(id==="@/screens/csa/useCsaPackages")return {useCsaPackages:(locale,page)=>{hookCalls.push([locale,page]);return hookState;}};
@@ -112,7 +113,7 @@ test("Account CSA package view supports arbitrary package counts without hiding 
  for(const id of ["one","two","three","four"])assert.match(html,new RegExp(`Package ${id}`));
 });
 
-test("Account step shows known address, explains backend validation and blocks exposed missing data",()=>{
+test("Account step requires a known complete address and blocks missing data",()=>{
  const component=loadComponent();
  const profile={name:"Nguyễn Minh Anh",phone:"0912345678",email:"member@example.com"};
  const address={name:"Nguyễn Minh Anh",phone:"0912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng"};
@@ -120,8 +121,8 @@ test("Account step shows known address, explains backend validation and blocks e
  assert.match(complete,/25 Đường Láng, Phường Láng, Hà Nội/);
  assert.doesNotMatch(complete,/csa\.accountIncomplete/);
  const unknownAddress=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:undefined,onBack:()=>{},onContinue:()=>{}}));
- assert.match(unknownAddress,/csa\.addressVerifiedByBackend/);
- assert.doesNotMatch(unknownAddress,/disabled=""/);
+ assert.match(unknownAddress,/csa\.accountIncomplete/);
+ assert.match(unknownAddress,/disabled=""/);
  const incomplete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile:{...profile,phone:""},address,onBack:()=>{},onContinue:()=>{}}));
  assert.match(incomplete,/csa\.accountIncomplete/);
  assert.match(incomplete,/disabled=""/);
@@ -182,4 +183,25 @@ test("VietQR URL uses only a validated Backend payment payload",()=>{
  const quote={payment:{amount:"500000",bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-1"},summary:{initialPaymentAmount:"500000"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"500000",addInfo:"CSA-1",format:"text",template:"compact2"}};
  const url=component.csaVietQrImageUrl(quote);assert.match(url,/^https:\/\/img\.vietqr\.io\/image\/970422-123456789-qr_only\.png\?/);assert.match(url,/amount=500000/);
  assert.equal(component.csaVietQrImageUrl({...quote,qr:{...quote.qr,amount:"1"}}),"");
+});
+
+test("payment step keeps Backend totals, installments and transfer fallback when QR is unavailable",()=>{
+ const component=loadComponent();
+ const quote={quoteToken:"signed",expiresAt:"2099-10-25T01:00:00Z",requestCode:"CSA-1",payment:{amount:"500000",bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-1"},summary:{paymentType:"installment",totalAmount:"3000000",initialPaymentAmount:"500000",installmentCount:2,installments:[{sequence:1,amount:"500000",cycleCount:1},{sequence:2,amount:"2500000",cycleCount:5}]},terms:{version:"v1",locale:"vi",hash:"abc"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"1",addInfo:"CSA-1",format:"text",template:"compact2"}};
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaPaymentStep,{locale:"vi",quote,busy:false,error:"",onBack:()=>{},onConfirm:()=>{}}));
+ assert.match(html,/csa\.contractTotal/);
+ assert.match(html,/csa\.firstPayment/);
+ assert.match(html,/csa\.installmentSchedule/);
+ assert.match(html,/csa\.copyAccountNumber/);
+ assert.match(html,/csa\.copyTransferContent/);
+ assert.match(html,/csa\.qrUnavailable/);
+ assert.doesNotMatch(html,/disabled=""/);
+});
+
+test("quote expiry helper rejects expired and malformed Backend timestamps",()=>{
+ const component=loadComponent();
+ const now=Date.parse("2026-10-25T01:00:00Z");
+ assert.equal(component.csaQuoteExpired("2026-10-25T01:00:00Z",now),true);
+ assert.equal(component.csaQuoteExpired("2026-10-25T01:00:01Z",now),false);
+ assert.equal(component.csaQuoteExpired("not-a-date",now),true);
 });

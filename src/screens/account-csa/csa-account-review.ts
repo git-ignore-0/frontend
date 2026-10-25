@@ -14,6 +14,6 @@ export function csaAccountReview(profile:Pick<Profile,"name"|"phone"|"email">,ad
   if(!profile.email.trim())missing.push("email");
   const addressKnown=address!==undefined;
   const addressParts=address?[address.detail,address.ward,address.city].map(value=>value.trim()).filter(Boolean):[];
-  if(addressKnown&&addressParts.length!==3)missing.push("address");
+  if(!addressKnown||addressParts.length!==3)missing.push("address");
   return {complete:missing.length===0,missing,addressKnown,addressLabel:addressParts.join(", ")};
 }

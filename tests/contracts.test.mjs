@@ -6,9 +6,11 @@ test("App Router root and TSX composition are present",()=>{
   const layout=readFileSync(new URL("../app/layout.tsx",import.meta.url),"utf8");
   const app=readFileSync(new URL("../app/NFVClientApp.tsx",import.meta.url),"utf8");
   assert.match(layout,/export default async function RootLayout/);
-  for(const name of ["Store","ProductDetail","Checkout","Account","CSAProgram","OrderDetail"]){
+  for(const name of ["Store","Checkout","Account","CSAProgram","OrderDetail"]){
     assert.ok(app.includes(name),name);
   }
+  const detail=readFileSync(new URL("../app/store/[segment]/[locale]/page.tsx",import.meta.url),"utf8");
+  assert.match(detail,/ProductDetail/);
 });
 test("do not ship fake backend, success or default customer records",()=>{
   const context=readFileSync(new URL("../src/state/NFVContext.tsx",import.meta.url),"utf8");

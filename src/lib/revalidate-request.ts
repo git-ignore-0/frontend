@@ -4,12 +4,13 @@ type RevalidationResult=
   | {ok:true;tags:string[]}
   | {ok:false;status:400|401;error:"invalid_json"|"invalid_payload"|"invalid_signature"};
 
-const STATIC_TAGS=new Set(["site-settings","workshops","testimonials","tracker-farms"]);
+const STATIC_TAGS=new Set(["site-settings","workshops","testimonials","tracker-farms","store-categories","store-products","store-product-details"]);
 const WORKSHOP_TAG=/^workshop:[a-z0-9_-]{1,180}$/i;
 const TESTIMONIAL_TAG=/^testimonial:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STORE_PRODUCT_TAG=/^store-product:[a-z0-9_-]{1,180}$/i;
 
 function allowedTag(value:unknown):value is string{
-  return typeof value==="string"&&value.length<=200&&(STATIC_TAGS.has(value)||WORKSHOP_TAG.test(value)||TESTIMONIAL_TAG.test(value));
+  return typeof value==="string"&&value.length<=200&&(STATIC_TAGS.has(value)||WORKSHOP_TAG.test(value)||TESTIMONIAL_TAG.test(value)||STORE_PRODUCT_TAG.test(value));
 }
 
 export async function readLimitedRequestBody(request:Request,maxBytes=8192):Promise<Buffer|null>{

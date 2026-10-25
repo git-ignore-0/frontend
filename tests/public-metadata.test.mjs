@@ -68,6 +68,6 @@ test("every public route delegates metadata to the shared helper",()=>{
     "app/page.tsx","app/vi/page.tsx","app/en/page.tsx","app/about/[locale]/page.tsx",
     "app/plants/[locale]/page.tsx","app/animals/[locale]/page.tsx","app/workshops/[segment]/page.tsx",
     "app/workshops/[segment]/[locale]/page.tsx","app/tracker/[locale]/page.tsx",
-    "app/testimonials/[locale]/page.tsx","app/store/[locale]/page.tsx","app/csa/[locale]/page.tsx",
+    "app/testimonials/[locale]/page.tsx","app/store/[segment]/page.tsx","app/csa/[locale]/page.tsx",
   ]) assert.match(source(path),/(publicPageMetadata|workshopPageMetadata)/,path);
 });

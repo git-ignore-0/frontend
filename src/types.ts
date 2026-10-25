@@ -25,7 +25,7 @@ export interface CSA {planName: string; planNameEn?: string; status: string; sta
 export interface Session {authenticated?: boolean; hasCSA?: boolean; profile?: Partial<Profile>}
 export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
- getProducts?(): Promise<Product[]>; getCategories?(): Promise<Category[]>; getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
+ getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
  getAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;
  getCSA?(): Promise<CSA | null>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
  getRewardGiftsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Gift>>;

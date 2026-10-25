@@ -55,11 +55,11 @@ test("revalidation accepts only a bounded array of allowed tags",()=>{
     const invalid=Buffer.from('{');
     assert.deepEqual(api.parseSignedRevalidation({secret,timestamp,signature:sign(invalid),raw:invalid,nowSeconds:1792720001}),{ok:false,status:400,error:'invalid_json'});
     const uuid='f71b35a8-4a85-4d38-b9cd-519ebc1d286a';
-    const tags=['workshops','workshops','site-settings','tracker-farms','testimonials','workshop:soil-life','testimonial:'+uuid];
+    const tags=['workshops','workshops','site-settings','tracker-farms','testimonials','workshop:soil-life','testimonial:'+uuid,'store-categories','store-products','store-product-details','store-product:root_vegetables'];
     const raw=Buffer.from(JSON.stringify({tags}));
     const result=api.parseSignedRevalidation({secret,timestamp,signature:sign(raw),raw,nowSeconds:1792720001});
     assert.equal(result.ok,true);
-    assert.deepEqual(result.tags,['workshops','site-settings','tracker-farms','testimonials','workshop:soil-life','testimonial:'+uuid]);
+    assert.deepEqual(result.tags,['workshops','site-settings','tracker-farms','testimonials','workshop:soil-life','testimonial:'+uuid,'store-categories','store-products','store-product-details','store-product:root_vegetables']);
     for(const body of [null,{}, {tags:'workshops'}, {tags:[]}, {tags:['unknown']}, {tags:['workshops','bad']}, {tags:Array.from({length:21},(_,i)=>'workshop:item-'+i)}]){
       const candidate=Buffer.from(JSON.stringify(body));
       assert.deepEqual(api.parseSignedRevalidation({secret,timestamp,signature:sign(candidate),raw:candidate,nowSeconds:1792720001}),{ok:false,status:400,error:'invalid_payload'});

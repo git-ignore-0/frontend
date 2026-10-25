@@ -54,10 +54,10 @@ test("Menu uses the shared modal panel and retains responsive close",()=>{
 });
 
 test("Store, CSA and Account are direct-entry Next routes",()=>{
-  assert.ok(existsSync(new URL("../app/store/[locale]/page.tsx",import.meta.url)));
+  assert.ok(existsSync(new URL("../app/store/[segment]/page.tsx",import.meta.url)));
   assert.ok(existsSync(new URL("../app/csa/[locale]/page.tsx",import.meta.url)));
   assert.match(source("app/csa/[locale]/page.tsx"),/initialPage="csa"/);
-  assert.match(source("app/store/[locale]/page.tsx"),/initialPage="store"/);
+  assert.match(source("app/store/[segment]/page.tsx"),/initialPage="store"/);
   assert.match(source("src/state/NFVContext.tsx"),/window\.addEventListener\("popstate",handlePopState\)/);
   assert.ok(existsSync(new URL("../app/account/[locale]/page.tsx",import.meta.url)));
   assert.match(source("app/account/[locale]/page.tsx"),/initialPage="account"/);

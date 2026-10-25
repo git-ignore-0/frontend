@@ -1,6 +1,6 @@
 "use client";
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction} from "react";
-import type {AccountTab, Address, Backend, CatalogData, Category, Locale, Product, Resource, Screen, Order} from "@/types";
+import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen, Order} from "@/types";
 import {formatAddress} from "@/lib/format";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
@@ -25,13 +25,6 @@ type Ctx = {
 const Context=createContext<Ctx|null>(null);
 export function useNFV():Ctx {
   const ctx=useContext(Context);if(!ctx)throw Error("NFVProvider is required");return ctx;
-}
-function normalizeProducts(items:unknown):Product[] {
-  if(!Array.isArray(items))return [];
-  return items.filter(p=>p && /^[A-Za-z0-9_-]{1,100}$/.test(String(p.id??"")) && Number.isFinite(Number(p.price)) && Number(p.price)>=0)
-    .map(p=>({...p,id:String(p.id),name:String(p.name||""),en:String(p.en||""),cat:String(p.cat||""),
-      categoryId:String(p.categoryId??p.category_id??""),unit:String(p.unit||""),farm:String(p.farm||""),
-      description:String(p.description||""),note:String(p.note||""),image:String(p.image||""),price:Number(p.price),csa:!!p.csa}));
 }
 export function NFVProvider({children,initialPage="home",initialLocale="vi",initialAccountTab="orders",initialAccountHubOpen=true,initialReferrerCode=""}:{children:ReactNode;initialPage?:Screen;initialLocale?:Locale;initialAccountTab?:AccountTab;initialAccountHubOpen?:boolean;initialReferrerCode?:string}){
   const auth=useAuth();
@@ -173,7 +166,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(epoch===authEpoch.current)setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"error"}}));
     }
   },[call,data.authenticated]);
-  // Public catalog requests never depend on the customer's authentication status.
+  // Address lookup data is public and does not depend on the customer's session.
   useEffect(()=>{
     let active=true;
     const backend=window.NFV_BACKEND;
@@ -184,8 +177,6 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       catch(error){console.error("NFV public data:",key,error);}
     };
     void Promise.all([
-      safe<Product[]>("getProducts",value=>setData(s=>({...s,products:normalizeProducts(value)}))),
-      safe<Category[]>("getCategories",value=>setData(s=>({...s,categories:Array.isArray(value)?value:[]}))),
       safe<{code:string;name:string}[]>("getProvinces",value=>setData(s=>({...s,provinces:Array.isArray(value)?value.filter(x=>x?.code&&x?.name).map(x=>x.name):[]})))
     ]);
     return ()=>{active=false;};

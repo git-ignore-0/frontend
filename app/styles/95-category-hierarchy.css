@@ -11,6 +11,8 @@
 .category-tree-node{list-style:none}
 .category-tree-row{padding:6px 7px 6px calc(7px + var(--tree-depth,0) * 15px)}
 .category-tree-name{min-width:0;flex:1;overflow-wrap:anywhere}
+.category-tree-name{border:0;background:transparent;color:inherit;padding:0;text-align:left;font:inherit;line-height:inherit}
+.category-tree-indicator.branch{border:0;background:transparent;padding:0;min-width:16px;min-height:24px}
 .category-tree-indicator{flex:0 0 16px;color:#718577;display:inline-flex;align-items:center;justify-content:center}
 .category-tree-chevron{display:inline-flex;transition:transform .14s ease}
 .category-tree-chevron.expanded{transform:rotate(90deg)}
@@ -80,6 +82,13 @@
 .catalog-meta .catalog-breadcrumb{margin:0;min-width:0}
 .catalog-meta .catalog-breadcrumb:empty{display:none}
 .catalog-results-count{font-size:12px;color:var(--muted);white-space:nowrap;margin-left:auto}
+.catalog-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:20px;color:var(--muted);font-size:12px}
+.store-supplier-list{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:7px}
+.store-supplier-list li{display:flex;flex-direction:column;gap:1px;padding-top:7px;border-top:1px solid var(--line)}
+.store-supplier-list li:first-child{padding-top:0;border-top:0}
+.store-supplier-list span{font-size:13px;font-weight:650;color:var(--ink)}
+.store-supplier-list small{font-size:11px;color:var(--muted)}
+.store-locale-notice{padding:9px 11px;margin:12px 0 0;background:var(--soft);border-left:3px solid var(--green2);color:var(--muted);font-size:12px}
 @media(max-width:800px){
  .catalog-layout{display:flex;flex-direction:column;gap:0}
  .catalog-rail{display:contents}

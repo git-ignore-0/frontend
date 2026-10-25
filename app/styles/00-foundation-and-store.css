@@ -29,6 +29,7 @@
  .catalog-head h2{font-size:19px}
  .catalog-head .muted,.catalog-head .status{display:none}
 }
+
 @media(max-width:340px){.welcome{grid-template-columns:minmax(0,1fr) 75px}.welcome-copy h1{font-size:18.5px}.welcome-copy{padding-left:12px}.cat-tile{flex-basis:105px}}
 
 /* v3 — Clean compact design language. Sans typography supports Vietnamese and English. */
@@ -140,7 +141,8 @@ h1,h2,h3,h4,p,button,input,textarea,select{font-family:inherit}
 .detail-desc{font-size:13px;padding-top:12px;line-height:1.65}
 .detail-select{padding:12px 0 15px}
 .detail-pane{margin-top:16px;padding:12px 14px}
-.detail-tabs{margin-top:24px;padding-top:17px}
+.detail-tabs{grid-template-columns:1fr;margin-top:24px;padding-top:17px}
+.detail-tabs h2,.detail-tabs h3{font-size:16px;margin:0 0 7px}
 .detail-tabs p{line-height:1.65}
 .detail-photo{aspect-ratio:1.33}
 .buy-row .btn{min-width:195px}
@@ -271,6 +273,7 @@ h1,h2,h3,h4,p,button,input,textarea,select{font-family:inherit}
   .detail-info .detail-price{font-size:23px}
   .detail-photo{aspect-ratio:1.28}
   .detail-info{padding-top:12px}
+  .detail-tabs h2,.detail-tabs h3{font-size:14px}
   .buy-row .btn{min-width:0}
   .box{padding:13px}
   .box h2{font-size:16px}

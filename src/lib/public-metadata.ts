@@ -2,6 +2,7 @@ import type {Metadata} from "next";
 import {SITE_ORIGIN} from "../config/site-brand.ts";
 import type {Locale} from "../types.ts";
 import type {PublicWorkshop} from "../types/workshop.ts";
+import type {StoreProductDetail,StoreLocale} from "../store/store-model.ts";
 
 export type PublicMetadataPage="home"|"about"|"plants"|"animals"|"workshops"|"tracker"|"testimonials"|"store"|"csa";
 
@@ -81,5 +82,22 @@ export function workshopPageMetadata(workshop:WorkshopMetadataSource,requestedLo
     robots:workshop.is_fallback?{index:false,follow:true}:undefined,
     alternates:{canonical:url,languages},
     openGraph:{title:workshop.title,description:workshop.summary,url,type:"article",siteName:"Natural Farming Vietnam",locale:canonicalLocale==="vi"?"vi_VN":"en_US",alternateLocale:[canonicalLocale==="vi"?"en_US":"vi_VN"]},
+  };
+}
+
+export function storeProductMetadata(product:StoreProductDetail,requestedLocale:StoreLocale):Metadata{
+  const canonicalLocale=product.content_locale||requestedLocale;
+  const slug=encodeURIComponent(product.slug);
+  const canonical=absolute(`/store/${slug}/${canonicalLocale}`);
+  const available=product.available_locales.length?product.available_locales:[canonicalLocale];
+  const languages:Record<string,string>=Object.fromEntries(available.map(locale=>[locale,absolute(`/store/${slug}/${locale}`)]));
+  languages["x-default"]=canonical;
+  const title=`${product.name} | Natural Farming Vietnam`;
+  const description=product.short_description||`${product.name} · ${product.category.name}`;
+  return {
+    title,description,
+    robots:product.is_fallback?{index:false,follow:true}:undefined,
+    alternates:{canonical,languages},
+    openGraph:{title:product.name,description,url:canonical,type:"website",siteName:"Natural Farming Vietnam",locale:canonicalLocale==="vi"?"vi_VN":"en_US",alternateLocale:[canonicalLocale==="vi"?"en_US":"vi_VN"],images:product.primary_image?[{url:product.primary_image.url,width:product.primary_image.width,height:product.primary_image.height,alt:product.name}]:undefined},
   };
 }

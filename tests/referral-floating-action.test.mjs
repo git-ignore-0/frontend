@@ -46,7 +46,7 @@ test("referral action keeps its accessible label and is wired into the shared pu
   const css=source("app/styles/96-account-benefits.css");
   assert.match(component,/aria-label=\{label\}/);
   assert.match(shell,/shouldShowReferralFloatingAction/);
-  assert.match(shell,/ui\.cartOpen\|\|ui\.filterOpen\|\|ui\.categoryOpen/);
+  assert.match(shell,/ui\.addressEditing\|\|ui\.orderDateOpen\|\|ui\.giftIntent!==null/);
   assert.match(css,/\.referral-floating-action-label/);
   assert.match(css,/@media\(max-width:560px\)[\s\S]*\.referral-floating-action-label\{position:absolute/);
   assert.match(css,/\.nfv-app:has\(\[role="dialog"\]\)/);

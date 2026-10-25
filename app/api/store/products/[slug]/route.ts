@@ -1,0 +1,5 @@
+import {NextResponse} from "next/server";
+import {fetchStoreProduct,StoreConfigurationError,StoreUpstreamError} from "@/store/store-service";
+import {parseStoreDetailRequest} from "../../validation";
+export const runtime="nodejs";export const dynamic="force-dynamic";const headers={"Cache-Control":"no-store"};
+export async function GET(request:Request,{params}:{params:Promise<{slug:string}>}){const {slug}=await params;const parsed=parseStoreDetailRequest(new URL(request.url).searchParams,slug);if(!parsed)return NextResponse.json({error:"invalid_request"},{status:400,headers});try{return NextResponse.json(await fetchStoreProduct(slug,parsed.locale,{bypassCache:parsed.bypassCache}),{headers})}catch(error){if(error instanceof StoreConfigurationError)return NextResponse.json({error:"api_not_configured"},{status:503,headers});if(error instanceof StoreUpstreamError&&error.status===404)return NextResponse.json({error:"not_found"},{status:404,headers});return NextResponse.json({error:"upstream_unavailable"},{status:502,headers})}}

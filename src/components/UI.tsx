@@ -65,8 +65,8 @@ export function Photo({src,alt="",className=""}:{src?:string;alt?:string;classNa
 export function Quantity({count,onMinus,onPlus,id,min=1}:{count:number;onMinus:()=>void;onPlus:()=>void;id?:string;min?:number}){
   return <div className="qty"><button type="button" onClick={onMinus} aria-label={`Giảm số lượng ${id||""}`} disabled={count<=min}><Icon name="minus" size={16}/></button><strong>{count}</strong><button type="button" onClick={onPlus} aria-label={`Tăng số lượng ${id||""}`} disabled={count>=99}><Icon name="plus" size={16}/></button></div>;
 }
-export function SearchField({value,onChange,placeholder,id,small=false}:{value:string;onChange:(value:string)=>void;placeholder:string;id:string;small?:boolean}){
-  return <label className={small?"acc-order-search":"store-search"}><Icon name="search" size={small?15:19}/><FormInput id={id} type="search" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} autoComplete="off"/></label>;
+export function SearchField({value,onChange,placeholder,id,small=false,maxLength}:{value:string;onChange:(value:string)=>void;placeholder:string;id:string;small?:boolean;maxLength?:number}){
+  return <label className={small?"acc-order-search":"store-search"}><Icon name="search" size={small?15:19}/><FormInput id={id} type="search" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} autoComplete="off" maxLength={maxLength}/></label>;
 }
 export function DataState({kind="empty",title,description,icon,action,compact=false}:{kind?:"empty"|"loading"|"error"|"auth";title:string;description?:string;icon?:string;action?:{label:string;onClick:()=>void};compact?:boolean}){
   return <div className={`nfv-data-state nfv-data-state--${kind}${compact?" nfv-data-state--compact":""}`} role={kind==="error"?"alert":"status"} aria-live={kind==="error"?"assertive":"polite"} aria-busy={kind==="loading"}>

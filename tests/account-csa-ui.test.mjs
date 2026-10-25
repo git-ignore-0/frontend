@@ -157,6 +157,28 @@ test("Account CSA state markup follows the approved active and pending surfaces"
  assert.match(purchase,/className="csa-notice csa-condensed"/);
 });
 
+test("approved scheduled request renders its effective date instead of a loading state",()=>{
+ const component=loadComponent();
+ const confirmation={requestCode:"CSA-002",status:"approved",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"3000000",expiresAt:"2026-11-01T00:00:00Z",membershipStartDate:"2026-12-01",membershipEndDate:"2027-06-01"};
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation}));
+ assert.match(html,/csa\.requestApproved/);
+ assert.match(html,/csa\.membershipStarts/);
+ assert.match(html,/2026-12-01/);
+ assert.doesNotMatch(html,/state\.loadingTitle/);
+});
+
+test("rejected and expired requests show their terminal result and a choose-again action",()=>{
+ const component=loadComponent();
+ const base={requestCode:"CSA-003",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2026-11-01T00:00:00Z"};
+ const rejected=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation:{...base,status:"rejected",rejectionReason:"Không tìm thấy giao dịch"},onDismiss:()=>{}}));
+ assert.match(rejected,/csa\.requestRejected/);
+ assert.match(rejected,/Không tìm thấy giao dịch/);
+ assert.match(rejected,/csa\.chooseAgain/);
+ const expired=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation:{...base,status:"expired"},onDismiss:()=>{}}));
+ assert.match(expired,/csa\.requestExpired/);
+ assert.match(expired,/csa\.chooseAgain/);
+});
+
 test("Contract action renders a file icon instead of the fallback leaf",()=>{
  const file=renderToStaticMarkup(React.createElement(realUI.Icon,{name:"file",size:14}));
  const fallback=renderToStaticMarkup(React.createElement(realUI.Icon,{name:"leaf",size:14}));

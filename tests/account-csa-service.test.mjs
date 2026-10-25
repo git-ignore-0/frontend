@@ -32,3 +32,12 @@ test("CSA purchase status is read back from the Backend tracker payload",()=>run
   assert.deepEqual(result,{requestCode:'CSA-001',status:'rejected',packageName:'Gói Rau',durationMonths:6,amount:'3000000',initialPaymentAmount:'500000',expiresAt:'2026-11-01T00:00:00Z',rejectionReason:'Không tìm thấy giao dịch'});
   assert.deepEqual(calls[0],{path:'/api/account/csa-purchase-status',body:{reference_code:'CSA-001',phone:'0912345678'}});
 `));
+
+test("approved CSA purchase status preserves the scheduled membership dates",()=>run(`
+  import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});
+  globalThis.fetch=async ()=>new Response(JSON.stringify({data:{reference_code:'CSA-002',status:'approved',package_snapshot:{name:'Gói Rau'},duration_months:6,amount:'3000000',initial_payment_amount:'3000000',expires_at:'2026-11-01T00:00:00Z',membership_start_date:'2026-12-01',membership_end_date:'2027-06-01'}}),{status:200,headers:{'Content-Type':'application/json'}});
+  const result=await service.getCsaPurchaseStatus({requestCode:'CSA-002',phone:'0912345678'});
+  assert.equal(result.status,'approved');
+  assert.equal(result.membershipStartDate,'2026-12-01');
+  assert.equal(result.membershipEndDate,'2027-06-01');
+`));

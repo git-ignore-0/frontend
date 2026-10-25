@@ -123,9 +123,10 @@ export async function confirmCsaTransfer(quoteToken:string):Promise<CsaPurchaseC
   return {id:string(data.id),requestCode:string(data.request_code),status,packageName:string(pkg.name),durationMonths:integer(option.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at)};
 }
 
-export type CsaPurchaseStatus=Omit<CsaPurchaseConfirmation,"id">&{rejectionReason?:string};
+export type CsaPurchaseStatus=Omit<CsaPurchaseConfirmation,"id">&{rejectionReason?:string;membershipStartDate?:string;membershipEndDate?:string};
 export async function getCsaPurchaseStatus(input:{requestCode:string;phone:string}):Promise<CsaPurchaseStatus>{
   const payload=await accountApi("csa-purchase-status",{method:"POST",body:JSON.stringify({reference_code:input.requestCode,phone:input.phone})}),data=record(payload.data),pkg=record(data.package_snapshot);
   const status=string(data.status);if(status!=="pending"&&status!=="payment_confirmed"&&status!=="approved"&&status!=="rejected"&&status!=="expired")throw new AccountApiError("invalid_response",502);
-  return {requestCode:string(data.reference_code),status,packageName:string(pkg.name),durationMonths:integer(data.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at),rejectionReason:optionalString(data.rejection_reason)};
+  const membershipStartDate=optionalString(data.membership_start_date),membershipEndDate=optionalString(data.membership_end_date);
+  return {requestCode:string(data.reference_code),status,packageName:string(pkg.name),durationMonths:integer(data.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at),rejectionReason:optionalString(data.rejection_reason),...(membershipStartDate?{membershipStartDate}:{}),...(membershipEndDate?{membershipEndDate}:{})};
 }

@@ -71,6 +71,15 @@ test("Store UI uses localized API states, native detail links and server paginat
  assert.doesNotMatch(store,/addCart|className="add-mini"/);
 });
 
+test("Store cards and product details format selling-unit quantities",()=>{
+ const store=source("src/screens/Store.tsx");
+ const detail=source("src/screens/store/ProductDetail.tsx");
+ assert.match(store,/formatUnitSize\(product\.unit_size\)/);
+ assert.match(detail,/formatUnitSize\(product\.unit_size\)/);
+ assert.doesNotMatch(store,/className="unit">\/ \{product\.unit_size\}/);
+ assert.doesNotMatch(detail,/className="detail-unit">\/ \{product\.unit_size\}/);
+});
+
 test("Store hero uses a localized real image without the NFV STORE eyebrow",()=>{
  const store=source("src/screens/Store.tsx");
  const copy=source("src/data/store-copy.ts");

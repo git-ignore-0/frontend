@@ -7,6 +7,7 @@ import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
 import {STORE_COPY} from "@/data/store-copy";
 import {money} from "@/lib/format";
 import {useNFV} from "@/state/NFVContext";
+import {formatUnitSize} from "@/store/store-format";
 import type {StoreCategory,StoreProductCard} from "@/store/store-model";
 import type {StorePriceBand,StoreSort} from "@/store/store-request";
 import {useStoreCatalog} from "@/store/useStoreCatalog";
@@ -31,7 +32,7 @@ export function ProductCard({product,locale}:{product:StoreProductCard;locale:"v
   <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${STORE_COPY[locale].view} ${product.name}`}>{product.csa_eligible&&<span className="corner-tag">CSA</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>
   <div className="card-copy"><a className="card-title" href={`/store/${product.slug}/${locale}`}>{product.name}</a>
    {product.alternate_name&&<div className="card-en" lang={product.content_locale==="vi"?"en":"vi"}>{product.alternate_name}</div>}
-   <div className="card-bottom"><div><div className="price">{money(product.retail_price_vnd)}</div><div className="unit">/ {product.unit_size} {product.unit_label}</div></div></div>
+   <div className="card-bottom"><div><div className="price">{money(product.retail_price_vnd)}</div><div className="unit">/ {formatUnitSize(product.unit_size)} {product.unit_label}</div></div></div>
   </div>
  </article>;
 }

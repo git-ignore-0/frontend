@@ -94,6 +94,14 @@ test("Store runtime parsers accept the exact public contract and normalize safe 
  assert.equal(detail.suppliers[0].location,"Da Lat");
 });
 
+test("Store unit quantities omit insignificant decimal zeroes",()=>{
+ const format=runModule("src/store/store-format.ts");
+ assert.equal(format.formatUnitSize("500.000"),"500");
+ assert.equal(format.formatUnitSize("0.500"),"0.5");
+ assert.equal(format.formatUnitSize("1.250"),"1.25");
+ assert.equal(format.formatUnitSize("1.001"),"1.001");
+});
+
 test("Store runtime parsers reject malformed envelopes, money, locale and unsafe images",()=>{
  const model=loadModel();
  for(const payload of [

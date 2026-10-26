@@ -1,5 +1,6 @@
 import type {CSA, CSAUsage, Locale, Paged} from "@/types";
 import {accountApi, AccountApiError} from "./account-api.ts";
+import type {CsaGuestIdentity} from "../screens/account-csa/csa-guest-buyer.ts";
 
 export {AccountApiError} from "./account-api.ts";
 
@@ -110,15 +111,15 @@ function quoteFrom(value:unknown):CsaQuote{
   return {quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},summary:{paymentType,totalAmount:decimal(summary.total_amount),initialPaymentAmount:decimal(summary.initial_payment_amount),installmentCount,installments},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
 }
 
-export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale}):Promise<CsaQuote>{
-  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale})});
+export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale;guestIdentity?:CsaGuestIdentity|null}):Promise<CsaQuote>{
+  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale,...(input.guestIdentity?{guest_identity:input.guestIdentity}:{})})});
   return quoteFrom(payload.data);
 }
 
 export type CsaPurchaseState="pending"|"payment_confirmed"|"approved"|"rejected"|"expired";
 export type CsaPurchaseConfirmation={id:string;requestCode:string;status:CsaPurchaseState;packageName:string;durationMonths:number;amount:string;initialPaymentAmount:string;expiresAt:string};
-export async function confirmCsaTransfer(quoteToken:string):Promise<CsaPurchaseConfirmation>{
-  const payload=await accountApi("csa-confirm-transfer",{method:"POST",body:JSON.stringify({quote_token:quoteToken})}),data=record(payload.data),pkg=record(data.package_snapshot),option=record(data.price_option_snapshot);
+export async function confirmCsaTransfer(quoteToken:string,guestIdentity?:CsaGuestIdentity|null):Promise<CsaPurchaseConfirmation>{
+  const payload=await accountApi("csa-confirm-transfer",{method:"POST",body:JSON.stringify({quote_token:quoteToken,...(guestIdentity?{guest_identity:guestIdentity}:{})})}),data=record(payload.data),pkg=record(data.package_snapshot),option=record(data.price_option_snapshot);
   const status=string(data.status);if(status!=="pending"&&status!=="payment_confirmed"&&status!=="approved"&&status!=="rejected"&&status!=="expired")throw new AccountApiError("invalid_response",502);
   return {id:string(data.id),requestCode:string(data.request_code),status,packageName:string(pkg.name),durationMonths:integer(option.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at)};
 }

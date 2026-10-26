@@ -31,7 +31,7 @@ export async function getSession():Promise<Session|null> {
     typeof user.phone_number!=="string" || !(user.date_of_birth===null||typeof user.date_of_birth==="string")) {
     throw new Error("Dữ liệu người dùng từ hệ thống xác thực không hợp lệ.");
   }
-  return {authenticated:true,profile:{
+  return {authenticated:true,subject:user.sub,profile:{
     name:user.name,
     phone:user.phone_number,
     email:user.email,

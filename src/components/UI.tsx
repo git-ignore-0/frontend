@@ -31,7 +31,8 @@ const paths: Record<string,ReactNode> = {
  heart:<path d="M20.5 8.5c0 5-8.5 11.5-8.5 11.5S3.5 13.5 3.5 8.5a4.5 4.5 0 0 1 8.5-2 4.5 4.5 0 0 1 8.5 2Z"/>,
  edit:<path d="m4 20 4-.8L20 7a3 3 0 0 0-4-4L4 15l-.5 5Z"/>,
  info:<><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></>,
- alert:<><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 4v.5"/></>
+ alert:<><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 4v.5"/></>,
+ copy:<><rect x="8" y="8" width="10" height="10" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>
 };
 export function Icon({name,size=19}:{name:string;size?:number}) {
   return <svg className="ico" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[name]||paths.leaf}</svg>;

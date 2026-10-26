@@ -120,13 +120,14 @@ test("Every workshop fetch uses the shared development and production cache poli
 });
 
 test("Workshop date formatter is safe for invalid timezone and date",async()=>{
-  const js=stripTypeScriptTypes(source("src/lib/workshop-date.ts"));
+  const dateFormatUrl=`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(source("src/lib/date-format.ts")))}`;
+  const js=stripTypeScriptTypes(source("src/lib/workshop-date.ts")).replace('from "./date-format"',`from ${JSON.stringify(dateFormatUrl)}`);
   const formatter=await import(`data:text/javascript,${encodeURIComponent(js)}`);
   const invalid={start_at:"garbage",end_at:"garbage",event_timezone:"not real"};
   assert.equal(formatter.formatWorkshopDate(invalid,"vi").day,"--");
   const valid={start_at:"2026-11-12T10:00:00+07:00",end_at:"2026-11-12T11:00:00+07:00",event_timezone:"bad/zone"};
   const result=formatter.formatWorkshopDate(valid,"vi");
-  assert.equal(result.day,"12");assert.ok(result.label.includes("10:00"));
+  assert.equal(result.day,"12");assert.equal(result.label,"12/11/2026 · 10:00–11:00");
 });
 
 test("Workshop rich-text sanitizer preserves valid internal and remote images",async()=>{

@@ -1,13 +1,8 @@
 import type {Locale} from "@/types";
+import {formatDate} from "@/lib/date-format";
 
 export function profileBirthDate(value:string|null,locale:Locale):string {
+  void locale;
   if(!value)return "";
-  const [year,month,day]=value.split("-").map(Number);
-  const date=new Date(Date.UTC(year,month-1,day));
-  return new Intl.DateTimeFormat(locale==="vi"?"vi-VN":"en-GB",{
-    day:"2-digit",
-    month:locale==="vi"?"2-digit":"short",
-    year:"numeric",
-    timeZone:"UTC",
-  }).format(date);
+  return formatDate(value);
 }

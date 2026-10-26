@@ -14,15 +14,16 @@ test("Account tabs come from one definition for desktop and mobile", () => {
   for (const id of ["orders", "profile", "address", "csa", "rewards", "redeem", "referrals"]) {
     assert.match(nav, new RegExp(`id:"${id}"`));
   }
-  assert.match(account, /ACCOUNT_NAV\.map\(/);
-  assert.match(account, /ACCOUNT_NAV\.filter\(/);
+  assert.match(account, /const navigation=accountNavigationFor\(auth\.status\)/);
+  assert.match(account, /navigation\.map\(/);
+  assert.match(account, /navigation\.filter\(/);
   assert.match(account, /\.map\(renderHubLink\)/);
   assert.doesNotMatch(account, /const ACCOUNT_TABS|const TABS_WITH_DESCRIPTION/);
 });
 
 test("Account moves keyboard focus to detail and back to the selected Hub link", () => {
   assert.match(account, /headingRef\.current\?\.focus\(\)/);
-  assert.match(account, /hubLinkRefs\.current\[ui\.accountTab\]\?\.focus\(\)/);
+  assert.match(account, /hubLinkRefs\.current\[activeTab\]\?\.focus\(\)/);
   assert.match(account, /tabIndex=\{-1\}/);
   assert.match(account, /nextFocus\.current="hub"/);
 });

@@ -144,6 +144,7 @@
 }
 
 /* Account CSA registration reuses the shared Account section typography and spacing. */
+.account-guest-notice{margin-bottom:14px}.account-guest-notice>p{margin:0;color:var(--ink2);font-size:12px;line-height:1.55}.account-guest-notice .nfv-auth-actions{margin-top:11px;justify-content:flex-start}
 .account-tab-csa .csa-account-package-selection{container-name:account-csa;container-type:inline-size;min-width:0}
 .account-tab-csa .csa-package-selection-section{overflow:hidden}
 .account-tab-csa .csa-terms-list{display:grid;margin-top:4px;border:1px solid var(--line);border-radius:8px;overflow:hidden}.account-tab-csa .csa-term-item{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;padding:11px 13px;background:#fff;color:var(--ink2);font-size:12px;line-height:1.55;cursor:pointer}.account-tab-csa .csa-term-item+.csa-term-item{border-top:1px solid var(--line)}.account-tab-csa .csa-term-item input{width:16px;height:16px;margin:2px 0 0;accent-color:var(--green)}.account-tab-csa .csa-term-item:has(input:checked){background:#f5f9f3;color:var(--ink)}.account-tab-csa .csa-term-item:has(input[aria-invalid="true"]){background:#fff6f3}.account-tab-csa .csa-terms-all{position:sticky;bottom:0;background:#edf5eb;color:var(--green);font-size:13px}.account-tab-csa .csa-terms-all:has(input:checked){background:#e4f1e1}
@@ -190,12 +191,20 @@
 .account-tab-csa .csa-purchase-actions{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:16px}
 .account-tab-csa .csa-purchase-actions .btn{max-width:100%;height:auto;min-height:36px;white-space:normal;text-align:center;padding-block:7px}
 .account-tab-csa .csa-purchase-intro{margin:0 0 15px;color:var(--ink2);font-size:12px}
+.account-tab-csa .csa-guest-buyer-form{align-items:start}.account-tab-csa .csa-guest-buyer-form .nfv-control{width:100%}.account-tab-csa .csa-guest-address-field,.account-tab-csa .csa-guest-unit-error,.account-tab-csa .csa-guest-form-error,.account-tab-csa .csa-guest-buyer-form>.csa-purchase-actions{grid-column:1/-1}.account-tab-csa .csa-guest-unit-error{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.account-tab-csa .csa-guest-unit-error .help-error,.account-tab-csa .csa-guest-form-error{margin:0}
 .account-tab-csa .csa-profile-row{display:flex;gap:14px;justify-content:space-between;padding:9px 0;border-bottom:1px solid #edf0eb;font-size:13px}
 .account-tab-csa .csa-profile-row span{color:var(--muted);min-width:105px;flex:none}.account-tab-csa .csa-profile-row strong{text-align:right;font-weight:650;overflow-wrap:anywhere;min-width:0}
-.account-tab-csa .csa-qr-area{display:grid;grid-template-columns:174px minmax(0,1fr);align-items:center;gap:19px;padding:12px 0 0}
-.account-tab-csa .csa-qr-box{display:grid;place-items:center;gap:7px;border:1px solid var(--line);border-radius:4px;width:174px;height:174px;background:#fff;color:var(--green);object-fit:contain}
-.account-tab-csa .csa-amount{font-size:24px;color:var(--green);font-weight:700;letter-spacing:-.6px;margin-bottom:5px}
-.account-tab-csa .csa-request-code{border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px}.account-tab-csa .csa-request-code span{color:var(--muted)}
+.account-tab-csa .csa-qr-area{display:grid;grid-template-columns:minmax(190px,220px) minmax(0,1fr);align-items:start;gap:24px;padding:18px 0 2px}
+.account-tab-csa .csa-qr-panel{display:grid;justify-items:center;min-width:0}
+.account-tab-csa .csa-qr-frame{display:grid;place-items:center;width:min(220px,100%);aspect-ratio:1;border:1px solid var(--line);border-radius:9px;padding:8px;background:#fff;color:var(--green)}
+.account-tab-csa .csa-qr-image{position:relative;width:100%;aspect-ratio:1;min-width:0}
+.account-tab-csa .csa-qr-code{width:100%;height:100%;object-fit:contain}
+.account-tab-csa .csa-qr-logo{position:absolute;top:50%;left:50%;width:15%;height:auto;padding:2px;border-radius:4px;background:#fff;pointer-events:none;transform:translate(-50%,-50%)}
+.account-tab-csa .csa-payment-information{display:grid;align-content:start;min-width:0}
+.account-tab-csa .csa-payment-primary{display:grid;gap:2px;padding:1px 0 12px;border-bottom:1px solid var(--line)}.account-tab-csa .csa-payment-primary span{color:var(--muted);font-size:11px}.account-tab-csa .csa-payment-primary strong{color:var(--green);font-size:24px;line-height:1.25;font-weight:700;letter-spacing:-.6px}
+.account-tab-csa .csa-payment-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.account-tab-csa .csa-payment-total span{color:var(--muted);font-size:11px}.account-tab-csa .csa-payment-total strong{font-size:13px;font-weight:650}
+.account-tab-csa .csa-transfer-details{display:grid;margin:0}.account-tab-csa .csa-transfer-row{display:grid;grid-template-columns:minmax(128px,.65fr) minmax(0,1fr);align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed #dfe7dc}.account-tab-csa .csa-transfer-row:last-child{border-bottom:0}.account-tab-csa .csa-transfer-row dt{color:var(--muted);font-size:11px}.account-tab-csa .csa-transfer-row dd{display:flex;align-items:center;justify-content:space-between;gap:9px;min-width:0;min-height:34px;margin:0}.account-tab-csa .csa-transfer-row strong{min-width:0;font-size:13px;font-weight:650;overflow-wrap:anywhere}
+.account-tab-csa .csa-copy-button{display:inline-grid;place-items:center;flex:0 0 34px;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--green)}.account-tab-csa .csa-copy-button:hover{border-color:#b9cbb9;background:#edf4eb}.account-tab-csa .csa-copy-button:disabled{opacity:.45}
 .account-tab-csa .v2-purchase-brief{margin:0 0 13px;color:var(--ink2);font-size:12px;line-height:1.55}
 .account-tab-csa .v2-package-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
 .account-tab-csa .v2-package-toolbar strong{font-size:12px;color:var(--ink2);font-weight:650}
@@ -241,5 +250,22 @@
  .account-tab-csa .v2-checkout-review{align-items:stretch}.account-tab-csa .v2-checkout-review .btn{width:100%}
 }
 @container account-csa (max-width:620px){.account-tab-csa .csa-buy-steps{margin-bottom:12px}.account-tab-csa .csa-buy-step{font-size:10px}.account-tab-csa .csa-buy-step:not(:last-child)::after{margin:0 5px;min-width:5px}.account-tab-csa .csa-rights-header,.account-tab-csa .csa-rights-row{grid-template-columns:minmax(106px,1.45fr) repeat(3,minmax(0,.95fr));gap:5px}.account-tab-csa .csa-rights-header{font-size:10px}.account-tab-csa .csa-rights-product>strong{font-size:12px}.account-tab-csa .csa-rights-product>small{font-size:10px}.account-tab-csa .csa-rights-metric strong{font-size:17px}.account-tab-csa .csa-plan-meta{gap:7px 14px}}
-@container account-csa (max-width:430px){.account-tab-csa .csa-buy-step .index{width:19px;height:19px}.account-tab-csa .csa-profile-row span{min-width:83px}.account-tab-csa .csa-qr-area{grid-template-columns:1fr;gap:12px}.account-tab-csa .csa-qr-box{width:168px;height:168px;margin:0 auto}}
+@container account-csa (max-width:560px){.account-tab-csa .csa-qr-area{grid-template-columns:1fr;gap:16px}.account-tab-csa .csa-qr-frame{width:min(220px,100%)}.account-tab-csa .csa-payment-information{width:100%}}
+@container account-csa (max-width:430px){.account-tab-csa .csa-buy-step .index{width:19px;height:19px}.account-tab-csa .csa-profile-row span{min-width:83px}.account-tab-csa .csa-transfer-row{grid-template-columns:minmax(0,1fr);gap:4px}}
 @media(prefers-reduced-motion:reduce){.account-tab-csa .v2-plan-cards{scroll-behavior:auto}.account-tab-csa .v2-plan-card{transition:none}}
+
+/* Guest CSA tracker composes the same Account section, form, status and row primitives. */
+.account-tab-csa-tracker .csa-tracker-page{min-width:0}
+.account-tab-csa-tracker .csa-tracker-result{container-name:csa-tracker;container-type:inline-size;min-width:0}
+.account-tab-csa-tracker .csa-tracker-form .nfv-control{width:100%}
+.account-tab-csa-tracker .csa-tracker-form-actions{grid-column:1/-1;display:flex;justify-content:flex-end}
+.account-tab-csa-tracker .csa-tracker-form-error{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px}.account-tab-csa-tracker .csa-tracker-form-error .help-error{margin:0}
+.account-tab-csa-tracker .csa-tracker-overview{min-width:0}
+.account-tab-csa-tracker .csa-tracker-overview-main{min-width:0}
+.account-tab-csa-tracker .csa-notice{margin-top:13px;padding:11px 12px;border:1px solid #e0e8dc;border-radius:4px;background:#f6f9f3;color:var(--ink2);font-size:12px;line-height:1.55}.account-tab-csa-tracker .csa-notice.is-error{border-color:#efd7d1;background:#fff7f4;color:#8e3d32}
+.account-tab-csa-tracker .csa-tracker-approved-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}
+.account-tab-csa-tracker .csa-tracker-approved-summary .benefit-info-row{display:grid;gap:3px;align-content:start}.account-tab-csa-tracker .csa-tracker-approved-summary .benefit-info-row span{min-width:0}.account-tab-csa-tracker .csa-tracker-approved-summary .benefit-info-row strong{text-align:left}
+.account-tab-csa-tracker .csa-tracker-contract-download{display:flex;justify-content:flex-start;margin-top:15px}.account-tab-csa-tracker .csa-tracker-contract-download .nfv-button-content{display:inline-flex;align-items:center;gap:6px}
+.account-tab-csa-tracker .csa-tracker-contract-state{margin-top:14px}.account-tab-csa-tracker .csa-purchase-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:16px}
+@container csa-tracker (max-width:560px){.account-tab-csa-tracker .csa-tracker-approved-summary{grid-template-columns:1fr}}
+@media(max-width:600px){.account-tab-csa-tracker .csa-tracker-approved-summary{grid-template-columns:1fr}.account-tab-csa-tracker .csa-tracker-form{grid-template-columns:1fr}.account-tab-csa-tracker .csa-tracker-form-actions{justify-content:stretch}.account-tab-csa-tracker .csa-tracker-form-actions .btn{width:100%}}

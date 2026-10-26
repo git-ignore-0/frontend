@@ -36,7 +36,7 @@ function Body({children}:{children?:ReactNode}){
    window.addEventListener("keydown",close);return ()=>window.removeEventListener("keydown",close);
  },[patch,ui.orderDateOpen]);
  return <div className={`nfv-app${ui.page==="account"||ui.page==="order-detail"?" nfv-app--auth-route":""}`}><Header/>
-   {children??(ui.page==="home"?<HomePage/>:ui.page==="about"?<AboutPage/>:ui.page==="workshops"?<WorkshopsPage/>:ui.page==="plants"?<PlantsPage/>:ui.page==="animals"?<AnimalsPage/>:ui.page==="tracker"?<TrackerPage/>:ui.page==="testimonials"?<TestimonialsPage key={ui.locale}/>:ui.page==="store"?<Store/>:ui.page==="checkout"?<Checkout/>:ui.page==="account"?<AuthGate><Account/></AuthGate>:ui.page==="csa"?<CSAProgram/>:ui.page==="order-detail"?<AuthGate><OrderDetail/></AuthGate>:<Store/>)}
+   {children??(ui.page==="home"?<HomePage/>:ui.page==="about"?<AboutPage/>:ui.page==="workshops"?<WorkshopsPage/>:ui.page==="plants"?<PlantsPage/>:ui.page==="animals"?<AnimalsPage/>:ui.page==="tracker"?<TrackerPage/>:ui.page==="testimonials"?<TestimonialsPage key={ui.locale}/>:ui.page==="store"?<Store/>:ui.page==="checkout"?<Checkout/>:ui.page==="account"?<Account/>:ui.page==="csa"?<CSAProgram/>:ui.page==="order-detail"?<AuthGate><OrderDetail/></AuthGate>:<Store/>)}
    <SiteFooter/>
    {!children&&PUBLIC_STORY_PAGES.has(ui.page)&&<StoriesWidget key={ui.locale}/>} 
    {showReferralAction&&<ReferralFloatingAction locale={ui.locale}/>} 

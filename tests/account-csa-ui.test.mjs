@@ -28,6 +28,8 @@ const selectionModel=runModule("src/screens/account-csa/csa-selection-model.ts",
 });
 const accountReview=runModule("src/screens/account-csa/csa-account-review.ts",id=>{throw new Error(`Unexpected account-review import ${id}`);});
 const pendingStorage=runModule("src/screens/account-csa/csa-pending-storage.ts",id=>{throw new Error(`Unexpected pending-storage import ${id}`);});
+const guestBuyer=runModule("src/screens/account-csa/csa-guest-buyer.ts",id=>{throw new Error(`Unexpected guest-buyer import ${id}`);});
+const dateFormat=runModule("src/lib/date-format.ts",id=>{throw new Error(`Unexpected date-format import ${id}`);});
 const realUI=runModule("src/components/UI.tsx",id=>{
  if(id==="react")return React;
  if(id==="react/jsx-runtime")return jsxRuntime;
@@ -36,12 +38,16 @@ const realUI=runModule("src/components/UI.tsx",id=>{
 
 let hookState={status:"loading",page:null,retry:()=>{}};
 let hookCalls=[];
+let renderedButtons=[];
 const UI={
  ActionLink:({children,variant,small,...props})=>{void variant;void small;return React.createElement("a",props,children);},
- Button:({children,loading,variant,small,...props})=>{void loading;void variant;void small;return React.createElement("button",props,children);},
+ Button:({children,loading,variant,small,...props})=>{void loading;void variant;void small;renderedButtons.push({children,props});return React.createElement("button",props,children);},
  DataState:({kind="empty",title,description,action})=>React.createElement("div",{"data-kind":kind},title,description,action&&React.createElement("button",{onClick:action.onClick},action.label)),
  Icon:({name})=>React.createElement("span",{"data-icon":name}),
  Section:({title,description,children,className=""})=>React.createElement("section",{className},React.createElement("h2",null,title),description&&React.createElement("p",null,description),children),
+ FormField:({label,children,className})=>React.createElement("label",{className},label,children),
+ FormInput:props=>React.createElement("input",props),
+ FormSelect:({children,...props})=>React.createElement("select",props,children),
 };
 
 function loadComponent(){
@@ -50,8 +56,11 @@ function loadComponent(){
   if(id==="react/jsx-runtime")return jsxRuntime;
   if(id==="@/components/UI")return UI;
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
+  if(id==="@/lib/date-format")return dateFormat;
   if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
+  if(id==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated"})};
   if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
+  if(id==="@/account/administrative-units-service")return {getAdministrativeProvinces:async()=>[],getAdministrativeWards:async()=>[]};
   if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
   if(id==="./csa-terms")return {CSA_TERM_IDS:Array.from({length:11},(_,index)=>`csa-term-${index+1}`),CSA_TERMS:{vi:Array(11).fill("Điều khoản"),en:Array(11).fill("Term")}};
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
@@ -60,6 +69,7 @@ function loadComponent(){
   if(id==="./csa-selection-model")return selectionModel;
 	  if(id==="./csa-account-review")return accountReview;
 	  if(id==="./csa-pending-storage")return pendingStorage;
+  if(id==="./csa-guest-buyer")return guestBuyer;
   throw new Error(`Unexpected component import ${id}`);
  });
 }
@@ -128,6 +138,13 @@ test("Account step requires a known complete address and blocks missing data",()
  assert.match(incomplete,/disabled=""/);
 });
 
+test("guest Account step rejects a ward outside the selected province list",()=>{
+ const component=loadComponent();
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaGuestStep,{locale:"vi",buyer:{name:"Nguyễn Văn An",phone:"0901234567",provinceCode:"66",wardCode:"99999",address:"Số 12"},submitted:true,provinces:[{code:"66",name:"Đồng Tháp"}],wards:[{code:"22015",name:"Phường Cao Lãnh"}],provincesLoading:false,wardsLoading:false,provincesError:false,wardsError:false,onRetryUnits:()=>{},onChange:()=>{},onBack:()=>{},onContinue:()=>{}}));
+ assert.match(html,/csa\.guestIncomplete/);
+ assert.match(html,/name="ward_code"[^>]*aria-invalid="true"/);
+});
+
 test("Account CSA styles keep wide cards equal and narrow cards in one scroll-snap row",()=>{
  const css=source("app/styles/96-account-benefits.css");
  assert.match(css,/\.account-tab-csa \.csa-account-package-selection\{[^}]*container-type:inline-size/);
@@ -163,8 +180,20 @@ test("approved scheduled request renders its effective date instead of a loading
  const html=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation}));
  assert.match(html,/csa\.requestApproved/);
  assert.match(html,/csa\.membershipStarts/);
- assert.match(html,/2026-12-01/);
+ assert.match(html,/01\/12\/2026/);
+ assert.doesNotMatch(html,/2026-12-01/);
  assert.doesNotMatch(html,/state\.loadingTitle/);
+});
+
+test("payment-reported request only shows the Admin-review status and a tracker action",()=>{
+ const component=loadComponent(),confirmation={requestCode:"CSA-004",status:"payment_confirmed",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2026-11-01T00:00:00Z"};
+ let tracked=false;renderedButtons=[];
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation,onTrack:()=>{tracked=true;}}));
+ assert.match(html,/csa\.pendingTitle/);
+ assert.match(html,/csa\.openTracker/);
+ assert.doesNotMatch(html,/csa\.pendingDescription|csa\.pendingQuotaNote|csa\.pendingReloadNote|csa\.transferReported|csa\.paymentAmount/);
+ const trackerButton=renderedButtons.find(({children})=>children==="csa.openTracker");
+ assert.ok(trackerButton);trackerButton.props.onClick();assert.equal(tracked,true);
 });
 
 test("rejected and expired requests show their terminal result and a choose-again action",()=>{
@@ -217,7 +246,30 @@ test("payment step keeps Backend totals, installments and transfer fallback when
  assert.match(html,/csa\.copyAccountNumber/);
  assert.match(html,/csa\.copyTransferContent/);
  assert.match(html,/csa\.qrUnavailable/);
+ assert.match(html,/25\/10\/2099 08:00/);
+ assert.doesNotMatch(html,/csa\.paymentDescription/);
+ assert.equal((html.match(/csa\.firstPayment/g)||[]).length,1);
+ assert.equal((html.match(/csa\.contractTotal/g)||[]).length,1);
  assert.doesNotMatch(html,/disabled=""/);
+});
+
+test("payment step presents a branded QR and compact accessible copy actions",()=>{
+ const component=loadComponent();
+ const quote={quoteToken:"signed",expiresAt:"2099-10-25T01:00:00Z",requestCode:"CSA-1",payment:{amount:"500000",bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-1"},summary:{paymentType:"full",totalAmount:"500000",initialPaymentAmount:"500000",installmentCount:1,installments:[{sequence:1,amount:"500000",cycleCount:1}]},terms:{version:"v1",locale:"vi",hash:"abc"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"500000",addInfo:"CSA-1",format:"text",template:"compact2"}};
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaPaymentStep,{locale:"vi",quote,busy:false,error:"",onBack:()=>{},onConfirm:()=>{}}));
+ assert.match(html,/class="csa-qr-frame"/);
+ assert.match(html,/class="csa-qr-image"/);
+ assert.match(html,/class="csa-qr-logo" src="\/images\/logo-mark\.png"/);
+ assert.equal((html.match(/class="csa-copy-button"/g)||[]).length,2);
+ assert.match(html,/aria-label="csa\.copyAccountNumber"[^>]*><span data-icon="copy"><\/span><\/button>/);
+ assert.match(html,/aria-label="csa\.copyTransferContent"[^>]*><span data-icon="copy"><\/span><\/button>/);
+ assert.doesNotMatch(html,/csa\.paymentDescription|csa\.contractTotal/);
+ assert.equal((html.match(/csa\.paymentAmount/g)||[]).length,1);
+});
+
+test("payment detail rows reserve the same value height with or without a copy action",()=>{
+ const css=source("app/styles/96-account-benefits.css");
+ assert.match(css,/\.account-tab-csa \.csa-transfer-row dd\{[^}]*min-height:34px/);
 });
 
 test("quote expiry helper rejects expired and malformed Backend timestamps",()=>{

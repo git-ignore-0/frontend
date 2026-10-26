@@ -1,12 +1,15 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- VietQR URL is derived exclusively from Backend payment payload. */
 
-import {useEffect,useRef,useState,useSyncExternalStore} from "react";
-import {ActionLink,Button,DataState,Icon,Section} from "@/components/UI";
+import {useCallback,useEffect,useRef,useState,useSyncExternalStore} from "react";
+import {ActionLink,Button,DataState,FormField,FormInput,FormSelect,Icon,Section} from "@/components/UI";
 import {copyText} from "@/data/account-copy";
+import {formatDate,formatDateTime} from "@/lib/date-format";
 import {siteAccountHref} from "@/auth/site-auth";
+import {useAuth} from "@/auth/AuthProvider";
 import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote} from "@/account/csa-service";
 import {confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus} from "@/account/csa-service";
+import {getAdministrativeProvinces,getAdministrativeWards,type AdministrativeUnit} from "@/account/administrative-units-service";
 import {copyTextToClipboard} from "@/account/referral-share";
 import {csaMoney,csaQuantity,type CsaPackage} from "@/screens/csa/csa-packages-model";
 import {useCsaPackages} from "@/screens/csa/useCsaPackages";
@@ -21,7 +24,8 @@ import {
 } from "./csa-selection-model";
 import {CSA_TERM_IDS,CSA_TERMS} from "./csa-terms";
 import {csaAccountReview} from "./csa-account-review";
-import {CSA_PENDING_STORAGE_KEY,parseCsaPending,saveCsaPending} from "./csa-pending-storage";
+import {CSA_PENDING_STORAGE_KEY,clearGuestCsaPending,csaPendingStorage,parseCsaPending,saveCsaPending} from "./csa-pending-storage";
+import {csaGuestBuyerReview,EMPTY_CSA_GUEST_BUYER,normalizeVietnamPhone,sanitizeVietnamPhoneInput,type CsaGuestBuyer,type CsaGuestBuyerField} from "./csa-guest-buyer";
 import type {Address,Profile} from "@/types";
 
 type Locale="vi"|"en";
@@ -43,8 +47,8 @@ function subscribePendingStorage(listener:()=>void){
   window.addEventListener("storage",onStorage);
   return ()=>window.removeEventListener("storage",onStorage);
 }
-function pendingStorageSnapshot(){
-  try{return window.localStorage.getItem(CSA_PENDING_STORAGE_KEY);}catch{return null;}
+function pendingStorageSnapshot(authenticated:boolean){
+  try{return csaPendingStorage(authenticated,window)?.getItem(CSA_PENDING_STORAGE_KEY)??null;}catch{return null;}
 }
 
 function Steps({locale,current}:{locale:Locale;current:PurchaseStep}){
@@ -54,7 +58,9 @@ function Steps({locale,current}:{locale:Locale;current:PurchaseStep}){
 }
 
 export function AccountCsaPackageSelection(){
-  const {ui,data,refreshResource}=useNFV();
+  const {ui,data,patch,refreshResource}=useNFV();
+  const auth=useAuth();
+  const guestMode=auth.status!=="authenticated";
   const {status,page,retry}=useCsaPackages(ui.locale,1);
   const packages=page?.data;
   const [selected,setSelected]=useState<CsaSelection|null>(null);
@@ -68,42 +74,81 @@ export function AccountCsaPackageSelection(){
   const [statusAttempt,setStatusAttempt]=useState(0);
   const [syncedRequest,setSyncedRequest]=useState<{key:string;value:CsaPurchaseStatus|null;error:boolean}|null>(null);
   const [dismissedRequestCode,setDismissedRequestCode]=useState("");
+  const [guest,setGuest]=useState<CsaGuestBuyer>(EMPTY_CSA_GUEST_BUYER);
+  const [guestSubmitted,setGuestSubmitted]=useState(false);
+  const [provinces,setProvinces]=useState<AdministrativeUnit[]>([]);
+  const [wards,setWards]=useState<AdministrativeUnit[]>([]);
+  const [provincesLoading,setProvincesLoading]=useState(false);
+  const [wardsLoading,setWardsLoading]=useState(false);
+  const [provincesError,setProvincesError]=useState(false);
+  const [wardsError,setWardsError]=useState(false);
+  const [unitsAttempt,setUnitsAttempt]=useState(0);
   const confirmingRef=useRef(false);
   const L=(key:string)=>copyText(ui.locale,key);
-  const persistedRaw=useSyncExternalStore(subscribePendingStorage,pendingStorageSnapshot,()=>null);
-  const persistedReference=parseCsaPending(persistedRaw,{email:data.profile.email,phone:data.profile.phone});
+  const guestReview=csaGuestBuyerReview(guest,provinces,wards);
+  const guestIdentity=guestMode?guestReview.identity:null;
+  const owner={email:guestMode?"":data.profile.email,phone:guestMode?(guestIdentity?.phone??normalizeVietnamPhone(guest.phone)):data.profile.phone};
+  const pendingSnapshot=useCallback(()=>pendingStorageSnapshot(!guestMode),[guestMode]);
+  const persistedRaw=useSyncExternalStore(subscribePendingStorage,pendingSnapshot,()=>null);
+  useEffect(()=>{if(guestMode)try{clearGuestCsaPending(window);}catch{/* Browser storage may be unavailable. */}},[guestMode]);
+  const persistedReference=parseCsaPending(persistedRaw,owner);
   const persistedRequestCode=persistedReference?.requestCode??"";
-  const statusKey=persistedRequestCode?`${persistedRequestCode}:${data.profile.phone}`:"";
+  const statusKey=persistedRequestCode?`${persistedRequestCode}:${owner.phone}`:"";
+  useEffect(()=>{
+    if(!guestMode||step!=="account")return;
+    let active=true;
+    void Promise.resolve().then(async()=>{
+      if(!active)return;
+      setProvincesLoading(true);setProvincesError(false);
+      try{const value=await getAdministrativeProvinces(ui.locale);if(active)setProvinces(value);}
+      catch{if(active){setProvinces([]);setProvincesError(true);}}
+      finally{if(active)setProvincesLoading(false);}
+    });
+    return()=>{active=false;};
+  },[guestMode,step,ui.locale,unitsAttempt]);
+  useEffect(()=>{
+    if(!guestMode||step!=="account")return;
+    let active=true;
+    void Promise.resolve().then(async()=>{
+      if(!active)return;
+      if(!guest.provinceCode){setWards([]);setWardsError(false);setWardsLoading(false);return;}
+      setWardsLoading(true);setWardsError(false);
+      try{const value=await getAdministrativeWards(guest.provinceCode,ui.locale);if(active)setWards(value);}
+      catch{if(active){setWards([]);setWardsError(true);}}
+      finally{if(active)setWardsLoading(false);}
+    });
+    return()=>{active=false;};
+  },[guest.provinceCode,guestMode,step,ui.locale,unitsAttempt]);
   useEffect(()=>{
     if(!persistedRequestCode||!statusKey)return;
     let active=true;
-    void getCsaPurchaseStatus({requestCode:persistedRequestCode,phone:data.profile.phone}).then(value=>{
+    void getCsaPurchaseStatus({requestCode:persistedRequestCode,phone:owner.phone}).then(value=>{
       if(!active)return;
       setSyncedRequest({key:statusKey,value,error:false});
-      if(value.status==="approved")void refreshResource("csa");
+      if(value.status==="approved"&&!guestMode)void refreshResource("csa");
     }).catch(()=>{if(active)setSyncedRequest({key:statusKey,value:null,error:true});});
     return ()=>{active=false;};
-  },[data.profile.phone,persistedRequestCode,refreshResource,statusAttempt,statusKey]);
+  },[guestMode,owner.phone,persistedRequestCode,refreshResource,statusAttempt,statusKey]);
   const officialRequest=confirmation??(syncedRequest?.key===statusKey?syncedRequest.value:null);
   const visibleRequest=officialRequest?.requestCode===dismissedRequestCode?null:officialRequest;
 
   if(persistedReference&&syncedRequest?.key!==statusKey&&!confirmation)return <Section title={L("csa.pendingRequestTitle")} className="benefit-section csa-account-package-selection"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></Section>;
   if(persistedReference&&syncedRequest?.key===statusKey&&syncedRequest.error&&!confirmation)return <Section title={L("csa.pendingRequestTitle")} className="benefit-section csa-account-package-selection"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>setStatusAttempt(value=>value+1)}}/></Section>;
-  if(visibleRequest)return <AccountCsaPendingStep locale={ui.locale} confirmation={visibleRequest} onDismiss={visibleRequest.status==="rejected"||visibleRequest.status==="expired"?()=>{try{window.localStorage.removeItem(CSA_PENDING_STORAGE_KEY);}catch{/* The terminal Backend result has already been shown. */}setDismissedRequestCode(visibleRequest.requestCode);}:undefined}/>;
+  if(visibleRequest)return <AccountCsaPendingStep locale={ui.locale} confirmation={visibleRequest} onTrack={guestMode?()=>patch({accountTab:"csa-tracker",accountHubOpen:false,error:""}):undefined} onDismiss={visibleRequest.status==="rejected"||visibleRequest.status==="expired"?()=>{try{csaPendingStorage(!guestMode,window)?.removeItem(CSA_PENDING_STORAGE_KEY);}catch{/* The terminal Backend result has already been shown. */}setDismissedRequestCode(visibleRequest.requestCode);}:undefined}/>;
   if(status==="loading")return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState kind="loading" title={L("state.loadingTitle")} description={L("csa.selectionLoading")}/></Section>;
   if(status==="error")return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:retry}}/></Section>;
   if(!packages?.length)return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState title={L("csa.noPackagesAvailable")} description={L("csa.noPackagesAvailableDesc")} icon="leaf"/></Section>;
 
   const current=csaSelectionSummary(packages,selected)?selected:createCsaSelection(packages);
   const back=()=>{setError("");setStep(step==="account"?"choose":step==="terms"?"account":"terms");};
-  if(step==="account")return <AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={data.addresses[0]} onBack={back} onContinue={()=>setStep("terms")}/>;
+  if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} provinces={provinces} wards={wards} provincesLoading={provincesLoading} wardsLoading={wardsLoading} provincesError={provincesError} wardsError={wardsError} onRetryUnits={()=>setUnitsAttempt(value=>value+1)} onChange={(field,value)=>{setQuote(null);if(field==="provinceCode"){setWards([]);setWardsError(false);setWardsLoading(Boolean(value));}setGuest(current=>field==="provinceCode"?{...current,provinceCode:value,wardCode:""}:{...current,[field]:value});}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={data.addresses[0]} onBack={back} onContinue={()=>setStep("terms")}/>;
   if(step==="terms"){
     const accepted=acceptedTerms.length===CSA_TERM_IDS.length;
     const toggle=(id:string,checked:boolean)=>setAcceptedTerms(value=>checked?[...new Set([...value,id])]:value.filter(item=>item!==id));
-    const createQuote=async()=>{setTermsSubmitted(true);setError("");if(!accepted||!current)return;setBusy(true);try{const result=await createCsaPaymentQuote({...current,locale:ui.locale});setQuote(result);setStep("payment");}catch(value){setError(value instanceof Error?value.message:"request_failed");}finally{setBusy(false);}};
+    const createQuote=async()=>{setTermsSubmitted(true);setError("");if(!accepted||!current||(guestMode&&!guestIdentity))return;setBusy(true);try{const result=await createCsaPaymentQuote({...current,locale:ui.locale,guestIdentity});setQuote(result);setStep("payment");}catch(value){setError(value instanceof Error?value.message:"request_failed");}finally{setBusy(false);}};
     return <div className="benefits-page csa-account-package-selection"><Steps locale={ui.locale} current={step}/><Section title={L("csa.termsTitle")} description={L("csa.termsDescription")} className="benefit-section csa-purchase-step"><div className="csa-terms-list" role="group" aria-describedby={termsSubmitted&&!accepted?"csa-terms-error":undefined}>{CSA_TERMS[ui.locale].map((term,index)=>{const id=CSA_TERM_IDS[index],checked=acceptedTerms.includes(id);return <label className="csa-term-item" htmlFor={id} key={id}><input id={id} name="csa_program_term" type="checkbox" checked={checked} disabled={busy} aria-invalid={termsSubmitted&&!checked} onChange={event=>toggle(id,event.target.checked)}/><span>{term}</span></label>;})}<label className="csa-term-item csa-terms-all" htmlFor="csa-terms-all"><input id="csa-terms-all" type="checkbox" checked={accepted} disabled={busy} aria-controls={CSA_TERM_IDS.join(" ")} onChange={event=>setAcceptedTerms(event.target.checked?[...CSA_TERM_IDS]:[])}/><strong>{L("csa.termsCheckAll")}</strong></label></div>{termsSubmitted&&!accepted&&<p className="help-error" id="csa-terms-error" role="alert">{L("csa.termsRequired")}</p>}{error&&<p className="help-error" role="alert">{L(csaPurchaseErrorKey(error))}</p>}<div className="csa-purchase-actions"><Button variant="outline" disabled={busy} onClick={back}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button loading={busy} disabled={!accepted} onClick={()=>void createQuote()}>{L("csa.createPayment")}</Button></div></Section></div>;
   }
-  if(step==="payment"&&quote)return <AccountCsaPaymentStep locale={ui.locale} quote={quote} busy={busy} error={error} onBack={back} onConfirm={async()=>{if(confirmingRef.current||csaQuoteExpired(quote.expiresAt))return;confirmingRef.current=true;setBusy(true);setError("");try{const result=await confirmCsaTransfer(quote.quoteToken);try{saveCsaPending(window.localStorage,{email:data.profile.email,phone:data.profile.phone},result);}catch{/* The Backend response still controls the current-session state. */}setConfirmation(result);setStep("pending");}catch(value){setError(value instanceof Error?value.message:"request_failed");}finally{confirmingRef.current=false;setBusy(false);}}}/>;
+  if(step==="payment"&&quote)return <AccountCsaPaymentStep locale={ui.locale} quote={quote} busy={busy} error={error} onBack={back} onConfirm={async()=>{if(confirmingRef.current||csaQuoteExpired(quote.expiresAt)||(guestMode&&!guestIdentity))return;confirmingRef.current=true;setBusy(true);setError("");try{const result=await confirmCsaTransfer(quote.quoteToken,guestIdentity);try{const storage=csaPendingStorage(!guestMode,window);if(storage)saveCsaPending(storage,owner,result);}catch{/* The Backend response still controls the current-session state. */}setConfirmation(result);setStep("pending");}catch(value){setError(value instanceof Error?value.message:"request_failed");}finally{confirmingRef.current=false;setBusy(false);}}}/>;
   return <><Steps locale={ui.locale} current="choose"/><AccountCsaPackageSelectionView
     locale={ui.locale}
     packages={packages}
@@ -122,6 +167,23 @@ export function AccountCsaPackageSelection(){
 export function AccountCsaAccountStep({locale,profile,address,onBack,onContinue}:{locale:Locale;profile:Pick<Profile,"name"|"phone"|"email">;address?:Address;onBack:()=>void;onContinue:()=>void}){
   const L=(key:string)=>copyText(locale,key),review=csaAccountReview(profile,address);
   return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="account"/><Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step"><p className="csa-purchase-intro">{L("csa.accountDescription")}</p><div className="csa-status-line"><span className={`acc-status ${review.complete?"completed":"processing"}`}>{L("csa.signedIn")}</span><span className="muted">{L("csa.accountManaged")}</span></div><div className="csa-profile-row"><span>{L("profile.name")}</span><strong>{profile.name||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{profile.phone||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.email")}</span><strong>{profile.email||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("csa.deliveryAddress")}</span><strong>{review.addressLabel||L("common.na")}</strong></div>{!review.complete&&<p className="help-error" role="alert">{L("csa.accountIncomplete")}</p>}<div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><ActionLink variant="outline" href={siteAccountHref(locale,`/account/${locale}?tab=csa`)}>{L("csa.editAccount")}</ActionLink><Button disabled={!review.complete} onClick={onContinue}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div></Section></div>;
+}
+
+export function AccountCsaGuestStep({locale,buyer,submitted,provinces,wards,provincesLoading,wardsLoading,provincesError,wardsError,onRetryUnits,onChange,onBack,onContinue}:{locale:Locale;buyer:CsaGuestBuyer;submitted:boolean;provinces:AdministrativeUnit[];wards:AdministrativeUnit[];provincesLoading:boolean;wardsLoading:boolean;provincesError:boolean;wardsError:boolean;onRetryUnits:()=>void;onChange:(field:CsaGuestBuyerField,value:string)=>void;onBack:()=>void;onContinue:()=>void}){
+  const L=(key:string)=>copyText(locale,key),review=csaGuestBuyerReview(buyer,provinces,wards),missing=(field:CsaGuestBuyerField)=>submitted&&review.missing.includes(field);
+  const collator=new Intl.Collator(locale==="en"?"en":"vi",{sensitivity:"base"});
+  const sortedProvinces=[...provinces].sort((left,right)=>collator.compare(left.name,right.name));
+  const sortedWards=[...wards].sort((left,right)=>collator.compare(left.name,right.name));
+  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="account"/><Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step"><p className="csa-purchase-intro">{L("csa.guestAccountDescription")}</p><form className="acc-form-grid csa-guest-buyer-form" noValidate onSubmit={event=>{event.preventDefault();onContinue();}}>
+    <FormField label={L("profile.name")}><FormInput name="name" autoComplete="name" value={buyer.name} aria-invalid={missing("name")} onChange={event=>onChange("name",event.target.value)}/></FormField>
+    <FormField label={L("profile.phone")}><FormInput name="phone" type="tel" inputMode="tel" pattern="[+0-9]*" autoComplete="tel" maxLength={13} value={buyer.phone} aria-invalid={missing("phone")} onChange={event=>onChange("phone",sanitizeVietnamPhoneInput(event.target.value))}/></FormField>
+    <FormField label={L("csa.guestProvince")}><FormSelect name="province_code" value={buyer.provinceCode} disabled={provincesLoading} aria-invalid={missing("provinceCode")} onChange={event=>onChange("provinceCode",event.target.value)}><option value="">{provincesLoading?L("common.loading"):L("csa.guestChooseProvince")}</option>{sortedProvinces.map(unit=><option value={unit.code} key={unit.code}>{unit.name}</option>)}</FormSelect></FormField>
+    <FormField label={L("csa.guestWard")}><FormSelect name="ward_code" value={buyer.wardCode} disabled={!buyer.provinceCode||wardsLoading} aria-invalid={missing("wardCode")} onChange={event=>onChange("wardCode",event.target.value)}><option value="">{wardsLoading?L("common.loading"):L("csa.guestChooseWard")}</option>{sortedWards.map(unit=><option value={unit.code} key={unit.code}>{unit.name}</option>)}</FormSelect></FormField>
+    <FormField label={L("csa.guestAddress")} className="csa-guest-address-field"><FormInput name="address" autoComplete="street-address" value={buyer.address} aria-invalid={missing("address")} onChange={event=>onChange("address",event.target.value)}/></FormField>
+    {(provincesError||wardsError)&&<div className="csa-guest-unit-error"><p className="help-error" role="alert">{L("csa.guestUnitsError")}</p><Button small variant="outline" onClick={onRetryUnits}>{L("common.retry")}</Button></div>}
+    {submitted&&!review.complete&&<p className="help-error csa-guest-form-error" role="alert">{L("csa.guestIncomplete")}</p>}
+    <div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button type="submit">{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div>
+  </form></Section></div>;
 }
 
 function csaPurchaseErrorKey(code:string):string{
@@ -214,15 +276,16 @@ export function AccountCsaPaymentStep({locale,quote,busy,error,onBack,onConfirm}
   const transferReady=Boolean(quote.payment.bankName&&quote.payment.accountNumber&&quote.payment.accountName&&quote.payment.transferContent&&quote.payment.amount===quote.summary.initialPaymentAmount);
   useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer);},[]);
   const copyValue=async(kind:"account"|"content",value:string)=>{try{await copyTextToClipboard(value);setCopied(kind);}catch{setCopied(null);}};
-  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="payment"/><Section title={L("csa.paymentTitle")} description={L("csa.paymentDescription")} className="benefit-section csa-purchase-step"><div className="benefit-detail-grid"><div className="benefit-info-row"><span>{L("csa.contractTotal")}</span><strong>{csaMoney(quote.summary.totalAmount,locale)}</strong></div><div className="benefit-info-row"><span>{quote.summary.paymentType==="installment"?L("csa.firstPayment"):L("csa.paymentAmount")}</span><strong>{csaMoney(quote.summary.initialPaymentAmount,locale)}</strong></div></div>{quote.summary.paymentType==="installment"&&<div className="csa-bank-details"><div><span>{L("csa.installmentSchedule")}</span><strong>{quote.summary.installments.map(item=>L("csa.installmentRow",{sequence:item.sequence,amount:csaMoney(item.amount,locale),cycles:item.cycleCount})).join(" · ")}</strong></div></div>}<div className="csa-qr-area">{qrReady?<img className="csa-qr-box" src={qrUrl} alt={L("csa.qrAlt")} onError={()=>setQrFailed(true)}/>:<div className="csa-qr-box csa-qr-unavailable"><Icon name="alert" size={25}/><span>{L("csa.qrUnavailable")}</span></div>}<div><div className="csa-amount">{csaMoney(quote.payment.amount,locale)}</div><p className="sm muted">{L("csa.paymentAmount")}</p><div className="csa-bank-details"><div><span>{L("csa.bank")}</span><strong>{quote.payment.bankName}</strong></div><div><span>{L("csa.accountNumber")}</span><strong>{quote.payment.accountNumber}</strong><Button small variant="outline" disabled={busy} onClick={()=>void copyValue("account",quote.payment.accountNumber)}>{L(copied==="account"?"csa.copied":"csa.copyAccountNumber")}</Button></div><div><span>{L("csa.accountName")}</span><strong>{quote.payment.accountName}</strong></div></div><div className="csa-request-code"><span>{L("csa.transferContent")}</span><strong>{quote.payment.transferContent}</strong><Button small variant="outline" disabled={busy} onClick={()=>void copyValue("content",quote.payment.transferContent)}>{L(copied==="content"?"csa.copied":"csa.copyTransferContent")}</Button></div></div></div><p className="csa-quote-expiry">{L("csa.quoteExpires")}: {new Date(quote.expiresAt).toLocaleString(locale==="en"?"en-US":"vi-VN")}</p>{(expired||error)&&<p className="help-error" role="alert">{L(expired?"csa.quoteExpiredError":csaPurchaseErrorKey(error))}</p>}<div className="csa-purchase-actions"><Button variant="outline" disabled={busy} onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button loading={busy} disabled={busy||expired||!transferReady} onClick={onConfirm}>{L("csa.confirmTransfer")}</Button></div></Section></div>;
+  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="payment"/><Section title={L("csa.paymentTitle")} className="benefit-section csa-purchase-step">{quote.summary.paymentType==="installment"&&<div className="csa-bank-details"><div><span>{L("csa.installmentSchedule")}</span><strong>{quote.summary.installments.map(item=>L("csa.installmentRow",{sequence:item.sequence,amount:csaMoney(item.amount,locale),cycles:item.cycleCount})).join(" · ")}</strong></div></div>}<div className="csa-qr-area"><div className="csa-qr-panel">{qrReady?<div className="csa-qr-frame"><div className="csa-qr-image"><img className="csa-qr-code" src={qrUrl} alt={L("csa.qrAlt")} onError={()=>setQrFailed(true)}/><img className="csa-qr-logo" src="/images/logo-mark.png" alt="" aria-hidden="true"/></div></div>:<div className="csa-qr-frame csa-qr-unavailable"><Icon name="alert" size={25}/><span>{L("csa.qrUnavailable")}</span></div>}</div><div className="csa-payment-information"><div className="csa-payment-primary"><span>{quote.summary.paymentType==="installment"?L("csa.firstPayment"):L("csa.paymentAmount")}</span><strong>{csaMoney(quote.payment.amount,locale)}</strong></div>{quote.summary.paymentType==="installment"&&<div className="csa-payment-total"><span>{L("csa.contractTotal")}</span><strong>{csaMoney(quote.summary.totalAmount,locale)}</strong></div>}<dl className="csa-transfer-details"><div className="csa-transfer-row"><dt>{L("csa.bank")}</dt><dd><strong>{quote.payment.bankName}</strong></dd></div><div className="csa-transfer-row"><dt>{L("csa.accountNumber")}</dt><dd><strong>{quote.payment.accountNumber}</strong><button type="button" className="csa-copy-button" aria-label={L(copied==="account"?"csa.copied":"csa.copyAccountNumber")} title={L(copied==="account"?"csa.copied":"csa.copyAccountNumber")} disabled={busy} onClick={()=>void copyValue("account",quote.payment.accountNumber)}><Icon name={copied==="account"?"check":"copy"} size={15}/></button></dd></div><div className="csa-transfer-row"><dt>{L("csa.accountName")}</dt><dd><strong>{quote.payment.accountName}</strong></dd></div><div className="csa-transfer-row csa-transfer-content"><dt>{L("csa.transferContent")}</dt><dd><strong>{quote.payment.transferContent}</strong><button type="button" className="csa-copy-button" aria-label={L(copied==="content"?"csa.copied":"csa.copyTransferContent")} title={L(copied==="content"?"csa.copied":"csa.copyTransferContent")} disabled={busy} onClick={()=>void copyValue("content",quote.payment.transferContent)}><Icon name={copied==="content"?"check":"copy"} size={15}/></button></dd></div></dl></div></div><p className="csa-quote-expiry">{L("csa.quoteExpires")}: {formatDateTime(quote.expiresAt)}</p>{(expired||error)&&<p className="help-error" role="alert">{L(expired?"csa.quoteExpiredError":csaPurchaseErrorKey(error))}</p>}<div className="csa-purchase-actions"><Button variant="outline" disabled={busy} onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button loading={busy} disabled={busy||expired||!transferReady} onClick={onConfirm}>{L("csa.confirmTransfer")}</Button></div></Section></div>;
 }
 
-export function AccountCsaPendingStep({locale,confirmation,onDismiss}:{locale:Locale;confirmation:CsaPurchaseConfirmation|CsaPurchaseStatus;onDismiss?:()=>void}){
+export function AccountCsaPendingStep({locale,confirmation,onTrack,onDismiss}:{locale:Locale;confirmation:CsaPurchaseConfirmation|CsaPurchaseStatus;onTrack?:()=>void;onDismiss?:()=>void}){
   const L=(key:string,vars?:Record<string,string|number>)=>copyText(locale,key,vars);
   const approved=confirmation.status==="approved",rejected=confirmation.status==="rejected",expired=confirmation.status==="expired";
+  const waiting=!approved&&!rejected&&!expired;
   const statusKey=approved?"csa.requestApproved":rejected?"csa.requestRejected":expired?"csa.requestExpired":"csa.pendingTitle";
-  const descriptionKey=approved?"csa.approvedScheduledDescription":rejected?"csa.rejectedDescription":expired?"csa.expiredDescription":"csa.pendingDescription";
+  const descriptionKey=approved?"csa.approvedScheduledDescription":rejected?"csa.rejectedDescription":"csa.expiredDescription";
   const statusTone=approved?"completed":rejected||expired?"error":"processing";
   const tracker=confirmation as CsaPurchaseStatus;
-  return <div className="benefits-page csa-account-package-selection"><Section title={L("csa.pendingRequestTitle")} className="benefit-section csa-purchase-step"><div className="benefit-plan-title"><strong>{confirmation.packageName} · {L("csa.monthCount",{count:confirmation.durationMonths})}</strong><span className={`acc-status ${statusTone}`}>{L(statusKey)}</span></div><div className="benefit-detail-grid"><div className="benefit-info-row"><span>{L("csa.requestCode")}</span><strong>{confirmation.requestCode}</strong></div><div className="benefit-info-row"><span>{L("csa.paymentAmount")}</span><strong>{csaMoney(confirmation.initialPaymentAmount,locale)}</strong></div><div className="benefit-info-row"><span>{L("csa.paymentStatus")}</span><strong>{L(approved?"csa.requestApproved":rejected?"csa.requestRejected":expired?"csa.requestExpired":"csa.transferReported")}</strong></div>{approved&&tracker.membershipStartDate&&<div className="benefit-info-row"><span>{L("csa.membershipStarts")}</span><strong>{tracker.membershipStartDate}</strong></div>}{rejected&&tracker.rejectionReason&&<div className="benefit-info-row"><span>{L("csa.rejectionReason")}</span><strong>{tracker.rejectionReason}</strong></div>}</div><div className="csa-notice csa-condensed">{L(descriptionKey)} {!approved&&!rejected&&!expired&&L("csa.pendingQuotaNote")}</div>{!approved&&!rejected&&!expired&&<p className="csa-history-helper">{L("csa.pendingReloadNote")}</p>}{onDismiss&&<div className="csa-purchase-actions"><Button onClick={onDismiss}>{L("csa.chooseAgain")}</Button></div>}</Section></div>;
+  return <div className="benefits-page csa-account-package-selection"><Section title={L("csa.pendingRequestTitle")} className="benefit-section csa-purchase-step"><div className="benefit-plan-title"><strong>{confirmation.packageName} · {L("csa.monthCount",{count:confirmation.durationMonths})}</strong><span className={`acc-status ${statusTone}`}>{L(statusKey)}</span></div>{!waiting&&<><div className="benefit-detail-grid"><div className="benefit-info-row"><span>{L("csa.requestCode")}</span><strong>{confirmation.requestCode}</strong></div><div className="benefit-info-row"><span>{L("csa.paymentAmount")}</span><strong>{csaMoney(confirmation.initialPaymentAmount,locale)}</strong></div><div className="benefit-info-row"><span>{L("csa.paymentStatus")}</span><strong>{L(approved?"csa.requestApproved":rejected?"csa.requestRejected":"csa.requestExpired")}</strong></div>{approved&&tracker.membershipStartDate&&<div className="benefit-info-row"><span>{L("csa.membershipStarts")}</span><strong>{formatDate(tracker.membershipStartDate)}</strong></div>}{rejected&&tracker.rejectionReason&&<div className="benefit-info-row"><span>{L("csa.rejectionReason")}</span><strong>{tracker.rejectionReason}</strong></div>}</div><div className="csa-notice csa-condensed">{L(descriptionKey)}</div></>}{(onTrack||onDismiss)&&<div className="csa-purchase-actions">{onTrack&&<Button variant="outline" onClick={onTrack}>{L("csa.openTracker")}</Button>}{onDismiss&&<Button onClick={onDismiss}>{L("csa.chooseAgain")}</Button>}</div>}</Section></div>;
 }

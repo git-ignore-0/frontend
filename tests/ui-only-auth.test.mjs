@@ -15,6 +15,9 @@ test("the local BFF session is checked on initial load and browser return",()=>{
   assert.match(provider,/status:"checking"/);
   assert.doesNotMatch(provider,/SESSION_ENABLED|NEXT_PUBLIC_SESSION_ENABLED|NEXT_PUBLIC_V2_SESSION_ENABLED/);
   assert.match(provider,/void refresh\(\)/);
+  assert.match(provider,/if\(showChecking\)setSnapshot/);
+  assert.match(provider,/document\.visibilityState==="visible"\)void refresh\(false\)/);
+  assert.match(provider,/event\.persisted\)void refresh\(false\)/);
   assert.match(provider,/window\.addEventListener\("pageshow",onPageShow\)/);
   assert.match(provider,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.doesNotMatch(read("src/components/auth/AuthEntry.tsx"),/fetch\(/);

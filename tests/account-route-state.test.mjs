@@ -45,6 +45,17 @@ test("account route opens a valid requested tab instead of the mobile hub", asyn
   assert.equal(result.props.initialAccountHubOpen, false);
 });
 
+test("account route accepts the direct guest CSA tracker tab", async () => {
+  const { Page } = loadAccountRoute();
+  const result = await Page({
+    params: Promise.resolve({ locale: "vi" }),
+    searchParams: Promise.resolve({ tab: "csa-tracker" }),
+  });
+
+  assert.equal(result.props.initialAccountTab, "csa-tracker");
+  assert.equal(result.props.initialAccountHubOpen, false);
+});
+
 test("account route ignores invalid or repeated tab values and keeps the account hub", async () => {
   const { Page } = loadAccountRoute();
   for (const tab of ["admin", ["profile", "orders"]]) {

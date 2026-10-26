@@ -25,6 +25,16 @@ test("CSA purchase service posts only selection, accepted locale and signed quot
   const confirmed=await service.confirmCsaTransfer(quote.quoteToken);assert.equal(confirmed.status,'payment_confirmed');assert.equal(confirmed.expiresAt,'2026-11-01T00:00:00Z');assert.deepEqual(calls[1].body,{quote_token:'signed'});
 `));
 
+test("CSA purchase service includes the same validated guest identity in quote and confirmation",()=>run(`
+  import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});const calls=[];
+  globalThis.fetch=async (path,options)=>{calls.push({path,body:JSON.parse(options.body)});const data=path.endsWith('csa-payment-quotes')?{quote_token:'signed',expires_at:'2026-10-25T01:00:00Z',request_code:'CSA-1',payment:{amount:'500000',bank_code:'970436',bank_name:'VCB',account_number:'123',account_name:'NFV',transfer_content:'CSA-1'},payment_summary:{payment_type:'full',total_amount:'500000',initial_payment_amount:'500000',installment_count:1,installments:[{sequence:1,amount:'500000',cycle_count:1}]},terms:{version:'v1',locale:'vi',hash:'abc'},qr_payload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:'500000',addInfo:'CSA-1',format:'text',template:'compact2'}}:{id:'purchase-1',request_code:'CSA-1',status:'payment_confirmed',package_snapshot:{name:'Gói Rau'},price_option_snapshot:{duration_months:1},amount:'500000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z'};return new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}})};
+  const guestIdentity={name:'Nguyễn Văn An',phone:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12, ngõ 5'};
+  const quote=await service.createCsaPaymentQuote({packageId:'p',priceOptionId:'o',paymentPlanId:null,locale:'vi',guestIdentity});
+  await service.confirmCsaTransfer(quote.quoteToken,guestIdentity);
+  assert.deepEqual(calls[0].body.guest_identity,guestIdentity);
+  assert.deepEqual(calls[1].body,{quote_token:'signed',guest_identity:guestIdentity});
+`));
+
 test("CSA purchase status is read back from the Backend tracker payload",()=>run(`
   import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});const calls=[];
   globalThis.fetch=async (path,options)=>{calls.push({path,body:JSON.parse(options.body)});return new Response(JSON.stringify({data:{reference_code:'CSA-001',status:'rejected',package_snapshot:{name:'Gói Rau'},duration_months:6,amount:'3000000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z',rejection_reason:'Không tìm thấy giao dịch'}}),{status:200,headers:{'Content-Type':'application/json'}})};

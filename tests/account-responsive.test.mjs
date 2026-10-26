@@ -19,7 +19,7 @@ test("Account React view keeps a desktop sidebar and a mobile hub without tablet
   assert.match(account, /className="account-nav-shell"/);
   assert.match(account, /className="account-mobile-hub"/);
   assert.match(account, /className="account-mobile-back"/);
-  assert.match(account, /aria-pressed=\{ui\.accountTab === id\}/);
+  assert.match(account, /aria-pressed=\{activeTab === id\}/);
   assert.doesNotMatch(account, /scrollBy|account-nav-arrow/);
 });
 

@@ -10,7 +10,8 @@ test('guest Account stays inside the shared app shell before the shared footer',
   assert.match(root,/nfv-app--auth-route/);
   assert.match(root,/ui\.page==="account"\|\|ui\.page==="order-detail"/);
   assert.doesNotMatch(root,/ui\.page==="home"\?" nfv-app--auth-route"/);
-  assert.match(root,/ui\.page==="account"\?<AuthGate><Account\/><\/AuthGate>/);
+  assert.match(root,/ui\.page==="account"\?<Account\/>/);
+  assert.doesNotMatch(root,/<AuthGate><Account\/><\/AuthGate>/);
   assert.ok(root.indexOf('<SiteFooter/>')>root.indexOf('ui.page==="account"'));
   assert.match(gate,/auth\.status==="guest"\|\|auth\.status==="expired"/);
   assert.match(entry,/<main className="main-content nfv-auth-page">/);

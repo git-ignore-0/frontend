@@ -1,6 +1,6 @@
 export type Locale = "vi" | "en";
 export type Screen = "home" | "about" | "workshops" | "plants" | "animals" | "tracker" | "testimonials" | "store" | "product" | "checkout" | "account" | "csa" | "order-detail" | "success";
-export type AccountTab = "orders" | "address" | "profile" | "csa" | "rewards" | "redeem" | "referrals";
+export type AccountTab = "orders" | "address" | "profile" | "csa" | "csa-tracker" | "rewards" | "redeem" | "referrals";
 export type Resource = "csa" | "rewards" | "referrals";
 export type FetchStatus = "loading" | "ready" | "error";
 export interface Product { id: string; name: string; en: string; price: number; cat: string; categoryId: string; unit: string; farm: string; image: string; description: string; note: string; csa: boolean }
@@ -22,7 +22,7 @@ export interface CSAQuota {productName?: string; productNameEn?: string; name?: 
 export interface CSAPayment {id: string; date?: string; dueDate?: string; amount: number; status: string; method?: string; methodEn?: string}
 export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
 export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
-export interface Session {authenticated?: boolean; hasCSA?: boolean; profile?: Partial<Profile>}
+export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
 export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;

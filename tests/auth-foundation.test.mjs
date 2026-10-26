@@ -2,6 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync,existsSync} from "node:fs";
 import {spawnSync} from "node:child_process";
+import {stripTypeScriptTypes} from "node:module";
 
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 
@@ -16,7 +17,8 @@ test("v1 delegates identity to the Core OAuth BFF and never renders local login/
   const provider=read("src/auth/AuthProvider.tsx"),gate=read("src/components/auth/AuthGate.tsx");
   const buttons=read("src/components/auth/GuestAuthActions.tsx"),guest=read("src/components/auth/AuthEntry.tsx");
   assert.match(app,/<AuthProvider><NFVProvider/);
-  assert.match(app,/<AuthGate><Account\/><\/AuthGate>/);
+  assert.match(app,/ui\.page==="account"\?<Account\/>/);
+  assert.doesNotMatch(app,/<AuthGate><Account\/><\/AuthGate>/);
   assert.match(app,/<AuthGate><OrderDetail\/><\/AuthGate>/);
   assert.doesNotMatch(app,/AuthForm|mode="login"|mode="register"/);
   assert.ok(!existsSync(new URL("../src/components/auth/AuthForm.tsx",import.meta.url)));
@@ -55,14 +57,16 @@ test("same-origin auth URLs preserve locale and safe returnTo",()=>{
 });
 
 test("profile presentation localizes birth dates and missing values",()=>{
-  const presentationUrl=new URL("../src/screens/profile-presentation.ts",import.meta.url).href;
+  const dateFormatUrl=`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(read("src/lib/date-format.ts")))}`;
+  const presentationSource=stripTypeScriptTypes(read("src/screens/profile-presentation.ts")).replace('from "@/lib/date-format"',`from ${JSON.stringify(dateFormatUrl)}`);
+  const presentationUrl=`data:text/javascript,${encodeURIComponent(presentationSource)}`;
   const copyUrl=new URL("../src/data/account-copy.ts",import.meta.url).href;
   runScript(`
     import assert from 'node:assert/strict';
     const presentation=await import(${JSON.stringify(presentationUrl)});
     const copy=await import(${JSON.stringify(copyUrl)});
     assert.equal(presentation.profileBirthDate('1990-06-15','vi'),'15/06/1990');
-    assert.equal(presentation.profileBirthDate('1990-06-15','en'),'15 Jun 1990');
+    assert.equal(presentation.profileBirthDate('1990-06-15','en'),'15/06/1990');
     assert.equal(presentation.profileBirthDate(null,'vi'),'');
     assert.equal(copy.copyText('vi','profile.phone'),'Số điện thoại');
     assert.equal(copy.copyText('en','profile.birthDate'),'Date of birth');
@@ -79,6 +83,7 @@ test("session adapter actually consumes v2 data.user instead of the old mock bri
     globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return new Response(JSON.stringify({data:{user:{sub:'uuid',name:'NFV Customer',email:'x@y.com',phone_number:'+84 912 345 678',date_of_birth:'1990-06-15'}}}),{status:200});};
     const user=await service.getSession();
     assert.equal(user.authenticated,true);
+    assert.equal(user.subject,'uuid');
     assert.deepEqual(user.profile,{name:'NFV Customer',email:'x@y.com',phone:'+84 912 345 678',dateOfBirth:'1990-06-15'});
     assert.equal(requests[0].path,'/api/auth/session');
     assert.equal(requests[0].opts.credentials,'same-origin');
@@ -93,6 +98,20 @@ test("session adapter actually consumes v2 data.user instead of the old mock bri
     await assert.rejects(()=>service.getSession(),/không hợp lệ/);
   `);
   assert.doesNotMatch(read("src/auth/auth-service.ts"),/window\.NFV_BACKEND|localStorage|sessionStorage|document\.cookie|mockUsers|login\(|register\(/);
+});
+
+test("silent auth refresh recognizes an unchanged session",()=>{
+  const equalityUrl=new URL("../src/auth/session-equality.ts",import.meta.url).href;
+  runScript(`
+    import assert from 'node:assert/strict';
+    const {sameAuthSession}=await import(${JSON.stringify(equalityUrl)});
+    const first={authenticated:true,subject:'user-a',hasCSA:false,profile:{name:'A',email:'a@example.com',phone:'0901',dateOfBirth:null}};
+    assert.equal(sameAuthSession(first,{authenticated:true,subject:'user-a',hasCSA:false,profile:{name:'A',email:'a@example.com',phone:'0901',dateOfBirth:null}}),true);
+    assert.equal(sameAuthSession(first,{...first,subject:'user-b'}),false);
+    assert.equal(sameAuthSession(first,{...first,hasCSA:true}),false);
+    assert.equal(sameAuthSession(first,null),false);
+    assert.equal(sameAuthSession(null,null),true);
+  `);
 });
 
 test("OAuth entry and logout are same-origin native navigation",()=>{

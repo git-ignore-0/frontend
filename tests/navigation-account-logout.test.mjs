@@ -18,7 +18,7 @@ test("drawer shows only site links, Account and language selector",()=>{
   assert.doesNotMatch(drawer,/nfv-mobile-nav-shortcuts/);
   assert.match(drawer,/<LocaleToggle variant="drawer"\/>/);
   assert.match(data,/path:"\/account\/\{locale\}"/);
-  assert.match(context,/navigationItemForPage/);
+  assert.match(context,/navigationHrefForPage\(page,ui\.locale,opts\?\.tab\)/);
   assert.match(data,/page==="account"\s*\?\s*MAIN_NAV_ACCOUNT/);
   assert.ok(existsSync(new URL("../app/account/[locale]/page.tsx",import.meta.url)));
 });

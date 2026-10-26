@@ -23,6 +23,12 @@ test('CSA reuses V62 shared Button, DataState, assets and configuration',()=>{
  assert.match(read('app/api/csa-packages/route.ts'),/getPublicContentOrigin/);
  assert.match(read('app/api/csa-packages/route.ts'),/\/api\/v1\/public\/membership-packages/);
 });
+test('CSA buy actions open the Account CSA purchase flow instead of Store',()=>{
+ const source=read('src/screens/CSAProgram.tsx');
+ assert.match(source,/const openCsaPurchase=\(\)=>navigate\("account",\{tab:"csa",hub:false\}\)/);
+ assert.equal((source.match(/onClick=\{openCsaPurchase\}/g)||[]).length,2);
+ assert.doesNotMatch(source,/navigate\("store"\)/);
+});
 test('Scoped CSA stylesheet preserves V2 responsive structure and V62 tokens',()=>{
  const css=read('app/styles/13-csa.css');
  assert.match(css,/\.nfv-csa/);

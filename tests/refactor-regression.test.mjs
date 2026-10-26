@@ -34,7 +34,7 @@ test("Ward options are fetched for saved addresses and failed fetches can be ret
   assert.match(wardHook, /retry:\(\)=>loadWards\(city,true\)/);
   assert.match(address, /useWardOptions\(value\.city\)/);
   assert.match(address, /wardOptions\.options\.includes\(value\.ward\)/);
-  assert.match(address, /wardOptions\.error.*Thử lại/);
+  assert.match(address, /wardOptions\.error.*copy\.retry/);
 });
 
 test("Ward fetch has in-flight de-duplication and separate ready/error statuses", () => {
@@ -71,9 +71,9 @@ test("Concurrent API actions maintain per-key busy state and reject duplicate su
 });
 
 test("CSA prices are clearly provisional without a defined backend quote schema", () => {
-  assert.match(checkout, /Tổng tiền hàng tạm tính/);
-  assert.match(checkout, /Chưa trừ quyền lợi CSA/);
-  assert.match(checkout, /Phí giao hàng chưa được tính/);
+  assert.match(checkout, /copy\.provisionalTotal/);
+  assert.match(checkout, /copy\.csaNotDeducted/);
+  assert.match(checkout, /copy\.shippingExcluded/);
 });
 
 test("Account stylesheet no longer contains shared transaction history selectors", () => {

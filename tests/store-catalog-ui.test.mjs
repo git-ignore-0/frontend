@@ -71,6 +71,24 @@ test("Store UI uses localized API states, native detail links and server paginat
  assert.doesNotMatch(store,/addCart|className="add-mini"/);
 });
 
+test("Store hero uses a localized real image without the NFV STORE eyebrow",()=>{
+ const store=source("src/screens/Store.tsx");
+ const copy=source("src/data/store-copy.ts");
+ const css=source("app/styles/00-foundation-and-store.css");
+ assert.doesNotMatch(store,/copy\.eyebrow/);
+ assert.doesNotMatch(copy,/eyebrow:"NFV STORE"/);
+ assert.match(store,/<Photo src="\/images\/harvest\.webp" alt=\{copy\.welcomeImageAlt\}/);
+ assert.match(copy,/welcomeImageAlt:/);
+ assert.match(css,/\.welcome-media img:not\(\[src=""\]\) \+ \.photo-fallback\{display:none\}/);
+ assert.match(css,/\.welcome-media img\.img-error \+ \.photo-fallback\{display:flex\}/);
+ assert.match(css,/\.welcome-media::after\{display:block;border:0;background:linear-gradient\(90deg,/);
+});
+
+test("Clear filters resets URL state and closes the mobile filter dialog",()=>{
+ const store=source("src/screens/Store.tsx");
+ assert.match(store,/const clearFilters=\(\)=>\{setQuery\(\{search:undefined,categoryId:undefined,csaEligible:undefined,priceBand:"all",sort:"default",page:1\}\);setFilterOpen\(false\);\}/);
+});
+
 test("Global context no longer treats optional window functions as the Store data source",()=>{
  const context=source("src/state/NFVContext.tsx");
  const types=source("src/types.ts");

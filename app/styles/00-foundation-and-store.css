@@ -58,6 +58,8 @@ h1,h2,h3,h4,p,button,input,textarea,select{font-family:inherit}
 .header-actions{gap:8px;margin-left:auto}
 .header-text-btn{font-size:12px;font-weight:600;color:var(--ink2);margin-right:8px}
 .locale-sep{color:#aab6aa;padding:0 2px}
+.welcome-media img:not([src=""]) + .photo-fallback{display:none}
+.welcome-media img.img-error + .photo-fallback{display:flex}
 .icon-btn{width:var(--nfv-icon-button-size);height:var(--nfv-icon-button-size);min-width:var(--nfv-icon-button-size);min-height:var(--nfv-icon-button-size);border-radius:4px;background:transparent;border-color:#e0e6dc}
 .icon-btn:hover{background:#f3f6f1}
 .cart-count{top:-6px;right:-6px;font-size:10px;min-width:17px;height:17px}
@@ -69,7 +71,7 @@ h1,h2,h3,h4,p,button,input,textarea,select{font-family:inherit}
 .welcome-copy p{font-size:13px;color:#69786b;max-width:none;line-height:1.55}
 .phase-note{font-weight:400;color:#7b897d;text-transform:none;letter-spacing:0}
 .welcome-media{min-height:116px;background:#eff3ec}
-.welcome-media::after{display:none}
+.welcome-media::after{display:block;border:0;background:linear-gradient(90deg,#f3f7f1 0%,rgba(243,247,241,.72) 18%,rgba(243,247,241,.18) 46%,transparent 72%)}
 .welcome-caption{display:none}
 .photo-fallback{background:#eef2ea;color:#9da99c;font-weight:500;font-size:11px;flex-direction:column;gap:5px}
 .photo-fallback .photo-placeholder-icon{display:flex;color:#a8b9a6;margin:0 auto 4px}

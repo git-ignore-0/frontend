@@ -28,7 +28,7 @@ function categoryTree(categories:StoreCategory[]):CategoryNode[]{
 export function ProductCard({product,locale}:{product:StoreProductCard;locale:"vi"|"en"}){
  const image=product.primary_image?.variants.find(variant=>variant.width>=400)?.url??product.primary_image?.url;
  return <article className="product-card">
-  <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${STORE_COPY[locale].view} ${product.name}`}>{product.csa_eligible&&<span className="corner-tag">CSA</span>}<Photo src={image??undefined} alt={product.name}/></a>
+  <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${STORE_COPY[locale].view} ${product.name}`}>{product.csa_eligible&&<span className="corner-tag">CSA</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>
   <div className="card-copy"><a className="card-title" href={`/store/${product.slug}/${locale}`}>{product.name}</a>
    {product.alternate_name&&<div className="card-en" lang={product.content_locale==="vi"?"en":"vi"}>{product.alternate_name}</div>}
    <div className="card-bottom"><div><div className="price">{money(product.retail_price_vnd)}</div><div className="unit">/ {product.unit_size} {product.unit_label}</div></div></div>
@@ -83,11 +83,11 @@ export function Store(){
  const commitSearch=useCallback((value:string)=>{if(value!==currentSearch)setQuery({search:value||undefined,page:1})},[currentSearch,setQuery]);
  const selectCategory=(id?:string)=>{setQuery({categoryId:id,page:1});setCategoryOpen(false)};
  const toggleCategory=(id:string)=>setExpanded(value=>value.includes(id)?value.filter(item=>item!==id):[...value,id]);
- const clearFilters=()=>setQuery({search:undefined,categoryId:undefined,csaEligible:undefined,priceBand:"all",sort:"default",page:1});
+ const clearFilters=()=>{setQuery({search:undefined,categoryId:undefined,csaEligible:undefined,priceBand:"all",sort:"default",page:1});setFilterOpen(false);};
  const categoryContent=catalog.categoryState==="loading"?<DataState kind="loading" compact title={copy.loading}/>:catalog.categoryState==="error"?<DataState kind="error" compact title={copy.categoriesError} action={{label:copy.retry,onClick:catalog.retryCategories}}/>:tree.length?<CategoryTree tree={tree} selectedId={catalog.query.categoryId} expanded={expanded} allLabel={copy.all} onSelect={selectCategory} onToggle={toggleCategory}/>:<p className="category-tree-empty">{copy.noCategories}</p>;
  const filterPanel=<FilterPanel copy={copy} csaOnly={!!catalog.query.csaEligible} priceBand={catalog.priceBand} onCsa={()=>setQuery({csaEligible:catalog.query.csaEligible?undefined:true,page:1})} onPrice={priceBand=>setQuery({priceBand,page:1})}/>;
  return <main className="main-content"><div className="container">
-  <section className="welcome"><div className="welcome-copy"><div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.intro}</p></div><div className="welcome-media"><Photo alt={copy.title}/></div></section>
+  <section className="welcome"><div className="welcome-copy"><h1>{copy.title}</h1><p>{copy.intro}</p></div><div className="welcome-media"><Photo src="/images/harvest.webp" alt={copy.welcomeImageAlt} locale={locale}/></div></section>
   <div className="store-control"><DebouncedStoreSearch key={catalog.query.search??""} initialValue={catalog.query.search??""} placeholder={copy.search} onCommit={commitSearch}/><div className="store-control-actions">
    <button type="button" className="btn btn-outline btn-small catalog-category-btn" onClick={()=>setCategoryOpen(true)}><Icon name="menu" size={13}/> {copy.categories}</button>
    <button type="button" className={`btn btn-outline btn-small catalog-filter-btn ${active?"has-filters":""}`} onClick={()=>setFilterOpen(true)}><Icon name="filter" size={15}/> {copy.filter} {active>0&&<span className="filter-count">{active}</span>}</button>

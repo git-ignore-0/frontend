@@ -4,7 +4,7 @@ import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen
 import {formatAddress} from "@/lib/format";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
-import {localeFromPath,localScreenFromPath,navigationItemForPage,mainNavHref} from "@/data/main-navigation";
+import {localeFromPath,localScreenFromPath,navigationHrefForPage} from "@/data/main-navigation";
 import {syncBrowserRoute} from "@/lib/browser-navigation";
 import * as rewardsService from "@/account/rewards-service";
 import * as referralsService from "@/account/referrals-service";
@@ -60,7 +60,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(method==="getCSA")return await csaService.getCSA(ui.locale) as T;
       if(method==="getCsaUsagePage")return await csaService.getCsaUsagePage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
       const fn=typeof window!=="undefined" ? window.NFV_BACKEND?.[method] : undefined;
-      if(typeof fn!=="function")throw new Error(`Chưa kết nối API: ${method}`);
+      if(typeof fn!=="function")throw new Error(ui.locale==="en"?`API is not connected: ${method}`:`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
     }
     catch(error){if(isUnauthorized(error))expire();throw error;}
@@ -74,18 +74,17 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(success)toast(success);
       return result;
     } catch (e) {
-      setUI(s=>({...s,error:e instanceof Error?e.message:"Không thể thực hiện. Vui lòng thử lại."}));
+      setUI(s=>({...s,error:e instanceof Error?e.message:(ui.locale==="en"?"Unable to complete the action. Please try again.":"Không thể thực hiện. Vui lòng thử lại.")}));
       return undefined;
     } finally {
       activeActions.current.delete(key);
       setUI(s=>({...s,busyKeys:s.busyKeys.filter(item=>item!==key)}));
     }
-  },[toast]);
+  },[toast,ui.locale]);
   const navigate=useCallback((page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>{
     // Only locally implemented screens own their own public URLs.
     if(typeof window!=="undefined"){
-      const item=navigationItemForPage(page);
-      const href=item?mainNavHref(item,ui.locale):null;
+      const href=navigationHrefForPage(page,ui.locale,opts?.tab);
       if(syncBrowserRoute(window,href,{replace:opts?.replace}))return;
     }
     setUI(s=>({...s,page,cartOpen:false,filterOpen:false,categoryOpen:false,
@@ -105,8 +104,8 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   },[]);
   const addCart=useCallback((id:string,quantity=1)=>{
     if(!data.products.some(p=>p.id===id))return;
-    setUI(s=>({...s,cart:{...s.cart,[id]:Math.min(99,(s.cart[id]||0)+quantity)},toast:"Đã thêm vào giỏ"}));
-  },[data.products]);
+    setUI(s=>({...s,cart:{...s.cart,[id]:Math.min(99,(s.cart[id]||0)+quantity)},toast:ui.locale==="en"?"Added to cart":"Đã thêm vào giỏ"}));
+  },[data.products,ui.locale]);
   const updateCart=useCallback((id:string,delta:number)=>{
     setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA};cart[id]=Math.max(0,Math.min(99,(cart[id]||0)+delta));
       if(cart[id]===0){delete cart[id];delete applyCSA[id];}

@@ -31,11 +31,12 @@ test("referral floating action stays on public pages and yields to private or ov
     import assert from 'node:assert/strict';
     const model=await import(${JSON.stringify(modelUrl)});
     for(const page of ['home','about','workshops','plants','animals','tracker','testimonials','store','product','csa']){
-      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:false}),true,page);
-      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:true}),false,page+' overlay');
+      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:false,authenticated:true}),true,page);
+      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:true,authenticated:true}),false,page+' overlay');
+      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:false,authenticated:false}),false,page+' guest');
     }
     for(const page of ['account','checkout','order-detail','success']){
-      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:false}),false,page);
+      assert.equal(model.shouldShowReferralFloatingAction({page,overlayOpen:false,authenticated:true}),false,page);
     }
   `);
 });
@@ -46,6 +47,8 @@ test("referral action keeps its accessible label and is wired into the shared pu
   const css=source("app/styles/96-account-benefits.css");
   assert.match(component,/aria-label=\{label\}/);
   assert.match(shell,/shouldShowReferralFloatingAction/);
+  assert.match(shell,/useAuth\(\)/);
+  assert.match(shell,/authenticated:auth\.status==="authenticated"/);
   assert.match(shell,/ui\.addressEditing\|\|ui\.orderDateOpen\|\|ui\.giftIntent!==null/);
   assert.match(css,/\.referral-floating-action-label/);
   assert.match(css,/@media\(max-width:560px\)[\s\S]*\.referral-floating-action-label\{position:absolute/);

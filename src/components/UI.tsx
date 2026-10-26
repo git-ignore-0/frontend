@@ -58,14 +58,15 @@ export function FormSelect({children,...props}:React.SelectHTMLAttributes<HTMLSe
 export function FormField({label,children,className=""}:{label:string;children:ReactNode;className?:string}){
   return <label className={className}>{label}{children}</label>;
 }
-export function Photo({src,alt="",className=""}:{src?:string;alt?:string;className?:string}) {
+export function Photo({src,alt="",className="",locale="vi"}:{src?:string;alt?:string;className?:string;locale?:Locale}) {
   const [broken,setBroken]=useState(false);
-  const fallback=<span className="photo-fallback nfv-photo-empty"><span className="photo-placeholder-icon"><Icon name="leaf" size={20}/></span><span>Chưa có ảnh</span></span>;
-  if(!src)return <span className={`nfv-photo-placeholder ${className}`} role="img" aria-label={alt||"Chưa có ảnh sản phẩm"}>{fallback}</span>;
+  const empty=locale==="en"?"No image":"Chưa có ảnh";
+  const fallback=<span className="photo-fallback nfv-photo-empty"><span className="photo-placeholder-icon"><Icon name="leaf" size={20}/></span><span>{empty}</span></span>;
+  if(!src)return <span className={`nfv-photo-placeholder ${className}`} role="img" aria-label={alt||(locale==="en"?"No product image":"Chưa có ảnh sản phẩm")}>{fallback}</span>;
   return <><img src={src} alt={alt} className={`${className} ${broken?"img-error":""}`} loading="lazy" onError={()=>setBroken(true)}/>{fallback}</>;
 }
-export function Quantity({count,onMinus,onPlus,id,min=1}:{count:number;onMinus:()=>void;onPlus:()=>void;id?:string;min?:number}){
-  return <div className="qty"><button type="button" onClick={onMinus} aria-label={`Giảm số lượng ${id||""}`} disabled={count<=min}><Icon name="minus" size={16}/></button><strong>{count}</strong><button type="button" onClick={onPlus} aria-label={`Tăng số lượng ${id||""}`} disabled={count>=99}><Icon name="plus" size={16}/></button></div>;
+export function Quantity({count,onMinus,onPlus,id,min=1,locale="vi"}:{count:number;onMinus:()=>void;onPlus:()=>void;id?:string;min?:number;locale?:Locale}){
+  return <div className="qty"><button type="button" onClick={onMinus} aria-label={locale==="en"?`Decrease quantity ${id||""}`:`Giảm số lượng ${id||""}`} disabled={count<=min}><Icon name="minus" size={16}/></button><strong>{count}</strong><button type="button" onClick={onPlus} aria-label={locale==="en"?`Increase quantity ${id||""}`:`Tăng số lượng ${id||""}`} disabled={count>=99}><Icon name="plus" size={16}/></button></div>;
 }
 export function SearchField({value,onChange,placeholder,id,small=false,maxLength}:{value:string;onChange:(value:string)=>void;placeholder:string;id:string;small?:boolean;maxLength?:number}){
   return <label className={small?"acc-order-search":"store-search"}><Icon name="search" size={small?15:19}/><FormInput id={id} type="search" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} autoComplete="off" maxLength={maxLength}/></label>;

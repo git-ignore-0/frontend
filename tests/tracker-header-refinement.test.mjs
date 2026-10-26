@@ -27,3 +27,9 @@ test('Tracker detail and photo dialogs are still separate from header styling', 
   const dialogs = read('src/screens/tracker/TrackerDialogs.tsx');
   assert.match(dialogs, /className="farmer-dialog"/);
 });
+
+test('Farmer dialog clips its rounded shell and scrolls inside the body', () => {
+  const css = read('app/styles/11-tracker.css');
+  assert.match(css, /\.nfv-tracker \.farmer-dialog \{[^}]*overflow: hidden;/s);
+  assert.match(css, /\.nfv-tracker \.farmer-dialog__body \{[^}]*max-height: calc\(90dvh - 2px\);[^}]*min-height: min\(320px,calc\(90dvh - 2px\)\);[^}]*overflow-y: auto;[^}]*scrollbar-gutter: stable;/s);
+});

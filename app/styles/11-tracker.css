@@ -503,7 +503,7 @@
   width: min(980px,88vw);
   max-width: 980px;
   max-height: 90dvh;
-  overflow: auto;
+  overflow: hidden;
   padding: 0;
   border: 1px solid var(--tracker-line);
   border-radius: 22px;
@@ -535,7 +535,10 @@
 .nfv-tracker .farmer-dialog__body {
   display: grid;
   grid-template-columns: minmax(240px,42%) minmax(0,1fr);
-  min-height: 320px;
+  max-height: calc(90dvh - 2px);
+  min-height: min(320px,calc(90dvh - 2px));
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .nfv-tracker .farmer-dialog__media {
   position: relative;

@@ -44,6 +44,12 @@ test('local route mapping is canonical and does not send guest Account to v2',()
   assert.equal(nav.localScreenFromPath('/tracker/en'),'tracker');
 });
 
+test('Account screen navigation preserves the requested tab in the document URL',()=>{
+  assert.equal(nav.navigationHrefForPage('account','vi','csa'),'/account/vi?tab=csa');
+  assert.equal(nav.navigationHrefForPage('account','en','orders'),'/account/en?tab=orders');
+  assert.equal(nav.navigationHrefForPage('csa','vi'),'/csa/vi');
+});
+
 test('server-rendered route content performs document navigation instead of only changing history',async()=>{
   const {syncBrowserRoute}=await loadBrowserNavigation();
   const calls=[];

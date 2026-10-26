@@ -1,4 +1,4 @@
-import type {Locale, Screen} from "@/types";
+import type {AccountTab,Locale,Screen} from "@/types";
 import type {PublicSiteSettings} from "@/types/site-settings";
 import {SITE_ORIGIN} from "@/config/site-brand";
 
@@ -57,6 +57,13 @@ export function navigationItemForPage(page:Screen):MainNavItem|undefined {
   if(page==="testimonials")return {id:"testimonials",label:{vi:"Lời chứng",en:"Stories"},path:"/testimonials/{locale}",icon:"message",screen:"testimonials"};
   if(page==="plants"||page==="animals")return {id:page as MainNavId,label:{vi:page==="plants"?"Cây trồng":"Vật nuôi",en:page==="plants"?"Plants":"Animals"},path:`/${page}/{locale}`,icon:"leaf",screen:page};
   return page==="account" ? MAIN_NAV_ACCOUNT : MAIN_NAV_ITEMS.find(item=>item.screen===page);
+}
+
+export function navigationHrefForPage(page:Screen,locale:Locale,accountTab?:AccountTab):string|null {
+  const item=navigationItemForPage(page);
+  if(!item)return null;
+  const href=mainNavHref(item,locale);
+  return page==="account"&&accountTab?`${href}?tab=${accountTab}`:href;
 }
 
 export function activeMainNavId(page:Screen):MainNavId|null {

@@ -9,6 +9,6 @@ export function referralFloatingActionModel(locale:Locale):{href:string;label:st
   };
 }
 
-export function shouldShowReferralFloatingAction({page,overlayOpen}:{page:Screen;overlayOpen:boolean}):boolean{
-  return !overlayOpen&&!HIDDEN_PAGES.has(page);
+export function shouldShowReferralFloatingAction({page,overlayOpen,authenticated}:{page:Screen;overlayOpen:boolean;authenticated:boolean}):boolean{
+  return authenticated&&!overlayOpen&&!HIDDEN_PAGES.has(page);
 }

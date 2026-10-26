@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,type ReactNode} from "react";
 import {NFVProvider,useNFV} from "@/state/NFVContext";
-import {AuthProvider} from "@/auth/AuthProvider";
+import {AuthProvider,useAuth} from "@/auth/AuthProvider";
 import {AuthGate} from "@/components/auth/AuthGate";
 import type {AccountTab,Locale,Screen} from "@/types";
 import type {PublicSiteSettings} from "@/types/site-settings";
@@ -29,8 +29,9 @@ import {SiteSettingsProvider} from "@/context/SiteSettingsContext";
 const PUBLIC_STORY_PAGES = new Set<Screen>(["home","about","plants","animals","tracker"]);
 function Body({children}:{children?:ReactNode}){
  const {ui,patch}=useNFV();
+ const auth=useAuth();
  const overlayOpen=ui.addressEditing||ui.orderDateOpen||ui.giftIntent!==null;
- const showReferralAction=shouldShowReferralFloatingAction({page:ui.page,overlayOpen});
+ const showReferralAction=shouldShowReferralFloatingAction({page:ui.page,overlayOpen,authenticated:auth.status==="authenticated"});
  useEffect(()=>{
    const close=(e:KeyboardEvent)=>{if(e.key==="Escape"&&ui.orderDateOpen)patch({orderDateOpen:false});};
    window.addEventListener("keydown",close);return ()=>window.removeEventListener("keydown",close);

@@ -153,6 +153,8 @@
 @container account-csa (max-width:620px){.account-tab-csa .csa-bank-details>div{grid-template-columns:minmax(0,1fr)}}
 
 /* Approved Account → CSA state surfaces. */
+.account-tab-csa .csa-account-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}.account-tab-csa .csa-account-heading h2{margin:0;color:var(--green);font-size:21px}.account-tab-csa .csa-account-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}.account-tab-csa .csa-account-heading .btn{flex:none}.account-tab-csa .csa-account-pending{margin-bottom:12px}
+@media(max-width:560px){.account-tab-csa .csa-account-heading{align-items:stretch;flex-direction:column}.account-tab-csa .csa-account-heading .btn{width:100%;justify-content:center}}
 .account-tab-csa .csa-plan-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px 23px;padding-bottom:15px;border-bottom:1px solid var(--line)}
 .account-tab-csa .csa-plan-meta>span{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink)}
 .account-tab-csa .csa-plan-meta .csa-meta-key{color:var(--muted);font-weight:400}

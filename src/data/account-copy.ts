@@ -3,6 +3,8 @@ const ACCOUNT_COPY={
 vi:{
 'account.title':'TÀI KHOẢN','account.titleMobile':'Tài khoản','account.checking':'Đang kiểm tra tài khoản…','account.back':'Quay lại Tài khoản','account.logout':'Đăng xuất','account.loggingOut':'Đang đăng xuất…','account.logoutFailed':'Không thể đăng xuất. Vui lòng thử lại.',
 'guestAccount.title':'DỊCH VỤ CSA','guestAccount.titleMobile':'Dịch vụ CSA','guestAccount.noticeTitle':'Bạn đang sử dụng chế độ khách','guestAccount.noticeBody':'Bạn vẫn có thể đăng ký và tra cứu CSA mà không cần tài khoản. Đăng nhập để quản lý đơn hàng và các quyền lợi khác.','guestNav.csa':'CSA','guestNavDesc.csa':'Đăng ký gói CSA','nav.csa-tracker':'Tra cứu CSA','navDesc.csa-tracker':'Theo dõi yêu cầu và hợp đồng CSA',
+'csa.backToProgram':'Về chương trình CSA','csa.dismissStatus':'Ẩn thông báo','csa.discardPending':'Bỏ yêu cầu cũ và chọn lại',
+'csa.managePurchase':'Mua thêm / Gia hạn','csa.registerAgain':'Đăng ký lại',
 'nav.orders':'Đơn hàng','nav.address':'Địa chỉ giao hàng','nav.profile':'Hồ sơ cá nhân','nav.csa':'CSA của tôi','nav.rewards':'Điểm thưởng','nav.redeem':'Đổi quà','nav.referrals':'Giới thiệu bạn bè',
 'navDesc.orders':'Theo dõi các đơn đã đặt','navDesc.address':'Địa chỉ nhận hàng','navDesc.profile':'Thông tin cá nhân','navDesc.csa':'Gói, quota và thanh toán','navDesc.rewards':'Số dư và lịch sử cộng/trừ điểm','navDesc.redeem':'Danh sách quà và lịch sử đổi','navDesc.referrals':'Mã mời và người giới thiệu',
 'group.orders':'Đơn hàng','group.personal':'Thông tin cá nhân','group.programs':'Chương trình NFV',
@@ -25,6 +27,8 @@ vi:{
 en:{
 'account.title':'ACCOUNT','account.titleMobile':'Account','account.checking':'Checking your account…','account.back':'Back to Account','account.logout':'Sign out','account.loggingOut':'Signing out…','account.logoutFailed':'Unable to sign out. Please try again.',
 'guestAccount.title':'CSA SERVICES','guestAccount.titleMobile':'CSA services','guestAccount.noticeTitle':'You are using guest mode','guestAccount.noticeBody':'You can still register for and track CSA without an account. Sign in to manage orders and other benefits.','guestNav.csa':'CSA','guestNavDesc.csa':'Register for a CSA plan','nav.csa-tracker':'Track CSA','navDesc.csa-tracker':'Track your CSA request and contract',
+'csa.backToProgram':'Back to CSA program','csa.dismissStatus':'Dismiss status','csa.discardPending':'Discard old request and choose again',
+'csa.managePurchase':'Buy another / Renew','csa.registerAgain':'Register again',
 'nav.orders':'Orders','nav.address':'Delivery address','nav.profile':'Personal profile','nav.csa':'My CSA','nav.rewards':'Reward points','nav.redeem':'Redeem gifts','nav.referrals':'Refer friends',
 'navDesc.orders':'Track past orders','navDesc.address':'Your saved address','navDesc.profile':'Contact information','navDesc.csa':'Plan, quotas and payments','navDesc.rewards':'Balance and point transaction history','navDesc.redeem':'Gifts and redemption history','navDesc.referrals':'Invite code and referrals',
 'group.orders':'Orders','group.personal':'Personal information','group.programs':'NFV programs',

@@ -49,10 +49,10 @@ function renderAccount(auth){
   return renderToStaticMarkup(React.createElement(exports.Account));
 }
 
-test("guest Account exposes only CSA purchase and tracker while signed-in navigation stays unchanged",()=>{
+test("guest Account exposes no CSA tools while signed-in navigation stays unchanged",()=>{
   const {ACCOUNT_NAV,GUEST_ACCOUNT_NAV,accountNavigationFor}=loadNavigation();
-  assert.deepEqual(Array.from(GUEST_ACCOUNT_NAV,item=>item.id),["csa","csa-tracker"]);
-  assert.deepEqual(Array.from(accountNavigationFor("guest"),item=>item.id),["csa","csa-tracker"]);
+ assert.deepEqual(Array.from(GUEST_ACCOUNT_NAV,item=>item.id),[]);
+ assert.deepEqual(Array.from(accountNavigationFor("guest"),item=>item.id),[]);
   assert.deepEqual(Array.from(accountNavigationFor("authenticated"),item=>item.id),
     ["orders","profile","address","csa","rewards","redeem","referrals"]);
   assert.equal(ACCOUNT_NAV.some(item=>item.id==="csa-tracker"),false);
@@ -60,8 +60,8 @@ test("guest Account exposes only CSA purchase and tracker while signed-in naviga
 
 test("Account normalizes tabs at the guest/auth boundary",()=>{
   const {accountTabForAuth}=loadNavigation();
-  assert.equal(accountTabForAuth("orders","guest"),"csa");
-  assert.equal(accountTabForAuth("csa-tracker","guest"),"csa-tracker");
+ assert.equal(accountTabForAuth("orders","guest"),"orders");
+ assert.equal(accountTabForAuth("csa-tracker","guest"),"csa-tracker");
   assert.equal(accountTabForAuth("csa-tracker","authenticated"),"orders");
   assert.equal(accountTabForAuth("csa","authenticated"),"csa");
 });
@@ -113,6 +113,7 @@ test("guest Account reuses the existing auth actions and hides logout",()=>{
   assert.match(account,/accountNavigationFor\(auth\.status\)/);
   assert.match(account,/const activeTab=accountTabForAuth\(ui\.accountTab,auth\.status\)/);
   assert.doesNotMatch(account,/ui\.accountTab === "orders"/);
+ assert.doesNotMatch(account,/AccountCsaPackageSelection|AccountCsaTracker/);
 });
 
 test("guest notice follows the Account content width instead of spanning above the layout",()=>{

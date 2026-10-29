@@ -12,8 +12,6 @@ import {AddressView, ProfileView} from "@/screens/AccountProfile";
 import {BenefitsView} from "@/screens/AccountBenefits";
 import {LogoutButton} from "@/components/auth/LogoutButton";
 import {GuestAuthActions} from "@/components/auth/GuestAuthActions";
-import {AccountCsaPackageSelection} from "@/screens/account-csa/AccountCsaPackageSelection";
-import {AccountCsaTracker} from "@/screens/account-csa/AccountCsaTracker";
 
 export function Account() {
   const {ui, patch} = useNFV();
@@ -67,12 +65,8 @@ export function Account() {
     <p>{translate("guestAccount.noticeBody")}</p>
     <GuestAuthActions locale={ui.locale}/>
   </Section>;
+  if(!authenticated)return <main className="main-content"><div className="container"><div className="account-title"><h1>{translate("account.titleMobile")}</h1></div>{guestNotice("content")}</div></main>;
   const renderTab = (tab:AccountTab) => {
-    if(!authenticated){
-      if(tab==="csa")return <AccountCsaPackageSelection/>;
-      if(tab==="csa-tracker")return <AccountCsaTracker/>;
-      return null;
-    }
     if(tab==="orders")return <OrdersView/>;
     if(tab==="address")return <AddressView/>;
     if(tab==="profile")return <ProfileView/>;

@@ -80,6 +80,11 @@ export function csaPendingMemberPhone(raw:string|null,email:string):string|null{
   }catch{return null;}
 }
 
+export function resolveCsaPendingMemberReference(raw:string|null,email:string,profilePhone="",shippingPhone=""):{phone:string;reference:CsaPendingReference|null}{
+  const phone=csaPendingMemberPhone(raw,email)||shippingPhone||profilePhone;
+  return {phone,reference:parseCsaPending(raw,{email,phone})};
+}
+
 export function clearLegacyGuestCsaPending(storage:StorageLike):void{
   if(csaPendingGuestPhone(storage.getItem(CSA_PENDING_STORAGE_KEY)))storage.removeItem(CSA_PENDING_STORAGE_KEY);
 }

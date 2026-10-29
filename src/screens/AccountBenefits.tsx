@@ -8,7 +8,8 @@ import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
 import {ActionLink,Button,DataState,Icon,Section,localized} from "@/components/UI";
 import {useNFV} from "@/state/NFVContext";
 import {copyText} from "@/data/account-copy";
-import {AccountCsaPackageSelection} from "@/screens/account-csa/AccountCsaPackageSelection";
+import {AccountCsaPendingStatus} from "@/screens/account-csa/AccountCsaPendingStatus";
+import {csaLandingHref} from "@/lib/csa-navigation";
 import {dateLabel} from "@/lib/format";
 import {beginRedemptionIntent,redemptionRequest} from "@/account/redemption-intent";
 import {redemptionErrorCopyKey,redemptionStatus} from "@/account/redemption-presentation";
@@ -38,9 +39,9 @@ export function BenefitsView({kind}:{kind:Exclude<AccountTab,"orders"|"address"|
  const resource:Resource=kind==="csa"?"csa":kind==="referrals"?"referrals":"rewards";
  const status=ui.accountFetchState[resource];
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
+ if(kind==="csa")return <CSABenefits status={status}/>;
  if(status==="loading")return <section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>;
  if(status==="error")return <section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource(resource)}}/></section>;
- if(kind==="csa")return <CSABenefits/>;
  if(kind==="referrals")return <ReferralBenefits/>;
  if(kind==="rewards")return <RewardsPoints/>;
  return <RewardsGifts/>;
@@ -152,15 +153,17 @@ function QuotaRow({quota:q}:{quota:CSAQuota}){
  const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
  return <div className="csa-rights-row" role="row"><div className="csa-rights-product" role="cell"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><small>{total} {unit} / {ui.locale==="en"?"cycle":"kỳ"}</small></div><div className="csa-rights-metric is-available" role="cell"><strong>{remaining}</strong><small className="mobile-only">{ui.locale==="en"?"Available":"Còn có thể đặt"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Used":"Đã sử dụng"}</small></div></div>;
 }
-function CSABenefits(){
- const {data,ui,setData,call,act,navigate}=useNFV();const c=data.csa;
+function CSABenefits({status}:{status?:"loading"|"ready"|"error"}){
+ const {data,ui,setData,call,act,navigate,refreshResource}=useNFV();const c=data.csa;
  const [pageError,setPageError]=useState(false);
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
- if(!c?.planName)return <AccountCsaPackageSelection/>;
+ const purchaseLabel=!c?.planName?L("csa.explore"):c.status==="ended"||c.status==="revoked"?L("csa.registerAgain"):L("csa.managePurchase");
+ const heading=<div className="csa-account-heading"><div><h2>{L("csa.title")}</h2><p>{L("navDesc.csa")}</p></div><ActionLink href={csaLandingHref(ui.locale,"packages")}>{purchaseLabel}</ActionLink></div>;
+ if(!c?.planName)return <div className="benefits-page csa-benefits-page">{heading}<AccountCsaPendingStatus/>{status==="loading"?<section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>:status==="error"?<section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource("csa")}}/></section>:<BenefitSection title={L("csa.noPackage")} description={L("csa.noPackageDesc")}><ActionLink variant="outline" href={csaLandingHref(ui.locale,"packages")}>{L("csa.explore")}</ActionLink></BenefitSection>}</div>;
  const quotas=c.quotas||[],usage=c.usage||c.history||[],contract=c.contract||{},page=c.pagination?.usage||{};
  const tone=({active:"active",upcoming:"pending",ended:"neutral",revoked:"error"} as Record<string,string>)[c.status]||"neutral";
  const loadMore=async()=>{if(!page.nextCursor)return;const result=await act("page:csa",()=>call<Paged<CSAUsage>>("getCsaUsagePage",{cursor:page.nextCursor,limit:30}));if(!result){setPageError(true);return;}const known=new Set(usage.map(item=>item.id));setData(state=>({...state,csa:state.csa?{...state.csa,usage:[...(state.csa.usage||[]),...result.items.filter(item=>!item.id||!known.has(item.id))],pagination:{...state.csa.pagination,usage:{nextCursor:result.nextCursor,total:result.total}}}:null}));setPageError(false);};
- return <div className="benefits-page csa-benefits-page">
+ return <div className="benefits-page csa-benefits-page">{heading}<AccountCsaPendingStatus/>
    <BenefitSection title={localized(c as unknown as Record<string,unknown>,"planName",ui.locale)||L("csa.current")}><div className="csa-plan-meta"><span><MetricBadge tone={tone}>{L("csa."+c.status)}</MetricBadge></span><span><span className="csa-meta-key">{L("csa.start")}</span><strong>{dateLabel(c.startDate)||"—"}</strong></span><span><span className="csa-meta-key">{L("csa.end")}</span><strong>{dateLabel(c.endDate)||"—"}</strong></span>{c.durationMonths&&<span><span className="csa-meta-key">{L("csa.duration")}</span><strong>{L("csa.monthCount",{count:c.durationMonths})}</strong></span>}</div><div className="csa-contract-inline"><div className="csa-contract-meta"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{contract.number||L("csa.contractPending")}</strong>{contract.signedAt&&<span className="csa-contract-subtle">{L("csa.signed")} {dateLabel(contract.signedAt)}</span>}</div>{contract.downloadUrl?<ActionLink small variant="outline" className="csa-contract-action" href={contract.downloadUrl}><Icon name="file" size={14}/>{L("csa.viewContract")}</ActionLink>:<Button small variant="outline" className="csa-contract-action" disabled><Icon name="file" size={14}/>{L("csa.viewContract")}</Button>}</div>{quotas.length?<div className="csa-rights" role="table" aria-label={L("csa.quota")}><div className="csa-rights-header" role="row"><span role="columnheader">{ui.locale==="en"?"Produce group":"Nhóm nông sản"}</span><span role="columnheader">{ui.locale==="en"?"Available":"Còn có thể đặt"}</span><span role="columnheader">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</span><span role="columnheader">{ui.locale==="en"?"Used":"Đã sử dụng"}</span></div>{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>}</BenefitSection>
    <BenefitSection title={L("csa.usage")}><div className="benefit-history-host csa-history-footer"><PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} nextCursor={page.nextCursor} total={page.total} pending={ui.busyKeys.includes("page:csa")} failed={pageError} onMore={()=>void loadMore()} render={(u,i)=><BenefitTransactionRow key={u.id||i} title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={dateLabel(u.date)} action={u.orderId?<button type="button" className="acc-text-link" onClick={()=>navigate("order-detail",{productId:u.orderId})}>{L("csa.viewOrder")} {u.orderId}<Icon name="chev" size={13}/></button>:undefined} amount={`−${u.quantity} ${ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"")}`}/>}/></div></BenefitSection>
  </div>;

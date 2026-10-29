@@ -1,6 +1,8 @@
 type BrowserRouteTarget = {
   location: {
     pathname: string;
+    search?: string;
+    hash?: string;
     assign: (href:string)=>void;
     replace: (href:string)=>void;
   };
@@ -17,7 +19,8 @@ type Locale = "vi"|"en";
  * leave the current document instead of only changing History API state.
  */
 export function syncBrowserRoute(browser:BrowserRouteTarget,href:string|null,options:BrowserRouteOptions={}):boolean {
-  if(!href||browser.location.pathname===href)return false;
+  const currentHref=`${browser.location.pathname}${browser.location.search??""}${browser.location.hash??""}`;
+  if(!href||currentHref===href)return false;
   if(options.replace)browser.location.replace(href);
   else browser.location.assign(href);
   return true;
@@ -29,5 +32,7 @@ export function localizedRouteHref(pathname:string,locale:Locale):string|null {
 }
 
 export function syncLocaleRoute(browser:BrowserRouteTarget,locale:Locale):boolean {
-  return syncBrowserRoute(browser,localizedRouteHref(browser.location.pathname,locale),{replace:true});
+  const localized=localizedRouteHref(browser.location.pathname,locale);
+  const href=localized?`${localized}${browser.location.search??""}${browser.location.hash??""}`:null;
+  return syncBrowserRoute(browser,href,{replace:true});
 }

@@ -5,6 +5,7 @@ import type {PublicWorkshop} from "../types/workshop.ts";
 import type {StoreProductDetail,StoreLocale} from "../store/store-model.ts";
 
 export type PublicMetadataPage="home"|"about"|"plants"|"animals"|"workshops"|"tracker"|"testimonials"|"store"|"csa";
+export type CsaFlowPage="purchase"|"track";
 
 const PATHS:Record<PublicMetadataPage,string>={
   home:"",about:"/about",plants:"/plants",animals:"/animals",workshops:"/workshops",
@@ -65,6 +66,23 @@ export function publicPageMetadata(page:PublicMetadataPage,locale:Locale):Metada
     alternates:{canonical:url,languages:languageAlternates(page)},
     openGraph:{title:copy.title,description:copy.description,url,type:"website",siteName:"Natural Farming Vietnam",locale:locale==="vi"?"vi_VN":"en_US",alternateLocale:[locale==="vi"?"en_US":"vi_VN"]},
   };
+}
+
+const CSA_FLOW_COPY:Record<CsaFlowPage,Record<Locale,{title:string;description:string}>>={
+  purchase:{
+    vi:{title:"Mua gói CSA | Natural Farming Vietnam",description:"Chọn gói CSA, nhập thông tin nhận hàng và xác nhận chuyển khoản."},
+    en:{title:"Purchase a CSA plan | Natural Farming Vietnam",description:"Choose a CSA plan, provide delivery details and confirm your transfer."},
+  },
+  track:{
+    vi:{title:"Tra cứu CSA | Natural Farming Vietnam",description:"Tra cứu yêu cầu và hợp đồng CSA bằng mã tham chiếu và số điện thoại."},
+    en:{title:"Track CSA | Natural Farming Vietnam",description:"Look up a CSA request or contract with its reference code and phone number."},
+  },
+};
+
+export function csaFlowMetadata(page:CsaFlowPage,locale:Locale):Metadata{
+  const copy=CSA_FLOW_COPY[page][locale],path=`/csa/${page}/${locale}`,url=absolute(path);
+  const alternate=(other:Locale)=>absolute(`/csa/${page}/${other}`);
+  return {title:copy.title,description:copy.description,robots:{index:false,follow:true},alternates:{canonical:url,languages:{vi:alternate("vi"),en:alternate("en"),"x-default":alternate("vi")}},openGraph:{title:copy.title,description:copy.description,url,type:"website",siteName:"Natural Farming Vietnam",locale:locale==="vi"?"vi_VN":"en_US",alternateLocale:[locale==="vi"?"en_US":"vi_VN"]}};
 }
 
 type WorkshopMetadataSource=Pick<PublicWorkshop,"slug"|"title"|"summary"|"is_fallback"|"content_locale"|"available_locales">;

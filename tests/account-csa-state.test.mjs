@@ -74,6 +74,16 @@ test("member pending lookup can recover the saved recipient phone for the same s
   assert.equal(pending.csaPendingMemberPhone(raw,"other@example.com"),null);
 `));
 
+test("My CSA resolves a pending request with the persisted shipping phone before a different profile phone",()=>run(`
+  import assert from "node:assert/strict";
+  const pending=await import(${JSON.stringify(pendingUrl)});
+  const raw=JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-MEMBER"}});
+  assert.deepEqual(
+    pending.resolveCsaPendingMemberReference(raw,"member@example.com","0911111111","0901234567"),
+    {phone:"0901234567",reference:{requestCode:"CSA-MEMBER"}},
+  );
+`));
+
 test("Account review follows the Backend identity contract for a saved delivery address",()=>run(`
   import assert from "node:assert/strict";
   const account=await import(${JSON.stringify(accountUrl)});

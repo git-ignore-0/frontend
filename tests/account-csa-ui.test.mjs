@@ -103,6 +103,19 @@ test("Account CSA package loader renders explicit loading, error and empty state
  assert.deepEqual(hookCalls.map(value=>Array.from(value)),[["vi",1],["vi",1],["vi",1]]);
 });
 
+test("failed saved-request synchronization offers retry and a way back to package selection",()=>{
+ const component=loadComponent();
+ let retried=false,discarded=false;renderedButtons=[];
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaPendingSyncError,{locale:"vi",onRetry:()=>{retried=true;},onDiscard:()=>{discarded=true;}}));
+ assert.match(html,/common\.retry/);
+ assert.match(html,/csa\.discardPending/);
+ const retryButton=renderedButtons.find(({children})=>children==="common.retry");
+ const discardButton=renderedButtons.find(({children})=>children==="csa.discardPending");
+ assert.ok(retryButton);assert.ok(discardButton);
+ retryButton.props.onClick();discardButton.props.onClick();
+ assert.equal(retried,true);assert.equal(discarded,true);
+});
+
 test("Account CSA package view renders API cards, duration, payment choices and one selection summary",()=>{
  const component=loadComponent();
  const packages=[packageRow("real-one",[paymentPlan("pay-full","full","3600000"),paymentPlan("pay-two","installment","1800000",2)]),packageRow("real-two")];
@@ -141,12 +154,17 @@ test("Account step requires a known complete address and blocks missing data",()
  const complete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address,onBack:()=>{},onContinue:()=>{}}));
  assert.match(complete,/25 Đường Láng, Phường Láng, Hà Nội/);
  assert.doesNotMatch(complete,/csa\.accountIncomplete/);
+ assert.match(complete,/csa\.continue/);
+ assert.doesNotMatch(complete,/csa\.editAccount/);
  const unknownAddress=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:undefined,onBack:()=>{},onContinue:()=>{}}));
  assert.match(unknownAddress,/csa\.accountIncomplete/);
- assert.match(unknownAddress,/disabled=""/);
+ assert.match(unknownAddress,/csa\.editAccount/);
+ assert.match(unknownAddress,/href="\/account\/vi\?tab=address"/);
+ assert.doesNotMatch(unknownAddress,/csa\.continue|disabled=""/);
  const incomplete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:{...address,phone:""},onBack:()=>{},onContinue:()=>{}}));
  assert.match(incomplete,/csa\.accountIncomplete/);
- assert.match(incomplete,/disabled=""/);
+ assert.match(incomplete,/csa\.editAccount/);
+ assert.doesNotMatch(incomplete,/csa\.continue|disabled=""/);
 });
 
 test("guest Account step rejects a ward outside the selected province list",()=>{
@@ -213,10 +231,10 @@ test("rejected and expired requests show their terminal result and a choose-agai
  const rejected=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation:{...base,status:"rejected",rejectionReason:"Không tìm thấy giao dịch"},onDismiss:()=>{}}));
  assert.match(rejected,/csa\.requestRejected/);
  assert.match(rejected,/Không tìm thấy giao dịch/);
- assert.match(rejected,/csa\.chooseAgain/);
+ assert.match(rejected,/csa\.dismissStatus/);
  const expired=renderToStaticMarkup(React.createElement(component.AccountCsaPendingStep,{locale:"vi",confirmation:{...base,status:"expired"},onDismiss:()=>{}}));
  assert.match(expired,/csa\.requestExpired/);
- assert.match(expired,/csa\.chooseAgain/);
+ assert.match(expired,/csa\.dismissStatus/);
 });
 
 test("Contract action renders a file icon instead of the fallback leaf",()=>{

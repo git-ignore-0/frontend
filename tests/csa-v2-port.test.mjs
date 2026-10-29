@@ -23,11 +23,16 @@ test('CSA reuses V62 shared Button, DataState, assets and configuration',()=>{
  assert.match(read('app/api/csa-packages/route.ts'),/getPublicContentOrigin/);
  assert.match(read('app/api/csa-packages/route.ts'),/\/api\/v1\/public\/membership-packages/);
 });
-test('CSA buy actions open the Account CSA purchase flow instead of Store',()=>{
+test('CSA buy and tracking actions stay in the public CSA flow',()=>{
  const source=read('src/screens/CSAProgram.tsx');
- assert.match(source,/const openCsaPurchase=\(\)=>navigate\("account",\{tab:"csa",hub:false\}\)/);
- assert.equal((source.match(/onClick=\{openCsaPurchase\}/g)||[]).length,2);
- assert.doesNotMatch(source,/navigate\("store"\)/);
+ const packages=read('src/screens/csa/CsaPackages.tsx');
+ assert.doesNotMatch(source,/navigate\("account"|openCsaPurchase/);
+ assert.match(source,/csaTrackerHref\(locale\)/);
+ assert.match(source,/csaPurchaseHref\(locale\)/);
+ assert.match(source,/href="#csa-packages"/);
+ assert.match(packages,/id="csa-packages"/);
+ assert.match(packages,/csaPurchaseHref\(locale,item\.id,page\)/);
+ assert.match(packages,/copy\.choosePackage/);
 });
 test('Scoped CSA stylesheet preserves V2 responsive structure and V62 tokens',()=>{
  const css=read('app/styles/13-csa.css');
@@ -38,6 +43,7 @@ test('Scoped CSA stylesheet preserves V2 responsive structure and V62 tokens',()
  assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
  assert.match(css,/var\(--csa-surface-radius\)/);
  assert.match(css,/var\(--bg\)/);
+ assert.match(css,/\.csa-v2-package-action\{[^}]*order:6/);
  assert.match(css,/prefers-reduced-motion/);
  assert.match(read('app/layout.tsx'),/13-csa\.css/);
 });

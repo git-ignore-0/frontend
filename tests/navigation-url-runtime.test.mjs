@@ -102,6 +102,20 @@ test('locale navigation refreshes the document on regular public pages',async()=
   assert.deepEqual(calls,[['replace','/csa/en']]);
 });
 
+test('locale navigation preserves the public CSA flow kind',async()=>{
+  const {localizedRouteHref}=await loadBrowserNavigation();
+  assert.equal(localizedRouteHref('/csa/purchase/vi','en'),'/csa/purchase/en');
+  assert.equal(localizedRouteHref('/csa/track/en','vi'),'/csa/track/vi');
+});
+
+test('locale navigation preserves the selected CSA package query and hash',async()=>{
+  const {syncLocaleRoute}=await loadBrowserNavigation();
+  const calls=[];
+  const browser={location:{pathname:'/csa/purchase/vi',search:'?package=family-6&page=2',hash:'#payment',assign:href=>calls.push(['assign',href]),replace:href=>calls.push(['replace',href])}};
+  assert.equal(syncLocaleRoute(browser,'en'),true);
+  assert.deepEqual(calls,[['replace','/csa/purchase/en?package=family-6&page=2#payment']]);
+});
+
 test('links are resolved by a shared function and obsolete wrappers are removed',()=>{
   const main=readFileSync(new URL('../src/components/navigation/MainNavigation.tsx',import.meta.url),'utf8');
   const footer=readFileSync(new URL('../src/data/footer-navigation.ts',import.meta.url),'utf8');

@@ -25,10 +25,7 @@ export const ACCOUNT_NAV: ReadonlyArray<AccountNavItem> = [
   {id:"referrals",icon:"share",group:"group.programs",hasDescription:false},
 ];
 
-export const GUEST_ACCOUNT_NAV: ReadonlyArray<AccountNavItem> = [
-  {id:"csa",icon:"leaf",group:null,hasDescription:true,labelKey:"guestNav.csa",descriptionKey:"guestNavDesc.csa"},
-  {id:"csa-tracker",icon:"search",group:null,hasDescription:true,labelKey:"nav.csa-tracker",descriptionKey:"navDesc.csa-tracker"},
-];
+export const GUEST_ACCOUNT_NAV: ReadonlyArray<AccountNavItem> = [];
 
 export function accountNavigationFor(status:AuthStatus):ReadonlyArray<AccountNavItem>{
   if(status==="authenticated")return ACCOUNT_NAV;

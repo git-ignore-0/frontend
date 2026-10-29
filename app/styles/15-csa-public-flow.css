@@ -1,0 +1,4 @@
+.csa-public-flow{background:var(--bg);padding:clamp(20px,4vw,42px) 0 clamp(48px,7vw,76px)}
+.csa-public-flow-shell{max-width:1080px}.csa-public-flow-head{display:grid;gap:12px;margin-bottom:18px}.csa-public-flow-head .btn{justify-self:start;padding-inline:0}.csa-public-flow-head h1{margin:0;color:var(--green);font-size:clamp(24px,3vw,34px);line-height:1.2}
+.csa-public-flow .account-guest-notice{display:none}
+@media(max-width:600px){.csa-public-flow{padding-top:14px}.csa-public-flow-head{margin-bottom:12px}.csa-public-flow .benefit-section{padding-inline:14px}}

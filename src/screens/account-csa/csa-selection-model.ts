@@ -20,7 +20,10 @@ function selectionForPackage(item:CsaPackage):CsaSelection|null{
   return option?{packageId:item.id,priceOptionId:option.id,paymentPlanId:defaultPaymentPlanId(option)}:null;
 }
 
-export function createCsaSelection(packages:CsaPackage[]):CsaSelection|null{
+export function createCsaSelection(packages:CsaPackage[],preferredPackageId?:string|null):CsaSelection|null{
+  const preferred=packages.find(item=>item.id===preferredPackageId);
+  if(preferred){const selected=selectionForPackage(preferred);if(selected)return selected;}
+  if(preferredPackageId)return null;
   for(const item of packages){
     const selected=selectionForPackage(item);
     if(selected)return selected;

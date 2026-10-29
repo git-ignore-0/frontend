@@ -21,11 +21,17 @@ function loadAccountRoute() {
     exports,
     require: (id) => {
       if (id === "react/jsx-runtime") return { jsx: (type, props) => ({ type, props }) };
-      if (id === "next/navigation") return { notFound: () => { throw new Error("not-found"); } };
+      if (id === "next/navigation") return {
+        notFound: () => { throw new Error("not-found"); },
+        redirect: (href) => { throw new Error(`redirect:${href}`); },
+      };
       if (id === "../../NFVApp") return { NFVApp };
       if (id === "@/account/referral-presentation") return {
         normalizeReferralCode: (value) => value.trim().toUpperCase(),
         isReferralCode: (value) => value === "NFV2345678",
+      };
+      if (id === "@/lib/csa-navigation") return {
+        csaTrackerHref: (locale) => `/csa/track/${locale}`,
       };
       throw new Error(`Unexpected import ${id}`);
     },
@@ -45,15 +51,15 @@ test("account route opens a valid requested tab instead of the mobile hub", asyn
   assert.equal(result.props.initialAccountHubOpen, false);
 });
 
-test("account route accepts the direct guest CSA tracker tab", async () => {
+test("legacy account CSA tracker route redirects to the public tracker", async () => {
   const { Page } = loadAccountRoute();
-  const result = await Page({
-    params: Promise.resolve({ locale: "vi" }),
-    searchParams: Promise.resolve({ tab: "csa-tracker" }),
-  });
-
-  assert.equal(result.props.initialAccountTab, "csa-tracker");
-  assert.equal(result.props.initialAccountHubOpen, false);
+  await assert.rejects(
+    Page({
+      params: Promise.resolve({ locale: "vi" }),
+      searchParams: Promise.resolve({ tab: "csa-tracker" }),
+    }),
+    /redirect:\/csa\/track\/vi/,
+  );
 });
 
 test("account route ignores invalid or repeated tab values and keeps the account hub", async () => {

@@ -23,6 +23,15 @@ test("CSA selection skips packages without a purchasable duration",()=>{
  `);
 });
 
+test("CSA selection never substitutes another package for an unavailable preferred package",()=>{
+ run(`${fixtures}
+  const packages=[pkg('first',[option('first-option',1)]),pkg('empty',[]),pkg('preferred',[option('preferred-option',6)])];
+  assert.deepEqual(selection.createCsaSelection(packages,'preferred'),{packageId:'preferred',priceOptionId:'preferred-option',paymentPlanId:null});
+  assert.equal(selection.createCsaSelection(packages,'missing'),null);
+  assert.equal(selection.createCsaSelection(packages,'empty'),null);
+ `);
+});
+
 test("CSA selection prefers the API full plan and derives legacy full payment only when plans are absent",()=>{
  run(`${fixtures}
   const installment=plan('installment','installment','600000',6),full=plan('full','full','3600000');

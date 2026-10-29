@@ -45,14 +45,14 @@ async function proxy(
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
-  const method = request.method === "POST" ? "POST" : "GET";
+  const method = request.method === "POST" || request.method === "PUT" ? request.method : "GET";
   const upstream = accountUpstreamTarget(path, method);
   if (!upstream) return jsonError("not_found", 404);
 
   const requestUrl = new URL(request.url);
   if (!accountQueryAllowed(requestUrl, upstream.query)) return jsonError(upstream.query==="tracker-pdf"?"invalid_contract_locale":"not_found", upstream.query==="tracker-pdf"?400:404);
   if (
-    method === "POST" &&
+    method !== "GET" &&
     (request.headers.get("origin") !== publicSiteOrigin() ||
       request.headers.get("x-nfv-public-request") !== "1")
   ) {
@@ -90,10 +90,10 @@ async function proxy(
         ...(request.headers.get("accept-language")
           ? { "Accept-Language": request.headers.get("accept-language") as string }
           : {}),
-        ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+        ...(method !== "GET" ? { "Content-Type": "application/json" } : {}),
         ...(upstream.trackerCookie&&trackerCookieHeader(request)?{Cookie:trackerCookieHeader(request) as string}:{}),
       },
-      body: method === "POST" ? await request.arrayBuffer() : undefined,
+      body: method !== "GET" ? await request.arrayBuffer() : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -125,3 +125,4 @@ async function proxy(
 
 export const GET = proxy;
 export const POST = proxy;
+export const PUT = proxy;

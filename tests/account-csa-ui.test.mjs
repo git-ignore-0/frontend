@@ -26,9 +26,16 @@ const selectionModel=runModule("src/screens/account-csa/csa-selection-model.ts",
  if(id==="../csa/csa-packages-model")return packageModel;
  throw new Error(`Unexpected selection-model import ${id}`);
 });
-const accountReview=runModule("src/screens/account-csa/csa-account-review.ts",id=>{throw new Error(`Unexpected account-review import ${id}`);});
 const pendingStorage=runModule("src/screens/account-csa/csa-pending-storage.ts",id=>{throw new Error(`Unexpected pending-storage import ${id}`);});
-const guestBuyer=runModule("src/screens/account-csa/csa-guest-buyer.ts",id=>{throw new Error(`Unexpected guest-buyer import ${id}`);});
+const shippingAddressModel=runModule("src/account/shipping-address-model.ts",id=>{throw new Error(`Unexpected shipping-address-model import ${id}`);});
+const accountReview=runModule("src/screens/account-csa/csa-account-review.ts",id=>{
+ if(id==="../../account/shipping-address-model.ts")return shippingAddressModel;
+ throw new Error(`Unexpected account-review import ${id}`);
+});
+const guestBuyer=runModule("src/screens/account-csa/csa-guest-buyer.ts",id=>{
+ if(id==="../../account/shipping-address-model.ts")return shippingAddressModel;
+ throw new Error(`Unexpected guest-buyer import ${id}`);
+});
 const dateFormat=runModule("src/lib/date-format.ts",id=>{throw new Error(`Unexpected date-format import ${id}`);});
 const realUI=runModule("src/components/UI.tsx",id=>{
  if(id==="react")return React;
@@ -55,17 +62,21 @@ function loadComponent(){
   if(id==="react")return React;
   if(id==="react/jsx-runtime")return jsxRuntime;
   if(id==="@/components/UI")return UI;
+  if(id==="@/components/account/ShippingAddressFields")return {ShippingAddressFields:({value,areas,missing=[],onChange})=>React.createElement(React.Fragment,null,
+   React.createElement("input",{name:"name",value:value.name,onChange:event=>onChange({...value,name:event.target.value})}),
+   React.createElement("select",{name:"ward_code",value:value.wardCode,"aria-invalid":missing.includes("wardCode"),onChange:event=>onChange({...value,wardCode:event.target.value})},areas.flatMap(area=>area.wards).map(ward=>React.createElement("option",{value:ward.code,key:ward.code},ward.name)))
+  )};
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(id==="@/lib/date-format")return dateFormat;
   if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
   if(id==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated"})};
   if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
-  if(id==="@/account/administrative-units-service")return {getAdministrativeProvinces:async()=>[],getAdministrativeWards:async()=>[]};
+  if(id==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false,retry:()=>{}})};
   if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
   if(id==="./csa-terms")return {CSA_TERM_IDS:Array.from({length:11},(_,index)=>`csa-term-${index+1}`),CSA_TERMS:{vi:Array(11).fill("Điều khoản"),en:Array(11).fill("Term")}};
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
   if(id==="@/screens/csa/useCsaPackages")return {useCsaPackages:(locale,page)=>{hookCalls.push([locale,page]);return hookState;}};
-  if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi"},data:{profile:{name:"",phone:"",email:""}}})};
+  if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}})};
   if(id==="./csa-selection-model")return selectionModel;
 	  if(id==="./csa-account-review")return accountReview;
 	  if(id==="./csa-pending-storage")return pendingStorage;
@@ -126,21 +137,21 @@ test("Account CSA package view supports arbitrary package counts without hiding 
 test("Account step requires a known complete address and blocks missing data",()=>{
  const component=loadComponent();
  const profile={name:"Nguyễn Minh Anh",phone:"0912345678",email:"member@example.com"};
- const address={name:"Nguyễn Minh Anh",phone:"0912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng"};
+ const address={name:"Người nhận",phone:"+84912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng",provinceCode:"01",wardCode:"00001",isSupported:true};
  const complete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address,onBack:()=>{},onContinue:()=>{}}));
  assert.match(complete,/25 Đường Láng, Phường Láng, Hà Nội/);
  assert.doesNotMatch(complete,/csa\.accountIncomplete/);
  const unknownAddress=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:undefined,onBack:()=>{},onContinue:()=>{}}));
  assert.match(unknownAddress,/csa\.accountIncomplete/);
  assert.match(unknownAddress,/disabled=""/);
- const incomplete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile:{...profile,phone:""},address,onBack:()=>{},onContinue:()=>{}}));
+ const incomplete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:{...address,phone:""},onBack:()=>{},onContinue:()=>{}}));
  assert.match(incomplete,/csa\.accountIncomplete/);
  assert.match(incomplete,/disabled=""/);
 });
 
 test("guest Account step rejects a ward outside the selected province list",()=>{
  const component=loadComponent();
- const html=renderToStaticMarkup(React.createElement(component.AccountCsaGuestStep,{locale:"vi",buyer:{name:"Nguyễn Văn An",phone:"0901234567",provinceCode:"66",wardCode:"99999",address:"Số 12"},submitted:true,provinces:[{code:"66",name:"Đồng Tháp"}],wards:[{code:"22015",name:"Phường Cao Lãnh"}],provincesLoading:false,wardsLoading:false,provincesError:false,wardsError:false,onRetryUnits:()=>{},onChange:()=>{},onBack:()=>{},onContinue:()=>{}}));
+ const html=renderToStaticMarkup(React.createElement(component.AccountCsaGuestStep,{locale:"vi",buyer:{name:"Nguyễn Văn An",phone:"0901234567",provinceCode:"66",wardCode:"99999",address:"Số 12"},submitted:true,areas:[{code:"66",name:"Đồng Tháp",wards:[{code:"22015",name:"Phường Cao Lãnh",shippingFeeVnd:"30000"}]}],loading:false,error:false,onRetry:()=>{},onChange:()=>{},onBack:()=>{},onContinue:()=>{}}));
  assert.match(html,/csa\.guestIncomplete/);
  assert.match(html,/name="ward_code"[^>]*aria-invalid="true"/);
 });

@@ -69,6 +69,17 @@ export function csaPendingGuestPhone(raw:string|null):string|null{
   }catch{return null;}
 }
 
+export function csaPendingMemberPhone(raw:string|null,email:string):string|null{
+  if(!raw)return null;
+  try{
+    const value=JSON.parse(raw) as Record<string,unknown>,storedOwner=value.owner as Record<string,unknown>|undefined;
+    const normalizedEmail=email.trim().toLowerCase();
+    if(value.version!==2||!normalizedEmail||!storedOwner||storedOwner.email!==normalizedEmail||typeof storedOwner.phone!=="string"||!requestCode(value.reference))return null;
+    const phone=normalizedOwner({email:"",phone:storedOwner.phone}).phone;
+    return phone&&phone===storedOwner.phone?phone:null;
+  }catch{return null;}
+}
+
 export function clearLegacyGuestCsaPending(storage:StorageLike):void{
   if(csaPendingGuestPhone(storage.getItem(CSA_PENDING_STORAGE_KEY)))storage.removeItem(CSA_PENDING_STORAGE_KEY);
 }

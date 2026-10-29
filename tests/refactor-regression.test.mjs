@@ -28,13 +28,15 @@ test("Account moves keyboard focus to detail and back to the selected Hub link",
   assert.match(account, /nextFocus\.current="hub"/);
 });
 
-test("Ward options are fetched for saved addresses and failed fetches can be retried", () => {
+test("Account delivery address uses the supported shipping-area API while Checkout keeps its existing ward lookup", () => {
   assert.match(wardHook, /useEffect\(/);
   assert.match(wardHook, /loadWards\(city\)/);
   assert.match(wardHook, /retry:\(\)=>loadWards\(city,true\)/);
-  assert.match(address, /useWardOptions\(value\.city\)/);
-  assert.match(address, /wardOptions\.options\.includes\(value\.ward\)/);
-  assert.match(address, /wardOptions\.error.*copy\.retry/);
+  assert.match(address, /useSupportedShippingAreas\(ui\.locale\)/);
+  assert.match(address, /ShippingAddressFields/);
+  assert.match(address, /shipping\.error/);
+  assert.match(address, /onRetry=\{shipping\.retry\}/);
+  assert.doesNotMatch(address, /useWardOptions/);
 });
 
 test("Ward fetch has in-flight de-duplication and separate ready/error statuses", () => {

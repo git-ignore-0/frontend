@@ -1,6 +1,11 @@
+import {normalizeVietnamPhone} from "../../account/shipping-address-model.ts";
 import type {Address,Profile} from "@/types";
 
-export type CsaAccountField="name"|"phone"|"email"|"address";
+export type CsaAccountField="email"|"address";
+
+export function csaAuthenticatedPendingOwner(profile:Pick<Profile,"email">,address?:Address){
+  return {email:profile.email,phone:address?.phone??""};
+}
 
 export function csaAccountReview(profile:Pick<Profile,"name"|"phone"|"email">,address?:Address):{
   complete:boolean;
@@ -9,11 +14,10 @@ export function csaAccountReview(profile:Pick<Profile,"name"|"phone"|"email">,ad
   addressLabel:string;
 }{
   const missing:CsaAccountField[]=[];
-  if(!profile.name.trim())missing.push("name");
-  if(!profile.phone.trim())missing.push("phone");
   if(!profile.email.trim())missing.push("email");
   const addressKnown=address!==undefined;
   const addressParts=address?[address.detail,address.ward,address.city].map(value=>value.trim()).filter(Boolean):[];
-  if(!addressKnown||addressParts.length!==3)missing.push("address");
+  const addressComplete=Boolean(address&&address.name.trim()&&normalizeVietnamPhone(address.phone)&&address.provinceCode?.trim()&&address.wardCode?.trim()&&address.detail.trim());
+  if(!addressKnown||!addressComplete||address?.isSupported===false)missing.push("address");
   return {complete:missing.length===0,missing,addressKnown,addressLabel:addressParts.join(", ")};
 }

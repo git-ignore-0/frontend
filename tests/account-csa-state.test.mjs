@@ -66,12 +66,24 @@ test("legacy guest lookup factors are removed from persistent local storage",()=
   assert.notEqual(storage.getItem(pending.CSA_PENDING_STORAGE_KEY),null);
 `));
 
-test("Account review requires exposed identity and validates a delivery address when available",()=>run(`
+test("member pending lookup can recover the saved recipient phone for the same signed-in email",()=>run(`
+  import assert from "node:assert/strict";
+  const pending=await import(${JSON.stringify(pendingUrl)});
+  const raw=JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-MEMBER"}});
+  assert.equal(pending.csaPendingMemberPhone(raw," MEMBER@example.com "),"0901234567");
+  assert.equal(pending.csaPendingMemberPhone(raw,"other@example.com"),null);
+`));
+
+test("Account review follows the Backend identity contract for a saved delivery address",()=>run(`
   import assert from "node:assert/strict";
   const account=await import(${JSON.stringify(accountUrl)});
   const profile={name:"Nguyễn Minh Anh",phone:"0912345678",email:"member@example.com"};
   assert.deepEqual(account.csaAccountReview(profile,undefined),{complete:false,missing:["address"],addressKnown:false,addressLabel:""});
-  assert.deepEqual(account.csaAccountReview(profile,{name:"Nguyễn Minh Anh",phone:"0912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng"}),{complete:true,missing:[],addressKnown:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
-  assert.deepEqual(account.csaAccountReview({...profile,phone:""},{name:"A",phone:"",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng"}).missing,["phone"]);
-  assert.deepEqual(account.csaAccountReview(profile,{name:"A",phone:"",city:"Hà Nội",ward:"",detail:"25 Đường Láng"}).missing,["address"]);
+  const address={name:"Người nhận",phone:"+84912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng",provinceCode:"01",wardCode:"00001",isSupported:true};
+  assert.deepEqual(account.csaAccountReview(profile,address),{complete:true,missing:[],addressKnown:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
+  assert.deepEqual(account.csaAccountReview({...profile,name:"",phone:""},address),{complete:true,missing:[],addressKnown:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
+  assert.deepEqual(account.csaAccountReview(profile,{...address,isSupported:false}).missing,["address"]);
+  assert.deepEqual(account.csaAccountReview(profile,{...address,phone:""}).missing,["address"]);
+  assert.deepEqual(account.csaAccountReview({...profile,email:""},address).missing,["email"]);
+  assert.deepEqual(account.csaAuthenticatedPendingOwner(profile,address),{email:"member@example.com",phone:"+84912345678"});
 `));

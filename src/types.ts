@@ -1,11 +1,11 @@
 export type Locale = "vi" | "en";
 export type Screen = "home" | "about" | "workshops" | "plants" | "animals" | "tracker" | "testimonials" | "store" | "product" | "checkout" | "account" | "csa" | "order-detail" | "success";
 export type AccountTab = "orders" | "address" | "profile" | "csa" | "csa-tracker" | "rewards" | "redeem" | "referrals";
-export type Resource = "csa" | "rewards" | "referrals";
+export type Resource = "address" | "csa" | "rewards" | "referrals";
 export type FetchStatus = "loading" | "ready" | "error";
 export interface Product { id: string; name: string; en: string; price: number; cat: string; categoryId: string; unit: string; farm: string; image: string; description: string; note: string; csa: boolean }
 export interface Category { id: string; name: string; parentId?: string | null; children?: Category[] }
-export interface Address { id?: string; name: string; phone: string; city: string; ward: string; detail: string; address?: string; isDefault?: boolean }
+export interface Address { id?: string; name: string; phone: string; city: string; ward: string; detail: string; provinceCode?: string; wardCode?: string; isSupported?: boolean; shippingFeeVnd?: string|null; address?: string; isDefault?: boolean }
 export interface Profile { name: string; phone: string; email: string; dateOfBirth: string | null }
 export interface Recipient extends Address { note: string }
 export interface OrderLine { id?: string; name: string; qty: number; price: number; unit: string }
@@ -23,15 +23,15 @@ export interface CSAPayment {id: string; date?: string; dueDate?: string; amount
 export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
 export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
 export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
-export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
+export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
- getAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;
+ getAddress?(): Promise<Address | null>; getShippingAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;
  getCSA?(): Promise<CSA | null>; getCsaUsagePage?(arg:{cursor:string;limit:number}):Promise<Paged<CSAUsage>>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
  getRewardGiftsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Gift>>;
  getRewardHistoryPage?(arg:{type:"points"|"redemptions";cursor:string;limit:number}):Promise<Paged<RewardEntry>>;
  getReferralsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Invitee>>;
- saveAddress?(arg:Address):Promise<Address | void>;
+ saveAddress?(arg:Address):Promise<Address | void>; saveShippingAddress?(arg:Address):Promise<Address>;
  applyReferralCode?(arg:{code:string}):Promise<{referrer:ReferralPerson;canEnterReferrer:boolean}>;
  redeemGift?(arg:{giftId:string;idempotencyKey:string}):Promise<{accepted:boolean;rewards?:Rewards;balance?:number;redemption?:RewardEntry}>;
  validateCoupon?(arg:unknown):Promise<{valid:boolean;amount:number;message?:string}>; applyCoupon?(arg:unknown):Promise<unknown>; quoteOrder?(arg:unknown):Promise<unknown>;

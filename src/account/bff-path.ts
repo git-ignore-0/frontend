@@ -9,7 +9,7 @@ export type AccountUpstreamTarget = {
 
 export function accountUpstreamTarget(
   path: string[],
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT",
 ): AccountUpstreamTarget | null {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (path.length === 3 && path[0] === "memberships" && uuid.test(path[1]) && path[2] === "contract" && method === "GET") {
@@ -51,6 +51,12 @@ export function accountUpstreamTarget(
   }
   if (path[0] === "administrative-wards" && method === "GET") {
     return {path:"/api/v1/administrative-units/wards",session:"none",query:"administrative-wards"};
+  }
+  if (path[0] === "shipping-areas" && method === "GET") {
+    return {path:"/api/v1/public/shipping-areas",session:"none",query:"localized"};
+  }
+  if (path[0] === "shipping-address" && (method === "GET" || method === "PUT")) {
+    return {path:"/api/v1/shipping-address",session:"required",query:"none"};
   }
   if (path[0] === "rewards" && method === "GET") {
     return {

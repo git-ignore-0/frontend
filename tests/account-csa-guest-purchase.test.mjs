@@ -20,11 +20,12 @@ test("guest buyer validation normalizes Vietnamese phones and requires every Bac
   assert.equal(buyer.sanitizeVietnamPhoneInput('09ab 01-23.45'),'09012345');
   assert.equal(buyer.sanitizeVietnamPhoneInput('+84abc901+234567'),'+84901234567');
   assert.equal(buyer.sanitizeVietnamPhoneInput('84+901xyz'),'84901');
-  const complete=buyer.csaGuestBuyerReview({name:' Nguyễn Văn An ',phone:'0901234567',provinceCode:'66',wardCode:'22015',address:' Số 12, ngõ 5 '});
+  const areas=[{code:'66',name:'Đắk Lắk',wards:[{code:'22015',name:'Phường Tuy Hoà',shippingFeeVnd:'30000'}]}];
+  const complete=buyer.csaGuestBuyerReview({name:' Nguyễn Văn An ',phone:'0901234567',provinceCode:'66',wardCode:'22015',address:' Số 12, ngõ 5 '},areas);
   assert.deepEqual(complete,{complete:true,missing:[],identity:{name:'Nguyễn Văn An',phone:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12, ngõ 5'}});
-  const missing=buyer.csaGuestBuyerReview({name:'',phone:'123',provinceCode:'',wardCode:'',address:''});
+  const missing=buyer.csaGuestBuyerReview({name:'',phone:'123',provinceCode:'',wardCode:'',address:''},areas);
   assert.equal(missing.complete,false);assert.deepEqual(missing.missing,['name','phone','provinceCode','wardCode','address']);assert.equal(missing.identity,null);
-  const mismatched=buyer.csaGuestBuyerReview({name:'Nguyễn Văn An',phone:'0901234567',provinceCode:'66',wardCode:'99999',address:'Số 12'},[{code:'66'}],[{code:'22015'}]);
+  const mismatched=buyer.csaGuestBuyerReview({name:'Nguyễn Văn An',phone:'0901234567',provinceCode:'66',wardCode:'99999',address:'Số 12'},areas);
   assert.equal(mismatched.complete,false);assert.deepEqual(mismatched.missing,['wardCode']);assert.equal(mismatched.identity,null);
 `));
 
@@ -46,9 +47,10 @@ test("existing CSA component branches only the buyer step and sends guest identi
   assert.match(component,/confirmCsaTransfer\(quote\.quoteToken,guestIdentity/);
   assert.match(component,/const storage=csaPendingStorage\(!guestMode,window\);if\(storage\)saveCsaPending\(storage,owner,result\)/);
   assert.doesNotMatch(component,/csaPendingGuestPhone/);
-  assert.match(component,/getAdministrativeProvinces/);
-  assert.match(component,/getAdministrativeWards/);
-  assert.match(component,/onChange\("phone",sanitizeVietnamPhoneInput\(event\.target\.value\)\)/);
+  assert.match(component,/useSupportedShippingAreas/);
+  assert.match(component,/useSupportedShippingAreas\(ui\.locale,guestMode&&\["account","terms","payment"\]\.includes\(step\)\)/);
+  assert.match(component,/ShippingAddressFields/);
+  assert.doesNotMatch(component,/getAdministrativeProvinces|getAdministrativeWards/);
   assert.doesNotMatch(source("src/screens/account-csa/csa-guest-buyer.ts"),/email/);
   assert.match(source("src/screens/account-csa/AccountCsaTracker.tsx"),/setPhone\(sanitizeVietnamPhoneInput\(event\.target\.value\)\)/);
 });

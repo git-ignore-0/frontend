@@ -9,7 +9,8 @@ import {syncBrowserRoute} from "@/lib/browser-navigation";
 import * as rewardsService from "@/account/rewards-service";
 import * as referralsService from "@/account/referrals-service";
 import * as csaService from "@/account/csa-service";
-import {initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
+import * as shippingService from "@/account/shipping-service";
+import {ACCOUNT_SERVICE_RESOURCES,initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
 import {loadCart,saveCart} from "./cart-persistence";
 
 export {initialUI} from "./initial-state";
@@ -59,6 +60,11 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(method==="applyReferralCode")return await referralsService.applyReferralCode(arg as {code:string}) as T;
       if(method==="getCSA")return await csaService.getCSA(ui.locale) as T;
       if(method==="getCsaUsagePage")return await csaService.getCsaUsagePage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
+      if(method==="getShippingAddress")return await shippingService.getShippingAddress(ui.locale) as T;
+      if(method==="saveShippingAddress"){
+        const address=arg as Address;
+        return await shippingService.saveShippingAddress({name:address.name,phone:address.phone,provinceCode:address.provinceCode??"",provinceName:address.city,wardCode:address.wardCode??"",wardName:address.ward,address:address.detail}) as T;
+      }
       const fn=typeof window!=="undefined" ? window.NFV_BACKEND?.[method] : undefined;
       if(typeof fn!=="function")throw new Error(ui.locale==="en"?`API is not connected: ${method}`:`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
@@ -156,6 +162,18 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   const refreshResource=useCallback(async(resource:Resource)=>{
     if(!data.authenticated)return;
     const epoch=authEpoch.current;
+    if(resource==="address"){
+      setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"loading"}}));
+      try{
+        const value=await call<Address|null>("getShippingAddress");
+        if(epoch!==authEpoch.current)return;
+        setData(s=>({...s,shippingAddress:value}));
+        setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"ready"}}));
+      }catch{
+        if(epoch===authEpoch.current)setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));
+      }
+      return;
+    }
     const name=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[resource];
     if(!["csa","rewards","referrals"].includes(resource)&&!window.NFV_BACKEND?.[name])return;
     setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"loading"}}));
@@ -192,7 +210,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     if(auth.status!=="authenticated"){
       if(auth.status!=="checking"){
         setData(s=>({...s,authenticated:false,hasCSA:false,profile:{name:"",phone:"",email:"",dateOfBirth:null},
-          addresses:[],orders:[],csa:null,rewards:null,referrals:null}));
+          addresses:[],shippingAddress:null,orders:[],csa:null,rewards:null,referrals:null}));
         setUI(s=>({...s,recipient:{...recipientEmpty},accountFetchState:{},applyCSA:{},
           couponCode:"",couponAmount:0,couponDraft:"",addressEditing:false,
           giftIntent:null,referrerDraft:"",referrerError:"",visible:{}}));
@@ -201,7 +219,8 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     }
     setData(s=>({...s,authenticated:true,hasCSA:!!auth.session?.hasCSA,
       profile:{name:"",phone:"",email:"",dateOfBirth:null,...auth.session?.profile},
-      addresses:[],orders:[],csa:null,rewards:null,referrals:null}));
+      addresses:[],shippingAddress:null,orders:[],csa:null,rewards:null,referrals:null}));
+    setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"loading"}}));
     const backend=window.NFV_BACKEND;
     const safe=async<T,>(method:keyof Backend,apply:(value:T)=>void)=>{
       if(typeof backend?.[method]!=="function")return;
@@ -209,11 +228,14 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       catch(error){if(stillCurrent())console.error("NFV account data:",method,error);}
     };
     void Promise.all([
+      call<Address|null>("getShippingAddress").then(v=>{if(stillCurrent()){
+        setData(s=>({...s,shippingAddress:v}));
+        setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"ready"}}));
+      }}).catch(()=>{if(stillCurrent())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));}),
       safe<Address|null>("getAddress",v=>setData(s=>({...s,addresses:v?[v]:[]}))),
       safe<Order[]>("getOrders",v=>setData(s=>({...s,orders:Array.isArray(v)?v:[]}))),
-      ...(["csa","rewards","referrals"] as Resource[]).map(kind=>{
+      ...ACCOUNT_SERVICE_RESOURCES.map(kind=>{
         const method=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[kind];
-        if(!["csa","rewards","referrals"].includes(kind)&&!backend?.[method])return Promise.resolve();
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"loading"}}));
         return call(method).then(v=>{if(stillCurrent()){
           setData(s=>({...s,[kind]:v}));

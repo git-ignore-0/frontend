@@ -191,7 +191,7 @@
 .account-tab-csa .csa-purchase-actions{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:16px}
 .account-tab-csa .csa-purchase-actions .btn{max-width:100%;height:auto;min-height:36px;white-space:normal;text-align:center;padding-block:7px}
 .account-tab-csa .csa-purchase-intro{margin:0 0 15px;color:var(--ink2);font-size:12px}
-.account-tab-csa .csa-guest-buyer-form{align-items:start}.account-tab-csa .csa-guest-buyer-form .nfv-control{width:100%}.account-tab-csa .csa-guest-address-field,.account-tab-csa .csa-guest-unit-error,.account-tab-csa .csa-guest-form-error,.account-tab-csa .csa-guest-buyer-form>.csa-purchase-actions{grid-column:1/-1}.account-tab-csa .csa-guest-unit-error{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.account-tab-csa .csa-guest-unit-error .help-error,.account-tab-csa .csa-guest-form-error{margin:0}
+.account-tab-csa .csa-guest-buyer-form{align-items:start}.account-tab-csa .csa-guest-buyer-form .nfv-control{width:100%}.account-tab-csa .csa-guest-form-error,.account-tab-csa .csa-guest-buyer-form>.csa-purchase-actions{grid-column:1/-1}.account-tab-csa .csa-guest-form-error{margin:0}
 .account-tab-csa .csa-profile-row{display:flex;gap:14px;justify-content:space-between;padding:9px 0;border-bottom:1px solid #edf0eb;font-size:13px}
 .account-tab-csa .csa-profile-row span{color:var(--muted);min-width:105px;flex:none}.account-tab-csa .csa-profile-row strong{text-align:right;font-weight:650;overflow-wrap:anywhere;min-width:0}
 .account-tab-csa .csa-qr-area{display:grid;grid-template-columns:minmax(190px,220px) minmax(0,1fr);align-items:start;gap:24px;padding:18px 0 2px}

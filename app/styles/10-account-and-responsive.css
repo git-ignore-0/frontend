@@ -45,8 +45,8 @@
 .acc-address-actions{display:flex;flex-wrap:wrap;gap:5px 11px;border-top:1px solid var(--line);padding-top:10px}.acc-address-actions button{border:0;background:transparent;color:#38644a;font-size:12px;padding:3px 0;display:inline-flex;align-items:center;gap:4px}.acc-address-actions button:hover{text-decoration:underline}
 .acc-footnote{border-top:1px solid var(--line);margin:15px 0 0;padding-top:10px;color:#8d988e;font-size:12px}
 .acc-editor{border:1px solid #bad2bc;background:#fbfdfb;padding:15px;margin-bottom:16px}.acc-editor-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}.acc-editor h3{margin:0;font-size:14px}
-.acc-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 13px}.acc-form-grid label{font-size:12px;color:#657668;font-weight:600;display:block;min-width:0}.acc-form-grid 
-.acc-form-grid select.acc-wide{grid-column:1/-1}.acc-check{display:flex;gap:7px;align-items:center;font-size:12px;margin-top:13px;color:#66796b}
+.acc-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 13px}.acc-form-grid label{font-size:12px;color:#657668;font-weight:600;display:block;min-width:0}.acc-form-grid .acc-wide{grid-column:1/-1}
+.acc-check{display:flex;gap:7px;align-items:center;font-size:12px;margin-top:13px;color:#66796b}
 .acc-form-actions{display:flex;gap:9px;margin-top:16px}.acc-editor .help-error:empty,#accProfileValidation:empty{display:none}
 .acc-profile-info>div{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--line);padding:14px 0;gap:12px}
 .acc-profile-info>div:first-child{border-top:0}.acc-profile-info span{font-size:12px;color:#86948a}.acc-profile-info strong{font-weight:600;font-size:13px;overflow-wrap:anywhere}

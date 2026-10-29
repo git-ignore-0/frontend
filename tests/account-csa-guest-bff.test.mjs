@@ -37,6 +37,17 @@ test("guest CSA BFF allowlists only the required public purchase, administrative
   assert.equal(target(["administrative-provinces"],"POST"),null);
 });
 
+test("shipping BFF exposes supported areas publicly and the single saved address only to its owner",()=>{
+  const {accountUpstreamTarget}=bffModel();
+  const target=(path,method)=>JSON.parse(JSON.stringify(accountUpstreamTarget(path,method)));
+  assert.deepEqual(target(["shipping-areas"],"GET"),{path:"/api/v1/public/shipping-areas",session:"none",query:"localized"});
+  assert.deepEqual(target(["shipping-address"],"GET"),{path:"/api/v1/shipping-address",session:"required",query:"none"});
+  assert.deepEqual(target(["shipping-address"],"PUT"),{path:"/api/v1/shipping-address",session:"required",query:"none"});
+  assert.equal(target(["shipping-areas"],"POST"),null);
+  assert.equal(target(["shipping-address"],"POST"),null);
+  assert.equal(target(["shipping-address","other-user"],"GET"),null);
+});
+
 test("guest CSA BFF validates ward and tracker PDF queries exactly",()=>{
   const {accountQueryAllowed}=bffModel();
   assert.equal(accountQueryAllowed(new URL("https://site/api/account/administrative-wards?province=66"),"administrative-wards"),true);
@@ -71,6 +82,22 @@ test("optional purchase session works for guests and keeps the same-origin mutat
   const attack=new Request("https://site.example.test/api/account/csa-payment-quotes",{method:"POST",headers:{Origin:"https://evil.example","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
   assert.equal((await guest.route.POST(attack,{params:Promise.resolve({path:["csa-payment-quotes"]})})).status,403);
   assert.equal(guest.calls.length,1);
+});
+
+test("saved shipping address PUT requires a session and the same-origin mutation guard",async()=>{
+  const authenticated=routeHarness({session:{accessToken:"stored"}});
+  const valid=new Request("https://site.example.test/api/account/shipping-address",{method:"PUT",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
+  assert.equal((await authenticated.route.PUT(valid,{params:Promise.resolve({path:["shipping-address"]})})).status,200);
+  assert.equal(authenticated.calls[0].init.method,"PUT");
+  assert.equal(authenticated.calls[0].init.headers.Authorization,"Bearer stored");
+
+  const attack=new Request("https://site.example.test/api/account/shipping-address",{method:"PUT",headers:{Origin:"https://evil.example","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
+  assert.equal((await authenticated.route.PUT(attack,{params:Promise.resolve({path:["shipping-address"]})})).status,403);
+  assert.equal(authenticated.calls.length,1);
+
+  const guest=routeHarness();
+  assert.equal((await guest.route.PUT(valid,{params:Promise.resolve({path:["shipping-address"]})})).status,401);
+  assert.equal(guest.calls.length,0);
 });
 
 test("optional purchase session returns 502 when an existing session cannot be verified",async()=>{

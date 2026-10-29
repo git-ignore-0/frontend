@@ -2,14 +2,15 @@
 /* eslint-disable @next/next/no-img-element -- VietQR URL is derived exclusively from Backend payment payload. */
 
 import {useCallback,useEffect,useRef,useState,useSyncExternalStore} from "react";
-import {ActionLink,Button,DataState,FormField,FormInput,FormSelect,Icon,Section} from "@/components/UI";
+import {ActionLink,Button,DataState,Icon,Section} from "@/components/UI";
+import {ShippingAddressFields} from "@/components/account/ShippingAddressFields";
 import {copyText} from "@/data/account-copy";
 import {formatDate,formatDateTime} from "@/lib/date-format";
 import {siteAccountHref} from "@/auth/site-auth";
 import {useAuth} from "@/auth/AuthProvider";
 import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote} from "@/account/csa-service";
 import {confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus} from "@/account/csa-service";
-import {getAdministrativeProvinces,getAdministrativeWards,type AdministrativeUnit} from "@/account/administrative-units-service";
+import {useSupportedShippingAreas} from "@/hooks/useSupportedShippingAreas";
 import {copyTextToClipboard} from "@/account/referral-share";
 import {csaMoney,csaQuantity,type CsaPackage} from "@/screens/csa/csa-packages-model";
 import {useCsaPackages} from "@/screens/csa/useCsaPackages";
@@ -23,9 +24,10 @@ import {
   type CsaSelection,
 } from "./csa-selection-model";
 import {CSA_TERM_IDS,CSA_TERMS} from "./csa-terms";
-import {csaAccountReview} from "./csa-account-review";
-import {CSA_PENDING_STORAGE_KEY,clearGuestCsaPending,csaPendingStorage,parseCsaPending,saveCsaPending} from "./csa-pending-storage";
-import {csaGuestBuyerReview,EMPTY_CSA_GUEST_BUYER,normalizeVietnamPhone,sanitizeVietnamPhoneInput,type CsaGuestBuyer,type CsaGuestBuyerField} from "./csa-guest-buyer";
+import {csaAccountReview,csaAuthenticatedPendingOwner} from "./csa-account-review";
+import {CSA_PENDING_STORAGE_KEY,clearGuestCsaPending,csaPendingMemberPhone,csaPendingStorage,parseCsaPending,saveCsaPending} from "./csa-pending-storage";
+import {csaGuestBuyerReview,EMPTY_CSA_GUEST_BUYER,normalizeVietnamPhone,type CsaGuestBuyer} from "./csa-guest-buyer";
+import type {SupportedShippingProvince} from "@/account/shipping-address-model";
 import type {Address,Profile} from "@/types";
 
 type Locale="vi"|"en";
@@ -76,49 +78,19 @@ export function AccountCsaPackageSelection(){
   const [dismissedRequestCode,setDismissedRequestCode]=useState("");
   const [guest,setGuest]=useState<CsaGuestBuyer>(EMPTY_CSA_GUEST_BUYER);
   const [guestSubmitted,setGuestSubmitted]=useState(false);
-  const [provinces,setProvinces]=useState<AdministrativeUnit[]>([]);
-  const [wards,setWards]=useState<AdministrativeUnit[]>([]);
-  const [provincesLoading,setProvincesLoading]=useState(false);
-  const [wardsLoading,setWardsLoading]=useState(false);
-  const [provincesError,setProvincesError]=useState(false);
-  const [wardsError,setWardsError]=useState(false);
-  const [unitsAttempt,setUnitsAttempt]=useState(0);
   const confirmingRef=useRef(false);
   const L=(key:string)=>copyText(ui.locale,key);
-  const guestReview=csaGuestBuyerReview(guest,provinces,wards);
+  const shipping=useSupportedShippingAreas(ui.locale,guestMode&&["account","terms","payment"].includes(step));
+  const guestReview=csaGuestBuyerReview(guest,shipping.areas);
   const guestIdentity=guestMode?guestReview.identity:null;
-  const owner={email:guestMode?"":data.profile.email,phone:guestMode?(guestIdentity?.phone??normalizeVietnamPhone(guest.phone)):data.profile.phone};
   const pendingSnapshot=useCallback(()=>pendingStorageSnapshot(!guestMode),[guestMode]);
   const persistedRaw=useSyncExternalStore(subscribePendingStorage,pendingSnapshot,()=>null);
+  const authenticatedOwner=csaAuthenticatedPendingOwner(data.profile,data.shippingAddress??undefined);
+  const owner=guestMode?{email:"",phone:guestIdentity?.phone??normalizeVietnamPhone(guest.phone)}:{...authenticatedOwner,phone:authenticatedOwner.phone||csaPendingMemberPhone(persistedRaw,authenticatedOwner.email)||""};
   useEffect(()=>{if(guestMode)try{clearGuestCsaPending(window);}catch{/* Browser storage may be unavailable. */}},[guestMode]);
   const persistedReference=parseCsaPending(persistedRaw,owner);
   const persistedRequestCode=persistedReference?.requestCode??"";
   const statusKey=persistedRequestCode?`${persistedRequestCode}:${owner.phone}`:"";
-  useEffect(()=>{
-    if(!guestMode||step!=="account")return;
-    let active=true;
-    void Promise.resolve().then(async()=>{
-      if(!active)return;
-      setProvincesLoading(true);setProvincesError(false);
-      try{const value=await getAdministrativeProvinces(ui.locale);if(active)setProvinces(value);}
-      catch{if(active){setProvinces([]);setProvincesError(true);}}
-      finally{if(active)setProvincesLoading(false);}
-    });
-    return()=>{active=false;};
-  },[guestMode,step,ui.locale,unitsAttempt]);
-  useEffect(()=>{
-    if(!guestMode||step!=="account")return;
-    let active=true;
-    void Promise.resolve().then(async()=>{
-      if(!active)return;
-      if(!guest.provinceCode){setWards([]);setWardsError(false);setWardsLoading(false);return;}
-      setWardsLoading(true);setWardsError(false);
-      try{const value=await getAdministrativeWards(guest.provinceCode,ui.locale);if(active)setWards(value);}
-      catch{if(active){setWards([]);setWardsError(true);}}
-      finally{if(active)setWardsLoading(false);}
-    });
-    return()=>{active=false;};
-  },[guest.provinceCode,guestMode,step,ui.locale,unitsAttempt]);
   useEffect(()=>{
     if(!persistedRequestCode||!statusKey)return;
     let active=true;
@@ -141,7 +113,7 @@ export function AccountCsaPackageSelection(){
 
   const current=csaSelectionSummary(packages,selected)?selected:createCsaSelection(packages);
   const back=()=>{setError("");setStep(step==="account"?"choose":step==="terms"?"account":"terms");};
-  if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} provinces={provinces} wards={wards} provincesLoading={provincesLoading} wardsLoading={wardsLoading} provincesError={provincesError} wardsError={wardsError} onRetryUnits={()=>setUnitsAttempt(value=>value+1)} onChange={(field,value)=>{setQuote(null);if(field==="provinceCode"){setWards([]);setWardsError(false);setWardsLoading(Boolean(value));}setGuest(current=>field==="provinceCode"?{...current,provinceCode:value,wardCode:""}:{...current,[field]:value});}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={data.addresses[0]} onBack={back} onContinue={()=>setStep("terms")}/>;
+  if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} areas={shipping.areas} loading={shipping.loading} error={shipping.error} onRetry={shipping.retry} onChange={value=>{setQuote(null);setGuest(value);}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={data.shippingAddress??undefined} addressLoading={ui.accountFetchState.address==="loading"} addressError={ui.accountFetchState.address==="error"} onRetryAddress={()=>void refreshResource("address")} onBack={back} onContinue={()=>setStep("terms")}/>;
   if(step==="terms"){
     const accepted=acceptedTerms.length===CSA_TERM_IDS.length;
     const toggle=(id:string,checked:boolean)=>setAcceptedTerms(value=>checked?[...new Set([...value,id])]:value.filter(item=>item!==id));
@@ -164,25 +136,17 @@ export function AccountCsaPackageSelection(){
   /></>;
 }
 
-export function AccountCsaAccountStep({locale,profile,address,onBack,onContinue}:{locale:Locale;profile:Pick<Profile,"name"|"phone"|"email">;address?:Address;onBack:()=>void;onContinue:()=>void}){
+export function AccountCsaAccountStep({locale,profile,address,addressLoading=false,addressError=false,onRetryAddress,onBack,onContinue}:{locale:Locale;profile:Pick<Profile,"name"|"phone"|"email">;address?:Address;addressLoading?:boolean;addressError?:boolean;onRetryAddress?:()=>void;onBack:()=>void;onContinue:()=>void}){
   const L=(key:string)=>copyText(locale,key),review=csaAccountReview(profile,address);
-  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="account"/><Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step"><p className="csa-purchase-intro">{L("csa.accountDescription")}</p><div className="csa-status-line"><span className={`acc-status ${review.complete?"completed":"processing"}`}>{L("csa.signedIn")}</span><span className="muted">{L("csa.accountManaged")}</span></div><div className="csa-profile-row"><span>{L("profile.name")}</span><strong>{profile.name||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{profile.phone||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.email")}</span><strong>{profile.email||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("csa.deliveryAddress")}</span><strong>{review.addressLabel||L("common.na")}</strong></div>{!review.complete&&<p className="help-error" role="alert">{L("csa.accountIncomplete")}</p>}<div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><ActionLink variant="outline" href={siteAccountHref(locale,`/account/${locale}?tab=csa`)}>{L("csa.editAccount")}</ActionLink><Button disabled={!review.complete} onClick={onContinue}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div></Section></div>;
+  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="account"/><Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step">{addressLoading?<DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/>:addressError?<DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={onRetryAddress?{label:L("common.retry"),onClick:onRetryAddress}:undefined}/>:<><p className="csa-purchase-intro">{L("csa.accountDescription")}</p><div className="csa-status-line"><span className={`acc-status ${review.complete?"completed":"processing"}`}>{L("csa.signedIn")}</span><span className="muted">{L("csa.accountManaged")}</span></div><div className="csa-profile-row"><span>{L("profile.name")}</span><strong>{profile.name||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{profile.phone||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("profile.email")}</span><strong>{profile.email||L("common.na")}</strong></div><div className="csa-profile-row"><span>{L("csa.deliveryAddress")}</span><strong>{review.addressLabel||L("common.na")}</strong></div>{!review.complete&&<p className="help-error" role="alert">{L("csa.accountIncomplete")}</p>}<div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><ActionLink variant="outline" href={siteAccountHref(locale,`/account/${locale}?tab=address`)}>{L("csa.editAccount")}</ActionLink><Button disabled={!review.complete} onClick={onContinue}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div></>}</Section></div>;
 }
 
-export function AccountCsaGuestStep({locale,buyer,submitted,provinces,wards,provincesLoading,wardsLoading,provincesError,wardsError,onRetryUnits,onChange,onBack,onContinue}:{locale:Locale;buyer:CsaGuestBuyer;submitted:boolean;provinces:AdministrativeUnit[];wards:AdministrativeUnit[];provincesLoading:boolean;wardsLoading:boolean;provincesError:boolean;wardsError:boolean;onRetryUnits:()=>void;onChange:(field:CsaGuestBuyerField,value:string)=>void;onBack:()=>void;onContinue:()=>void}){
-  const L=(key:string)=>copyText(locale,key),review=csaGuestBuyerReview(buyer,provinces,wards),missing=(field:CsaGuestBuyerField)=>submitted&&review.missing.includes(field);
-  const collator=new Intl.Collator(locale==="en"?"en":"vi",{sensitivity:"base"});
-  const sortedProvinces=[...provinces].sort((left,right)=>collator.compare(left.name,right.name));
-  const sortedWards=[...wards].sort((left,right)=>collator.compare(left.name,right.name));
+export function AccountCsaGuestStep({locale,buyer,submitted,areas,loading,error,onRetry,onChange,onBack,onContinue}:{locale:Locale;buyer:CsaGuestBuyer;submitted:boolean;areas:SupportedShippingProvince[];loading:boolean;error:boolean;onRetry:()=>void;onChange:(value:CsaGuestBuyer)=>void;onBack:()=>void;onContinue:()=>void}){
+  const L=(key:string)=>copyText(locale,key),review=csaGuestBuyerReview(buyer,areas);
   return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="account"/><Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step"><p className="csa-purchase-intro">{L("csa.guestAccountDescription")}</p><form className="acc-form-grid csa-guest-buyer-form" noValidate onSubmit={event=>{event.preventDefault();onContinue();}}>
-    <FormField label={L("profile.name")}><FormInput name="name" autoComplete="name" value={buyer.name} aria-invalid={missing("name")} onChange={event=>onChange("name",event.target.value)}/></FormField>
-    <FormField label={L("profile.phone")}><FormInput name="phone" type="tel" inputMode="tel" pattern="[+0-9]*" autoComplete="tel" maxLength={13} value={buyer.phone} aria-invalid={missing("phone")} onChange={event=>onChange("phone",sanitizeVietnamPhoneInput(event.target.value))}/></FormField>
-    <FormField label={L("csa.guestProvince")}><FormSelect name="province_code" value={buyer.provinceCode} disabled={provincesLoading} aria-invalid={missing("provinceCode")} onChange={event=>onChange("provinceCode",event.target.value)}><option value="">{provincesLoading?L("common.loading"):L("csa.guestChooseProvince")}</option>{sortedProvinces.map(unit=><option value={unit.code} key={unit.code}>{unit.name}</option>)}</FormSelect></FormField>
-    <FormField label={L("csa.guestWard")}><FormSelect name="ward_code" value={buyer.wardCode} disabled={!buyer.provinceCode||wardsLoading} aria-invalid={missing("wardCode")} onChange={event=>onChange("wardCode",event.target.value)}><option value="">{wardsLoading?L("common.loading"):L("csa.guestChooseWard")}</option>{sortedWards.map(unit=><option value={unit.code} key={unit.code}>{unit.name}</option>)}</FormSelect></FormField>
-    <FormField label={L("csa.guestAddress")} className="csa-guest-address-field"><FormInput name="address" autoComplete="street-address" value={buyer.address} aria-invalid={missing("address")} onChange={event=>onChange("address",event.target.value)}/></FormField>
-    {(provincesError||wardsError)&&<div className="csa-guest-unit-error"><p className="help-error" role="alert">{L("csa.guestUnitsError")}</p><Button small variant="outline" onClick={onRetryUnits}>{L("common.retry")}</Button></div>}
+    <ShippingAddressFields locale={locale} value={buyer} areas={areas} loading={loading} error={error} missing={submitted?review.missing:[]} onRetry={onRetry} onChange={onChange} copy={{name:L("profile.name"),namePlaceholder:L("profile.name"),phone:L("profile.phone"),province:L("csa.guestProvince"),chooseProvince:L("csa.guestChooseProvince"),ward:L("csa.guestWard"),chooseProvinceFirst:L("csa.guestChooseProvince"),chooseWard:L("csa.guestChooseWard"),address:L("csa.guestAddress"),addressPlaceholder:L("csa.guestAddress"),loading:L("common.loading"),loadError:L("csa.guestUnitsError"),retry:L("common.retry")}}/>
     {submitted&&!review.complete&&<p className="help-error csa-guest-form-error" role="alert">{L("csa.guestIncomplete")}</p>}
-    <div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button type="submit">{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div>
+    <div className="csa-purchase-actions"><Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button type="submit" disabled={loading||error}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button></div>
   </form></Section></div>;
 }
 

@@ -1,6 +1,8 @@
 import type {AccountTab,CatalogData,FetchStatus,Locale,Recipient,Resource,Screen} from "@/types";
 import type {RedemptionIntent} from "@/account/redemption-intent";
 
+export const ACCOUNT_SERVICE_RESOURCES=["csa","rewards","referrals"] as const;
+
 export interface UIState {
   page: Screen; productId: string; accountTab: AccountTab; accountHubOpen: boolean; locale: Locale;
   query: string; sort: string; selectedCategoryId: string | null; expandedCategoryIds: string[];
@@ -15,7 +17,7 @@ export interface UIState {
 }
 export const recipientEmpty: Recipient = {name:"",phone:"",city:"",ward:"",detail:"",address:"",note:""};
 export const initialData: CatalogData = {
-  products:[],categories:[],provinces:[],wards:{},orders:[],addresses:[],
+  products:[],categories:[],provinces:[],wards:{},orders:[],addresses:[],shippingAddress:null,
   profile:{name:"",phone:"",email:"",dateOfBirth:null},authenticated:false,hasCSA:false,csa:null,rewards:null,referrals:null
 };
 function defaultDate(days:number) {

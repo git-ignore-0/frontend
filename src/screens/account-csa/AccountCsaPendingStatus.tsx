@@ -4,7 +4,6 @@ import {useEffect,useState} from "react";
 import {DataState,Section} from "@/components/UI";
 import {getCsaPurchaseStatus,type CsaPurchaseStatus} from "@/account/csa-service";
 import {copyText} from "@/data/account-copy";
-import {csaLandingHref,csaTrackerHref} from "@/lib/csa-navigation";
 import {useNFV} from "@/state/NFVContext";
 import {AccountCsaPendingStep} from "./AccountCsaPackageSelection";
 import {CSA_PENDING_STORAGE_KEY,csaPendingStorage,resolveCsaPendingMemberReference} from "./csa-pending-storage";
@@ -25,5 +24,5 @@ export function AccountCsaPendingStatus(){
   if(error)return <Section title={L("csa.pendingRequestTitle")} className="benefit-section csa-account-pending"><DataState compact kind="error" title={L("state.failedTitle")} action={{label:L("common.retry"),onClick:()=>setAttempt(value=>value+1)}}/></Section>;
   if(!request)return null;
   const dismissible=request.status==="approved"||request.status==="rejected"||request.status==="expired";
-  return <AccountCsaPendingStep locale={ui.locale} confirmation={request} trackerHref={csaTrackerHref(ui.locale)} csaHref={csaLandingHref(ui.locale,"packages")} onDismiss={dismissible?dismiss:undefined}/>;
+  return <AccountCsaPendingStep locale={ui.locale} confirmation={request} onDismiss={dismissible?dismiss:undefined}/>;
 }

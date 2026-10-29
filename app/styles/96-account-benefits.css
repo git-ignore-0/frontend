@@ -271,3 +271,4 @@
 .account-tab-csa-tracker .csa-tracker-contract-state{margin-top:14px}.account-tab-csa-tracker .csa-purchase-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:16px}
 @container csa-tracker (max-width:560px){.account-tab-csa-tracker .csa-tracker-approved-summary{grid-template-columns:1fr}}
 @media(max-width:600px){.account-tab-csa-tracker .csa-tracker-approved-summary{grid-template-columns:1fr}.account-tab-csa-tracker .csa-tracker-form{grid-template-columns:1fr}.account-tab-csa-tracker .csa-tracker-form-actions{justify-content:stretch}.account-tab-csa-tracker .csa-tracker-form-actions .btn{width:100%}}
+.account-tab-csa .csa-term-copy{display:grid;gap:4px}.account-tab-csa .csa-term-copy>strong{color:var(--ink);font-size:13px}.account-tab-csa .csa-term-copy>span{display:block}

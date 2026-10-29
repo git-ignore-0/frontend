@@ -37,6 +37,7 @@ const guestBuyer=runModule("src/screens/account-csa/csa-guest-buyer.ts",id=>{
  throw new Error(`Unexpected guest-buyer import ${id}`);
 });
 const dateFormat=runModule("src/lib/date-format.ts",id=>{throw new Error(`Unexpected date-format import ${id}`);});
+const termsModel=runModule("src/screens/account-csa/csa-terms-model.ts",id=>{throw new Error(`Unexpected terms-model import ${id}`);});
 const realUI=runModule("src/components/UI.tsx",id=>{
  if(id==="react")return React;
  if(id==="react/jsx-runtime")return jsxRuntime;
@@ -44,6 +45,7 @@ const realUI=runModule("src/components/UI.tsx",id=>{
 });
 
 let hookState={status:"loading",page:null,retry:()=>{}};
+let termsHookState={status:"loading",document:null,retry:()=>{}};
 let hookCalls=[];
 let renderedButtons=[];
 const UI={
@@ -73,7 +75,8 @@ function loadComponent(){
   if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
   if(id==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false,retry:()=>{}})};
   if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
-  if(id==="./csa-terms")return {CSA_TERM_IDS:Array.from({length:11},(_,index)=>`csa-term-${index+1}`),CSA_TERMS:{vi:Array(11).fill("Điều khoản"),en:Array(11).fill("Term")}};
+  if(id==="./useCsaTerms")return {useCsaTerms:()=>termsHookState};
+  if(id==="./csa-terms-model")return termsModel;
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
   if(id==="@/screens/csa/useCsaPackages")return {useCsaPackages:(locale,page)=>{hookCalls.push([locale,page]);return hookState;}};
   if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}})};
@@ -101,6 +104,27 @@ test("Account CSA package loader renders explicit loading, error and empty state
  hookState={status:"ready",page:{data:[],meta:null},retry:()=>{}};
  assert.match(renderToStaticMarkup(React.createElement(component.AccountCsaPackageSelection)),/data-kind="empty"/);
  assert.deepEqual(hookCalls.map(value=>Array.from(value)),[["vi",1],["vi",1],["vi",1]]);
+});
+
+test("CSA terms step renders the current Backend document and requires every dynamic clause",()=>{
+ const component=loadComponent();renderedButtons=[];
+ const document={version:"CSA_TERMS_V3",locale:"vi",hash:"a".repeat(64),content:{title:"Điều khoản mùa mới",sections:[{key:"delivery",heading:"Giao hàng",paragraphs:["Giao vào thứ Sáu."]},{key:"contact",heading:"Liên hệ",paragraphs:["Dùng Zalo.","Báo khi đổi địa chỉ."]}]}};
+ const base={locale:"vi",document,status:"ready",acceptedTerms:["delivery"],submitted:false,busy:false,error:"",onToggle:()=>{},onToggleAll:()=>{},onBack:()=>{},onRetry:()=>{},onCreatePayment:()=>{}};
+ const partial=renderToStaticMarkup(React.createElement(component.AccountCsaTermsStep,base));
+ assert.match(partial,/Điều khoản mùa mới/);assert.match(partial,/Giao hàng/);assert.match(partial,/Giao vào thứ Sáu/);assert.match(partial,/Liên hệ/);assert.equal((partial.match(/type="checkbox"/g)||[]).length,3);
+ assert.doesNotMatch(partial,/CSA_TERMS_V3/);
+ assert.equal(renderedButtons.find(({children})=>children==="csa.createPayment").props.disabled,true);
+ renderedButtons=[];
+ renderToStaticMarkup(React.createElement(component.AccountCsaTermsStep,{...base,acceptedTerms:["delivery","contact"]}));
+ assert.equal(renderedButtons.find(({children})=>children==="csa.createPayment").props.disabled,false);
+});
+
+test("CSA terms step exposes loading and retry states without a payment action",()=>{
+ const component=loadComponent();renderedButtons=[];
+ const loading=renderToStaticMarkup(React.createElement(component.AccountCsaTermsStep,{locale:"vi",document:null,status:"loading",acceptedTerms:[],submitted:false,busy:false,error:"",onToggle:()=>{},onToggleAll:()=>{},onBack:()=>{},onRetry:()=>{},onCreatePayment:()=>{}}));
+ assert.match(loading,/data-kind="loading"/);
+ const failed=renderToStaticMarkup(React.createElement(component.AccountCsaTermsStep,{locale:"vi",document:null,status:"error",acceptedTerms:[],submitted:false,busy:false,error:"",onToggle:()=>{},onToggleAll:()=>{},onBack:()=>{},onRetry:()=>{},onCreatePayment:()=>{}}));
+ assert.match(failed,/data-kind="error"/);assert.match(failed,/common\.retry/);assert.doesNotMatch(failed,/csa\.createPayment/);
 });
 
 test("failed saved-request synchronization offers retry and a way back to package selection",()=>{

@@ -111,8 +111,8 @@ function quoteFrom(value:unknown):CsaQuote{
   return {quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},summary:{paymentType,totalAmount:decimal(summary.total_amount),initialPaymentAmount:decimal(summary.initial_payment_amount),installmentCount,installments},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
 }
 
-export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale;guestIdentity?:CsaGuestIdentity|null}):Promise<CsaQuote>{
-  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale,...(input.guestIdentity?{guest_identity:input.guestIdentity}:{})})});
+export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale;termsVersion:string;termsHash:string;guestIdentity?:CsaGuestIdentity|null}):Promise<CsaQuote>{
+  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale,terms_version:input.termsVersion,terms_hash:input.termsHash,...(input.guestIdentity?{guest_identity:input.guestIdentity}:{})})});
   return quoteFrom(payload.data);
 }
 

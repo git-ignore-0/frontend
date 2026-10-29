@@ -43,7 +43,7 @@ test("existing CSA component branches only the buyer step and sends guest identi
   const component=source("src/screens/account-csa/AccountCsaPackageSelection.tsx");
   assert.match(component,/useAuth\(\)/);
   assert.match(component,/<AccountCsaGuestStep/);
-  assert.match(component,/createCsaPaymentQuote\(\{\.\.\.current,locale:ui\.locale,guestIdentity/);
+  assert.match(component,/createCsaPaymentQuote\(\{\.\.\.current,locale:ui\.locale,termsVersion:document\.version,termsHash:document\.hash,guestIdentity/);
   assert.match(component,/confirmCsaTransfer\(quote\.quoteToken,guestIdentity/);
   assert.match(component,/const storage=csaPendingStorage\(!guestMode,window\);if\(storage\)saveCsaPending\(storage,owner,result\)/);
   assert.doesNotMatch(component,/csaPendingGuestPhone/);

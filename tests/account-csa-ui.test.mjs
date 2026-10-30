@@ -212,7 +212,7 @@ test("Account CSA styles keep wide cards equal and narrow cards in one scroll-sn
 test("Account CSA state markup follows the approved active and pending surfaces",()=>{
  const benefits=source("src/screens/AccountBenefits.tsx");
  const purchase=source("src/screens/account-csa/AccountCsaPackageSelection.tsx");
- assert.match(benefits,/className="csa-plan-meta"/);
+ assert.match(benefits,/<AccountCsaPlanSummary/);
  assert.match(benefits,/className="csa-contract-inline"/);
  assert.match(benefits,/contract\.downloadUrl\?<ActionLink[^>]+csa-contract-action/);
  assert.match(benefits,/:<Button[^>]+csa-contract-action[^>]+disabled>/);

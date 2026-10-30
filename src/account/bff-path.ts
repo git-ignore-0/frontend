@@ -28,8 +28,8 @@ export function accountUpstreamTarget(
     return {path:"/api/v1/public/csa-contract-tracker/contract/pdf",session:"none",query:"tracker-pdf",trackerCookie:true};
   }
   if (path.length !== 1) return null;
-  if (path[0] === "csa-current" && method === "GET") {
-    return {path:"/api/v1/memberships/current",session:"required",query:"localized"};
+  if (path[0] === "csa-overview" && method === "GET") {
+    return {path:"/api/v1/memberships/overview",session:"required",query:"localized"};
   }
   if (path[0] === "csa-quota" && method === "GET") {
     return {path:"/api/v1/memberships/quota",session:"required",query:"localized"};

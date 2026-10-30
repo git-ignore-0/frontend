@@ -22,12 +22,14 @@ export interface CSAQuota {productName?: string; productNameEn?: string; name?: 
 export interface CSAPayment {id: string; date?: string; dueDate?: string; amount: number; status: string; method?: string; methodEn?: string}
 export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
 export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
+export interface CSAUpcoming {kind:"membership"|"purchase_request";id:string;requestCode?:string;planName:string;status:"scheduled"|"pending"|"payment_confirmed";durationMonths:number;amount:string;currency:string;startDate?:string;endDate?:string;createdAt?:string;expiresAt?:string}
+export interface CSAOverview {active:CSA|null;upcoming:CSAUpcoming[]}
 export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
-export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSA | null; rewards: Rewards | null; referrals: Referrals | null}
+export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
  getAddress?(): Promise<Address | null>; getShippingAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;
- getCSA?(): Promise<CSA | null>; getCsaUsagePage?(arg:{cursor:string;limit:number}):Promise<Paged<CSAUsage>>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
+ getCSA?(): Promise<CSAOverview>; getCsaUsagePage?(arg:{cursor:string;limit:number}):Promise<Paged<CSAUsage>>; getRewards?(): Promise<Rewards | null>; getReferrals?(): Promise<Referrals | null>;
  getRewardGiftsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Gift>>;
  getRewardHistoryPage?(arg:{type:"points"|"redemptions";cursor:string;limit:number}):Promise<Paged<RewardEntry>>;
  getReferralsPage?(arg:{cursor:string;limit:number}):Promise<Paged<Invitee>>;

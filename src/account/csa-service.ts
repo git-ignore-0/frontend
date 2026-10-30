@@ -1,4 +1,4 @@
-import type {CSA, CSAUsage, Locale, Paged} from "@/types";
+import type {CSA, CSAOverview, CSAUpcoming, CSAUsage, Locale, Paged} from "@/types";
 import {accountApi, AccountApiError} from "./account-api.ts";
 import type {CsaGuestIdentity} from "../screens/account-csa/csa-guest-buyer.ts";
 
@@ -64,10 +64,28 @@ async function optionalContract(membershipId:string,locale:Locale):Promise<CSA["
   }
 }
 
-export async function getCSA(locale:Locale):Promise<CSA|null>{
-  const currentPayload=await accountApi(`csa-current?locale=${locale}`);
-  if(currentPayload.data===null)return null;
-  const current=record(currentPayload.data),membershipId=string(current.id);
+function upcomingItems(value:unknown):CSAUpcoming[]{
+  if(!Array.isArray(value))throw new AccountApiError("invalid_response",502);
+  return value.map(entryValue=>{
+    const item=record(entryValue),kind=string(item.kind),status=string(item.status);
+    if(kind==="membership"){
+      if(status!=="scheduled")throw new AccountApiError("invalid_response",502);
+      return {kind,id:string(item.id),planName:string(item.package_name),status,durationMonths:integer(item.duration_months,1),amount:decimal(item.total_price_vnd),currency:"VND",startDate:string(item.start_date),endDate:string(item.end_date)};
+    }
+    if(kind==="purchase_request"){
+      if(status!=="pending"&&status!=="payment_confirmed")throw new AccountApiError("invalid_response",502);
+      const expiresAt=optionalString(item.expires_at);
+      return {kind,id:string(item.id),requestCode:string(item.request_code),planName:string(item.package_name),status,durationMonths:integer(item.duration_months,1),amount:decimal(item.amount),currency:string(item.currency),createdAt:string(item.created_at),...(expiresAt?{expiresAt}:{})};
+    }
+    throw new AccountApiError("invalid_response",502);
+  });
+}
+
+export async function getCSA(locale:Locale):Promise<CSAOverview>{
+  const overviewPayload=await accountApi(`csa-overview?locale=${locale}`),overview=record(overviewPayload.data);
+  const upcoming=upcomingItems(overview.upcoming);
+  if(overview.active_membership===null)return {active:null,upcoming};
+  const current=record(overview.active_membership),membershipId=string(current.id);
   const [quotaPayload,usage,contract]=await Promise.all([
     accountApi(`csa-quota?locale=${locale}`),
     getCsaUsagePage({locale,cursor:"1"}),
@@ -75,7 +93,7 @@ export async function getCSA(locale:Locale):Promise<CSA|null>{
   ]);
   const quotaData=record(quotaPayload.data);
   if(!Array.isArray(quotaData.products))throw new AccountApiError("invalid_response",502);
-  return {
+  const active:CSA={
     id:membershipId,
     planName:string(current.package_name),
     description:optionalString(current.package_description),
@@ -90,6 +108,7 @@ export async function getCSA(locale:Locale):Promise<CSA|null>{
     usage:usage.items,
     pagination:{usage:{nextCursor:usage.nextCursor,total:usage.total}},
   };
+  return {active,upcoming};
 }
 
 export type CsaQuote={

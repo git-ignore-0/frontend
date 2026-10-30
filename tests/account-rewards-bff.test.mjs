@@ -68,7 +68,7 @@ test("account BFF only allows the account endpoints used by v1", () => {
     session: "required",
     query: "none",
   });
-  assert.deepEqual(target(["csa-current"], "GET"), {path:"/api/v1/memberships/current",session:"required",query:"localized"});
+  assert.deepEqual(target(["csa-overview"], "GET"), {path:"/api/v1/memberships/overview",session:"required",query:"localized"});
   assert.deepEqual(target(["csa-quota"], "GET"), {path:"/api/v1/memberships/quota",session:"required",query:"localized"});
   assert.deepEqual(target(["csa-usage"], "GET"), {path:"/api/v1/memberships/usage",session:"required",query:"localized-page"});
   assert.deepEqual(target(["csa-payment-quotes"], "POST"), {path:"/api/v1/public/csa-payment-quotes",session:"optional",query:"none"});

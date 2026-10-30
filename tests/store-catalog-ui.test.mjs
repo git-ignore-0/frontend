@@ -80,6 +80,27 @@ test("Store cards and product details format selling-unit quantities",()=>{
  assert.doesNotMatch(detail,/className="detail-unit">\/ \{product\.unit_size\}/);
 });
 
+test("Store list cards show the localized CSA quota group and point cost",()=>{
+ const store=source("src/screens/Store.tsx");
+ assert.match(store,/formatCsaQuotaBadge/);
+ assert.match(store,/product\.csa_quota_group&&<span className="corner-tag">\{formatCsaQuotaBadge\(product\.csa_quota_group,locale\)\}<\/span>/);
+ assert.doesNotMatch(store,/product\.csa_eligible/);
+});
+
+test("Store list cards show only the locale-resolved product name",()=>{
+ const store=source("src/screens/Store.tsx");
+ assert.match(store,/className="card-title"[^>]*>\{product\.name\}<\/a>/);
+ assert.doesNotMatch(store,/product\.alternate_name/);
+ assert.doesNotMatch(store,/className="card-en"/);
+});
+
+test("Store list card price and unit share one row separated by a slash",()=>{
+ const store=source("src/screens/Store.tsx");
+ const css=source("app/styles/00-foundation-and-store.css");
+ assert.match(store,/className="card-price-line"><div className="price">\{money\(product\.retail_price_vnd\)\}<\/div><div className="unit">\/ \{formatUnitSize\(product\.unit_size\)\} \{product\.unit_label\}<\/div><\/div>/);
+ assert.match(css,/\.card-price-line\{[^}]*display:flex;[^}]*align-items:baseline;/);
+});
+
 test("Store hero uses a localized real image without the NFV STORE eyebrow",()=>{
  const store=source("src/screens/Store.tsx");
  const copy=source("src/data/store-copy.ts");

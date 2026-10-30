@@ -121,8 +121,15 @@ h1,h2,h3,h4,p,button,input,textarea,select{font-family:inherit}
 .card-title{font-weight:650;font-size:13px;line-height:1.35;min-height:0;margin:0 0 2px}
 .card-en{color:#8a968b;font-size:11px;line-height:1.35;margin:0 0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
 .card-farm{display:none}
+.card-price-line{display:flex;align-items:baseline;gap:4px;min-width:0}
 .price{font-size:15px;font-weight:700;letter-spacing:-.35px}
 .unit{font-size:11px;margin-top:1px}
+.card-price-line .unit{margin-top:0}
+.detail-price-line{display:flex;align-items:baseline;gap:6px;margin:20px 0 16px;min-width:0}
+.detail-info .detail-price-line .detail-price{margin:0}
+.detail-price-line .detail-unit{margin-bottom:0;min-width:0}
+.detail-photo,.detail-thumb{border-radius:var(--radius)}
+.buy-row .qty{flex:none}
 .add-mini{width:var(--nfv-add-button-size);height:var(--nfv-add-button-size);min-width:var(--nfv-add-button-size);min-height:var(--nfv-add-button-size);border:1px solid #d2e0d1;border-radius:3px;background:#f5f9f2;color:#28543a}
 
 

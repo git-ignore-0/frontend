@@ -4,7 +4,8 @@ export type StoreLocale="vi"|"en";
 export type StoreImage={id:string;url:string;width:number;height:number;variants:Array<{url:string;width:number;height:number}>};
 export type StoreCategory={id:string;parent_id:string|null;slug:string;sort_order:number;name:string;requested_locale:StoreLocale;content_locale:StoreLocale;is_fallback:boolean};
 export type StoreSupplier={id:string;name:string;location?:string};
-export type StoreProductCard={id:string;slug:string;sku:string;name:string;alternate_name:string|null;short_description:string;retail_price_vnd:number;unit_size:string;unit_label:string;category:{id:string;slug:string;name:string};primary_image:StoreImage|null;csa_eligible:boolean;suppliers:StoreSupplier[];requested_locale:StoreLocale;content_locale:StoreLocale;available_locales:StoreLocale[];is_fallback:boolean};
+export type StoreCsaQuotaGroup={id:string;name:string;cost:number};
+export type StoreProductCard={id:string;slug:string;sku:string;name:string;alternate_name:string|null;short_description:string;retail_price_vnd:number;unit_size:string;unit_label:string;category:{id:string;slug:string;name:string};primary_image:StoreImage|null;csa_quota_group:StoreCsaQuotaGroup|null;suppliers:StoreSupplier[];requested_locale:StoreLocale;content_locale:StoreLocale;available_locales:StoreLocale[];is_fallback:boolean};
 export type StoreProductDetail=StoreProductCard&{description:string;suppliers:Array<StoreSupplier&{location:string}>};
 export type StorePage={data:StoreProductCard[];meta:{page:number;page_size:number;total:number}};
 
@@ -41,12 +42,17 @@ function parseSupplier(value:unknown,detail:boolean):StoreSupplier|null{
  if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,240)||detail&&!nonEmpty(value.location,240))return null;
  return {id:value.id,name:value.name,...(detail?{location:value.location as string}:{})};
 }
+function parseCsaQuotaGroup(value:unknown):StoreCsaQuotaGroup|null{
+ if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,200)||!Number.isSafeInteger(value.cost)||Number(value.cost)<=0)return null;
+ return {id:value.id,name:value.name,cost:Number(value.cost)};
+}
 function parseProduct(value:unknown,detail:boolean):StoreProductCard|StoreProductDetail|null{
- if(!record(value)||!uuid(value.id)||!slug(value.slug)||!nonEmpty(value.sku,80)||!nonEmpty(value.name,200)||!(value.alternate_name===null||nonEmpty(value.alternate_name,200))||typeof value.short_description!=="string"||value.short_description.length>800||!Number.isSafeInteger(value.retail_price_vnd)||Number(value.retail_price_vnd)<=0||typeof value.unit_size!=="string"||!/^\d{1,7}\.\d{3}$/.test(value.unit_size)||!nonEmpty(value.unit_label,40)||typeof value.csa_eligible!=="boolean"||!Array.isArray(value.suppliers)||!Array.isArray(value.available_locales)||value.available_locales.some(item=>!locale(item))||detail&&typeof value.description!=="string")return null;
+ if(!record(value)||!uuid(value.id)||!slug(value.slug)||!nonEmpty(value.sku,80)||!nonEmpty(value.name,200)||!(value.alternate_name===null||nonEmpty(value.alternate_name,200))||typeof value.short_description!=="string"||value.short_description.length>800||!Number.isSafeInteger(value.retail_price_vnd)||Number(value.retail_price_vnd)<=0||typeof value.unit_size!=="string"||!/^\d{1,7}\.\d{3}$/.test(value.unit_size)||!nonEmpty(value.unit_label,40)||!(value.csa_quota_group===null||record(value.csa_quota_group))||!Array.isArray(value.suppliers)||!Array.isArray(value.available_locales)||value.available_locales.some(item=>!locale(item))||detail&&typeof value.description!=="string")return null;
  const localized=localeFields(value);if(!localized||!record(value.category)||!uuid(value.category.id)||!slug(value.category.slug)||!nonEmpty(value.category.name,200))return null;
  const primary=image(value.primary_image);if(value.primary_image!==null&&!primary)return null;
+ const csaQuotaGroup=value.csa_quota_group===null?null:parseCsaQuotaGroup(value.csa_quota_group);if(value.csa_quota_group!==null&&!csaQuotaGroup)return null;
  const suppliers=value.suppliers.map(item=>parseSupplier(item,detail));if(suppliers.some(item=>item===null))return null;
- const base:StoreProductCard={id:value.id,slug:value.slug,sku:value.sku,name:value.name,alternate_name:value.alternate_name as string|null,short_description:value.short_description,retail_price_vnd:Number(value.retail_price_vnd),unit_size:value.unit_size,unit_label:value.unit_label,category:{id:value.category.id,slug:value.category.slug,name:value.category.name},primary_image:primary,csa_eligible:value.csa_eligible,suppliers:suppliers as StoreSupplier[],available_locales:[...new Set(value.available_locales as StoreLocale[])],...localized};
+ const base:StoreProductCard={id:value.id,slug:value.slug,sku:value.sku,name:value.name,alternate_name:value.alternate_name as string|null,short_description:value.short_description,retail_price_vnd:Number(value.retail_price_vnd),unit_size:value.unit_size,unit_label:value.unit_label,category:{id:value.category.id,slug:value.category.slug,name:value.category.name},primary_image:primary,csa_quota_group:csaQuotaGroup,suppliers:suppliers as StoreSupplier[],available_locales:[...new Set(value.available_locales as StoreLocale[])],...localized};
  return detail?{...base,description:value.description as string,suppliers:suppliers as Array<StoreSupplier&{location:string}>}:base;
 }
 

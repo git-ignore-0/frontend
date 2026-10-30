@@ -144,7 +144,6 @@
   .checkout-mobile-track span{height:100%;display:block;background:#306849;transition:width .15s}
   
   .checkout-summary{margin-top:8px}
-  .detail-info .buy-row{display:none}
   .mobile-sticky{box-shadow:none;border-top:1px solid #dae4d8;background:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
   
   .mobile-sticky .flex>div:first-child{min-width:80px}

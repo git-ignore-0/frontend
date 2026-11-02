@@ -124,5 +124,5 @@ test("tracker screen has validation, duplicate-submit, retry, session-expiry and
   assert.match(tracker,/onRetryContract/);
   assert.match(tracker,/resetLookup/);
   assert.doesNotMatch(tracker,/getCSA|getCsaUsage|quota|Quota/);
-  assert.match(source("src/screens/Account.tsx"),/key=\{`\$\{auth\.status\}:\$\{tab\}`\}/);
+  assert.match(source("src/screens/Account.tsx"),/key=\{`\$\{auth\.status\}:\$\{auth\.session\?\.subject\?\?""\}:\$\{tab\}`\}/);
 });

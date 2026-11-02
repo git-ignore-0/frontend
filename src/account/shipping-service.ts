@@ -49,6 +49,7 @@ function addressFrom(value:unknown,names:{province:string;ward:string}):Address{
     wardCode:string(item.ward_code),
     isSupported:supported,
     shippingFeeVnd:nullableFee(item.shipping_fee_vnd),
+    updatedAt:string(item.updated_at),
     isDefault:true,
   };
 }

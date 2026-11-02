@@ -15,7 +15,7 @@ test("App Router root and TSX composition are present",()=>{
 test("do not ship fake backend, success or default customer records",()=>{
   const context=readFileSync(new URL("../src/state/NFVContext.tsx",import.meta.url),"utf8");
   const initial=readFileSync(new URL("../src/state/initial-state.ts",import.meta.url),"utf8");
-  assert.match(initial,/products:\[\],categories:\[\],provinces:\[\]/);
+  assert.match(initial,/products:\[\],storeProducts:\{\},categories:\[\],provinces:\[\]/);
   assert.match(context,/Chưa kết nối API/);
   assert.doesNotMatch(context,/localStorage|fetch\(['"]\/api\//);
 });

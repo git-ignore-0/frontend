@@ -9,8 +9,9 @@ import {BrandLogo} from "@/components/brand/BrandLogo";
 import {useNFV} from "@/state/NFVContext";
 
 export function Header(){
-  const {ui,navigate}=useNFV();
+  const {ui,navigate,patch}=useNFV();
   const accountLabel=ui.locale==="vi"?"Tài khoản":"Account";
+  const cartLabel=ui.locale==="vi"?"Mở giỏ hàng":"Open cart",cartCount=Object.values(ui.cart).reduce((sum,count)=>sum+count,0);
   const [menuOpen,setMenuOpen]=useState(false);
   const closeMenu=useCallback(()=>setMenuOpen(false),[]);
 
@@ -21,6 +22,7 @@ export function Header(){
         <DesktopNavigation/>
         <div className="header-actions">
           <LocaleToggle variant="header"/>
+          <button type="button" className="icon-btn header-cart-button" onClick={()=>patch({cartOpen:true})} title={cartLabel} aria-label={`${cartLabel} (${cartCount})`} aria-haspopup="dialog"><Icon name="bag" size={18}/>{cartCount>0&&<span className="header-cart-badge" aria-hidden="true">{cartCount>99?"99+":cartCount}</span>}</button>
           <button type="button" className={`icon-btn account-button ${["account","order-detail"].includes(ui.page)?"is-active":""}`}
             onClick={()=>navigate("account")} title={accountLabel} aria-label={accountLabel}><Icon name="user" size={18}/></button>
           <button type="button" className="icon-btn nfv-menu-trigger" onClick={()=>setMenuOpen(true)}

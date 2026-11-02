@@ -24,7 +24,7 @@ export function SiteFooter(){
           </div>
           <p>{copy.description}</p>
         </section>
-        <section className="nfv-site-footer__contact">
+        <section id="site-contact" className="nfv-site-footer__contact">
           <h2>{copy.contactTitle}</h2>
           <dl>
             {email&&<div><dt>{copy.emailLabel}</dt><dd><a href={`mailto:${email}`}>{email}</a></dd></div>}

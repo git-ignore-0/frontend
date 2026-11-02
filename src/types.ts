@@ -5,7 +5,7 @@ export type Resource = "address" | "csa" | "rewards" | "referrals";
 export type FetchStatus = "loading" | "ready" | "error";
 export interface Product { id: string; name: string; en: string; price: number; cat: string; categoryId: string; unit: string; farm: string; image: string; description: string; note: string; csa: boolean }
 export interface Category { id: string; name: string; parentId?: string | null; children?: Category[] }
-export interface Address { id?: string; name: string; phone: string; city: string; ward: string; detail: string; provinceCode?: string; wardCode?: string; isSupported?: boolean; shippingFeeVnd?: string|null; address?: string; isDefault?: boolean }
+export interface Address { id?: string; name: string; phone: string; city: string; ward: string; detail: string; provinceCode?: string; wardCode?: string; isSupported?: boolean; shippingFeeVnd?: string|null; updatedAt?:string; address?: string; isDefault?: boolean }
 export interface Profile { name: string; phone: string; email: string; dateOfBirth: string | null }
 export interface Recipient extends Address { note: string }
 export interface OrderLine { id?: string; name: string; qty: number; price: number; unit: string }
@@ -18,14 +18,14 @@ export interface Rewards { balance?: number | null; gifts?: Gift[]; history?: Re
 export interface ReferralPerson { id?: string; code?: string; name?: string; linkedAt?: string }
 export interface Invitee { id: string; name?: string; maskedName?: string; label?: string; status: string; date: string }
 export interface Referrals { code?: string; canEnterReferrer?: boolean; referrer?: ReferralPerson | null; invitedCount?: number; invitees?: Invitee[]; history?: Invitee[]; terms?: string; termsEn?: string; pagination?: {invitees?: PageMeta; referrals?: PageMeta} }
-export interface CSAQuota {productName?: string; productNameEn?: string; name?: string; total: number; remaining: number; unit?: string; unitEn?: string}
+export interface CSAQuota {productName?: string; productNameEn?: string; name?: string; total: number; remaining: number; reserved?: number; used?: number; unit?: string; unitEn?: string}
 export interface CSAPayment {id: string; date?: string; dueDate?: string; amount: number; status: string; method?: string; methodEn?: string}
 export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
 export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
 export interface CSAUpcoming {kind:"membership"|"purchase_request";id:string;requestCode?:string;planName:string;status:"scheduled"|"pending"|"payment_confirmed";durationMonths:number;amount:string;currency:string;startDate?:string;endDate?:string;createdAt?:string;expiresAt?:string}
 export interface CSAOverview {active:CSA|null;upcoming:CSAUpcoming[]}
 export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
-export interface CatalogData {products: Product[]; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
+export interface CatalogData {products: Product[]; storeProducts:Record<string,import("./store/store-model").StoreProductCard>; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
  getAddress?(): Promise<Address | null>; getShippingAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;

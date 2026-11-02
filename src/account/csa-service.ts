@@ -50,7 +50,9 @@ function usageRows(value:unknown):CSAUsage[]{
 export async function getCsaUsagePage({locale,cursor}:{locale:Locale;cursor?:string|null;limit?:number}):Promise<Paged<CSAUsage>>{
   const payload=await accountApi(`csa-usage?locale=${locale}&page=${cursorPage(cursor)}`);
   const meta=page(payload.meta);
-  return {items:usageRows(payload.data),...meta};
+  // API totals count transactions, while each UI row represents one produce group.
+  // Keep the row total unknown until the UI has loaded every page.
+  return {items:usageRows(payload.data),nextCursor:meta.nextCursor,total:null};
 }
 
 async function optionalContract(membershipId:string,locale:Locale):Promise<CSA["contract"]>{
@@ -104,7 +106,7 @@ export async function getCSA(locale:Locale):Promise<CSAOverview>{
     monthlyPriceVnd:decimal(current.monthly_price_vnd),
     totalPriceVnd:decimal(current.total_price_vnd),
     contract,
-    quotas:quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:integer(item.quota_units_per_cycle),remaining:integer(item.remaining_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};}),
+    quotas:quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:integer(item.quota_units_per_cycle),remaining:integer(item.available_units),reserved:integer(item.reserved_units),used:integer(item.used_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};}),
     usage:usage.items,
     pagination:{usage:{nextCursor:usage.nextCursor,total:usage.total}},
   };

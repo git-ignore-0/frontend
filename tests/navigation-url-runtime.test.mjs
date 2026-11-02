@@ -124,3 +124,11 @@ test('links are resolved by a shared function and obsolete wrappers are removed'
   assert.equal(existsSync(new URL('../src/components/Shell.tsx',import.meta.url)),false);
   assert.equal(existsSync(new URL('../src/components/account/AccountLogout.tsx',import.meta.url)),false);
 });
+
+
+test('Store order URLs preserve a points-history origin and keep other origins on orders',()=>{
+ const id='12345678-1234-4123-8123-123456789012';
+ assert.equal(nav.navigationHrefForPage('order-detail','vi','csa',id),`/store/orders/${id}/vi?from=csa`);
+ assert.equal(nav.navigationHrefForPage('order-detail','en','orders',id),`/store/orders/${id}/en`);
+ assert.equal(nav.navigationHrefForPage('order-detail','vi',undefined,id),`/store/orders/${id}/vi`);
+});

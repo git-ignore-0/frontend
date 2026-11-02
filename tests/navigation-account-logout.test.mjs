@@ -18,7 +18,7 @@ test("drawer shows only site links, Account and language selector",()=>{
   assert.doesNotMatch(drawer,/nfv-mobile-nav-shortcuts/);
   assert.match(drawer,/<LocaleToggle variant="drawer"\/>/);
   assert.match(data,/path:"\/account\/\{locale\}"/);
-  assert.match(context,/navigationHrefForPage\(page,ui\.locale,opts\?\.tab\)/);
+  assert.match(context,/navigationHrefForPage\(page,ui\.locale,opts\?\.tab,opts\?\.productId\)/);
   assert.match(data,/page==="account"\s*\?\s*MAIN_NAV_ACCOUNT/);
   assert.ok(existsSync(new URL("../app/account/[locale]/page.tsx",import.meta.url)));
 });
@@ -39,14 +39,14 @@ test("private state is invalidated on session loss, with stale responses blocked
   assert.match(context,/orders:\[\],csa:null,rewards:null,referrals:null/);
   assert.match(context,/recipient:\{\.\.\.recipientEmpty\}/);
   assert.match(context,/epoch===authEpoch\.current/);
-  assert.match(context,/if\(epoch!==authEpoch\.current\)return;/);
+  assert.match(context,/if\(!current\(\)\)return;/);
 });
 
-test("orders list receives dedicated top spacing, including mobile",()=>{
-  assert.match(source("src/screens/AccountOrders.tsx"),/id="accountOrdersList" className="account-orders-list"/);
-  const css=source("app/styles/20-history-and-catalog.css");
-  assert.match(css,/\.nfv-orders-section \.account-orders-list \{ margin-block-start: 16px; \}/);
-  assert.match(css,/\.nfv-orders-section \.account-orders-list \{ margin-block-start: 14px; \}/);
+test("Store orders use the shared Store surface and spacing tokens",()=>{
+  assert.match(source("src/screens/AccountOrders.tsx"),/className="store-order-list"/);
+  assert.match(source("src/screens/AccountOrders.tsx"),/<StoreSection title=\{copy.title\}/);
+  const css=source("app/styles/81-store-commerce.css");
+  assert.match(css,/\.store-order-list\{[^}]*gap:var\(--store-content-gap\)[^}]*margin-top:var\(--store-content-gap\)/);
 });
 
 test("profile is read-only and delegates editing to the Core account form",()=>{

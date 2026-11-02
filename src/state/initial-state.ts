@@ -12,12 +12,13 @@ export interface UIState {
   orderSearch: string; orderStatus: string; orderStart: string; orderEnd: string; orderDateOpen: boolean;
   visible: Record<string,number>; addressEditing: boolean;
   referrerDraft: string; referrerError: string; giftIntent: RedemptionIntent | null;
-  toast: string; busyKeys: string[]; error: string; accountFetchState: Partial<Record<Resource,FetchStatus>>;
-  wardFetchState: Record<string,FetchStatus>;
+  toast: string; toastTone:"success"|"error"; toastSequence:number; busyKeys: string[]; error: string; accountFetchState: Partial<Record<Resource,FetchStatus>>;
+  wardFetchState: Record<string,FetchStatus>; cartProductState:Record<string,FetchStatus|"unavailable">;
+  cartProductNotice:Record<string,"price_changed"|"stock_changed">;
 }
 export const recipientEmpty: Recipient = {name:"",phone:"",city:"",ward:"",detail:"",address:"",note:""};
 export const initialData: CatalogData = {
-  products:[],categories:[],provinces:[],wards:{},orders:[],addresses:[],shippingAddress:null,
+  products:[],storeProducts:{},categories:[],provinces:[],wards:{},orders:[],addresses:[],shippingAddress:null,
   profile:{name:"",phone:"",email:"",dateOfBirth:null},authenticated:false,hasCSA:false,csa:null,rewards:null,referrals:null
 };
 function defaultDate(days:number) {
@@ -32,5 +33,5 @@ export const initialUI: UIState = {
   couponDraft:"",couponCode:"",couponAmount:0,couponError:"",applyCSA:{},
   orderSearch:"",orderStatus:"all",orderStart:defaultDate(29),orderEnd:defaultDate(0),orderDateOpen:false,
   visible:{},addressEditing:false,referrerDraft:"",referrerError:"",giftIntent:null,
-  toast:"",busyKeys:[],error:"",accountFetchState:{},wardFetchState:{}
+  toast:"",toastTone:"success",toastSequence:0,busyKeys:[],error:"",accountFetchState:{},wardFetchState:{},cartProductState:{},cartProductNotice:{}
 };

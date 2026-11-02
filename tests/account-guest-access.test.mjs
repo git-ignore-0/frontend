@@ -35,7 +35,7 @@ function renderAccount(auth){
     };
     if(id==="@/data/account-navigation")return loadNavigation();
     if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
-    if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi",accountTab:"csa",accountHubOpen:true},patch:()=>{}})};
+    if(id==="@/state/NFVContext")return {useNFV:()=>({accountSessionKey:auth.status==="authenticated"?auth.session?.subject:"guest",ui:{locale:"vi",accountTab:"csa",accountHubOpen:true},patch:()=>{}})};
     if(id==="@/auth/AuthProvider")return {useAuth:()=>auth};
     if(id==="@/screens/AccountOrders")return {OrdersView:()=>null};
     if(id==="@/screens/AccountProfile")return {AddressView:()=>null,ProfileView:()=>null};

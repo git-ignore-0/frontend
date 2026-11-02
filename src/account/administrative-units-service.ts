@@ -22,3 +22,14 @@ export async function getAdministrativeWards(provinceCode:string,locale:Locale):
   const payload=await accountApi(`administrative-wards?province=${encodeURIComponent(provinceCode)}`,{headers:{"Accept-Language":locale}});
   return unitsFrom(payload.data);
 }
+
+export async function resolveAdministrativeAddressNames(provinceCode:string,wardCode:string,locale:Locale):Promise<{provinceName:string;wardName:string}>{
+  const [provinces,wards]=await Promise.all([
+    getAdministrativeProvinces(locale),
+    getAdministrativeWards(provinceCode,locale),
+  ]);
+  return {
+    provinceName:provinces.find(item=>item.code===provinceCode)?.name??provinceCode,
+    wardName:wards.find(item=>item.code===wardCode)?.name??wardCode,
+  };
+}

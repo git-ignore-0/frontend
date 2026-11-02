@@ -18,3 +18,5 @@
 
 
 .nfv-photo-placeholder{width:100%;height:100%;min-height:100px;display:flex;align-items:center;justify-content:center;background:#f4f6f1;color:#7d927b}.nfv-photo-placeholder .nfv-photo-empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;position:static}.nfv-photo-placeholder .photo-placeholder-icon{display:flex}
+.acc-detail-thumb .nfv-photo-placeholder,.drawer-thumb .nfv-photo-placeholder{min-height:0}
+.acc-detail-thumb .nfv-photo-empty,.drawer-thumb .nfv-photo-empty{position:absolute;inset:0;font-size:0;gap:0}

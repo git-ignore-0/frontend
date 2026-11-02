@@ -71,7 +71,7 @@ function DebouncedStoreSearch({initialValue,placeholder,onCommit}:{initialValue:
 }
 
 export function Store(){
- const {ui,navigate}=useNFV(),locale=ui.locale,copy=STORE_COPY[locale];
+ const {ui,navigate,cacheStoreProducts}=useNFV(),locale=ui.locale,copy=STORE_COPY[locale];
  const catalog=useStoreCatalog(locale),{setQuery}=catalog;
  const [categoryOpen,setCategoryOpen]=useState(false),[filterOpen,setFilterOpen]=useState(false),[expanded,setExpanded]=useState<string[]>([]);
  const tree=useMemo(()=>categoryTree(catalog.categories),[catalog.categories]);
@@ -79,6 +79,7 @@ export function Store(){
  const active=Number(!!catalog.query.csaEligible)+Number(catalog.priceBand!=="all");
  const totalPages=Math.max(1,Math.ceil(catalog.meta.total/catalog.meta.page_size));
  useEffect(()=>{if(catalog.state==="ready"&&catalog.products.length===0&&catalog.query.page>1)setQuery({page:totalPages},{replace:true})},[catalog.products.length,catalog.query.page,catalog.state,setQuery,totalPages]);
+ useEffect(()=>{if(catalog.state==="ready")cacheStoreProducts(catalog.products)},[cacheStoreProducts,catalog.products,catalog.state]);
  const currentSearch=catalog.query.search??"";
  const commitSearch=useCallback((value:string)=>{if(value!==currentSearch)setQuery({search:value||undefined,page:1})},[currentSearch,setQuery]);
  const selectCategory=(id?:string)=>{setQuery({categoryId:id,page:1});setCategoryOpen(false)};

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicSiteOrigin } from "@/auth/server/config";
 import { exchangeCode } from "@/auth/server/oauth";
-import { consumeOAuthFlow, writeSession } from "@/auth/server/session";
+import { consumeOAuthFlow, startSession } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${publicSiteOrigin()}/${flow?.locale ?? "en"}?auth=oauth`);
   }
   try {
-    await writeSession(await exchangeCode(code, flow.verifier));
+    await startSession(await exchangeCode(code, flow.verifier));
     return NextResponse.redirect(`${publicSiteOrigin()}${flow.returnTo}`);
   } catch {
     return NextResponse.redirect(`${publicSiteOrigin()}/${flow.locale}?auth=oauth`);

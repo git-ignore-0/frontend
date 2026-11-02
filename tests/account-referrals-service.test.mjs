@@ -180,9 +180,9 @@ test("referral sharing opens a dedicated dialog built from v1 primitives", () =>
   assert.match(shareDialogSource, /ResponsiveDialog/);
   assert.match(shareDialogSource, /<Button small onClick=/);
   assert.match(shareDialogSource, /<ActionLink/);
-  assert.match(shareDialogSource, /copyTextToClipboard/);
+  assert.match(shareDialogSource, /copyToClipboard/);
   assert.match(shareDialogSource, /buildReferralShareTargets/);
-  assert.match(shareDialogSource, /copyValue\(normalizedMessage,"message"\)/);
+  assert.match(shareDialogSource, /copyToClipboard\(normalizedMessage\)/);
   assert.match(shareDialogSource, /descriptionId=\{descriptionId\}/);
 });
 

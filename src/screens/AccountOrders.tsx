@@ -1,56 +1,108 @@
 "use client";
-import {PagedList} from "@/components/account/PagedList";
-import {useMemo,useState} from "react";
-import {Button,DataState,FormInput,Icon,MoneyLine,Photo,SearchField,Tabs} from "@/components/UI";
+import {useEffect,useRef,useState} from "react";
+import {Button,DataState,FormInput,Tabs,Status,Photo,Icon} from "@/components/UI";
+import {ListPaginationFooter} from "@/components/account/ListPaginationFooter";
+import {StoreSection} from "@/components/store/StorePrimitives";
 import {useNFV} from "@/state/NFVContext";
-import {dateLabel,money,isoDay} from "@/lib/format";
-import type {Locale,Order} from "@/types";
+import {useAuth} from "@/auth/AuthProvider";
+import {useStoreSession} from "@/store/use-store-session";
+import {currentLookupStoreOrder,getStoreOrders,lookupStoreOrder} from "@/store/store-order-service";
+import type {StoreOrder,StoreOrderStatus} from "@/store/store-order-model";
+import {StoreOrderDetail,STORE_STATUS} from "@/screens/store/StoreOrderDetail";
+import {money} from "@/lib/format";
+import {formatUnitSize} from "@/store/store-format";
+import {sanitizeVietnamPhoneInput} from "@/account/shipping-address-model";
+import {AccountApiError} from "@/account/account-api";
 
-const ORDER_COPY:Record<Locale,Record<string,string>>={
- vi:{all:"Tất cả",processing:"Đang xử lý",shipping:"Đang giao",completed:"Hoàn thành",cancelled:"Đã hủy",unknown:"Chưa xác định",rangeRequired:"Vui lòng chọn đủ ngày bắt đầu và kết thúc.",rangeOrder:"Ngày kết thúc không được trước ngày bắt đầu.",rangeLimit:"Mỗi lần tìm chỉ được chọn tối đa 30 ngày (tính cả hai ngày).",rangeFuture:"Ngày kết thúc không được lớn hơn ngày hôm nay.",time:"Thời gian",dateRange:"Chọn khoảng ngày tìm đơn",chooseRange:"Chọn khoảng thời gian",closeRange:"Đóng bảng chọn ngày",from:"Từ ngày",startDate:"Ngày bắt đầu",to:"Đến ngày",endDate:"Ngày kết thúc",last7:"7 ngày gần đây",last30:"30 ngày gần đây",rangeHint:"Chọn tối đa 30 ngày cho mỗi lần tìm. Có thể chọn khoảng ngày cũ.",apply:"Áp dụng",title:"Đơn hàng nông sản",search:"Tìm mã đơn hoặc sản phẩm",filterStatus:"Lọc theo trạng thái đơn hàng",empty:"Chưa có đơn hàng",units:"đơn vị",usedCsa:"Có dùng CSA",portions:"suất",goods:"Tiền hàng",viewDetail:"Xem chi tiết",noMatch:"Không có đơn phù hợp",tryOther:"Thử từ khóa, thời gian hoặc trạng thái khác.",ordersHere:"Các đơn hàng sẽ xuất hiện tại đây.",clear:"Xóa bộ lọc",backOrders:"Quay lại đơn hàng",back:"Quay lại Đơn hàng",account:"Tài khoản",detailEyebrow:"CHI TIẾT ĐƠN HÀNG",orderedOn:"Đặt ngày",products:"Sản phẩm đã đặt",delivery:"Giao / nhận hàng",recipient:"Người nhận",phone:"Số điện thoại",address:"Địa chỉ",method:"Phương thức",pickup:"Nhận tại điểm hẹn",deliveryAddress:"Giao tới địa chỉ",history:"Lịch sử đơn",support:"Liên hệ hỗ trợ",supportToast:"Thông tin liên hệ hỗ trợ thực tế cần kết nối với NFV.",costDetail:"Chi tiết tiền hàng",goodsAtOrder:"Tiền hàng tại lúc đặt",csaUsed:"Quyền lợi CSA đã dùng",notUsed:"Không dùng"},
- en:{all:"All",processing:"Processing",shipping:"Shipping",completed:"Completed",cancelled:"Cancelled",unknown:"Unknown",rangeRequired:"Select both a start date and an end date.",rangeOrder:"The end date cannot be before the start date.",rangeLimit:"Each search can cover no more than 30 days, including both dates.",rangeFuture:"The end date cannot be later than today.",time:"Period",dateRange:"Choose an order date range",chooseRange:"Choose a date range",closeRange:"Close date range",from:"From",startDate:"Start date",to:"To",endDate:"End date",last7:"Last 7 days",last30:"Last 30 days",rangeHint:"Choose up to 30 days per search. Older date ranges are supported.",apply:"Apply",title:"Produce orders",search:"Search order number or product",filterStatus:"Filter orders by status",empty:"No orders yet",units:"units",usedCsa:"CSA used",portions:"portions",goods:"Goods",viewDetail:"View details",noMatch:"No matching orders",tryOther:"Try another keyword, date range or status.",ordersHere:"Your orders will appear here.",clear:"Clear filters",backOrders:"Back to orders",back:"Back to Orders",account:"Account",detailEyebrow:"ORDER DETAILS",orderedOn:"Ordered on",products:"Ordered products",delivery:"Delivery / pickup",recipient:"Recipient",phone:"Phone number",address:"Address",method:"Method",pickup:"Pickup at meeting point",deliveryAddress:"Deliver to address",history:"Order history",support:"Contact support",supportToast:"Support contact information still needs to be connected to NFV.",costDetail:"Order cost details",goodsAtOrder:"Goods total when ordered",csaUsed:"CSA benefit used",notUsed:"Not used"}
-};
-
-const dayNumber=(text:string)=>{const d=Date.parse(text);return Number.isFinite(d)?Math.floor(d/86400000):NaN;};
-export function checkOrderRange(start:string,end:string,locale:Locale="vi"){
- const copy=ORDER_COPY[locale],a=dayNumber(start),b=dayNumber(end),today=dayNumber(isoDay(new Date()));
- if(!Number.isFinite(a)||!Number.isFinite(b))return copy.rangeRequired;
- if(b<a)return copy.rangeOrder;if(b-a>29)return copy.rangeLimit;if(b>today)return copy.rangeFuture;return "";
+const C={vi:{title:"Đơn hàng nông sản",loading:"Đang tải đơn hàng…",failed:"Không thể tải đơn hàng",empty:"Chưa có đơn hàng",retry:"Thử lại",all:"Tất cả",previous:"Trước",next:"Sau",view:"Xem chi tiết",lookup:"Kiểm tra đơn hàng",lookupIntro:"Nhập mã đơn và số điện thoại đã dùng khi đặt. Không cần đăng nhập.",reference:"Mã đơn",phone:"Số điện thoại",find:"Tra cứu",notFound:"Không tìm thấy đơn hàng với thông tin này.",limited:"Bạn đã thử quá nhiều lần. Vui lòng chờ rồi thử lại.",stale:"Chưa cập nhật được đơn hàng. Đang hiển thị dữ liệu lần tải trước.",session:"Phiên tra cứu đã hết hạn. Hãy nhập lại mã đơn và số điện thoại."},en:{title:"Produce orders",loading:"Loading orders…",failed:"Orders could not be loaded",empty:"No orders yet",retry:"Try again",all:"All",previous:"Previous",next:"Next",view:"View details",lookup:"Check an order",lookupIntro:"Enter the order code and phone number used at checkout. No sign-in is required.",reference:"Order code",phone:"Phone number",find:"Look up",notFound:"No order was found with this information.",limited:"Too many attempts. Wait before trying again.",stale:"Orders could not be refreshed. Showing the previously loaded data.",session:"The lookup session expired. Enter the order code and phone number again."}};
+const STATUSES:StoreOrderStatus[]=["payment_pending","pending_review","pending_delivery","delivered","cancelled"];
+function ordersVisible(active:boolean,hubOpen:boolean){
+ return active&&!(hubOpen&&typeof window!=="undefined"&&typeof window.matchMedia==="function"&&window.matchMedia("(max-width: 1023px)").matches);
 }
-function OrderStatus({order,locale}:{order:Order;locale:Locale}){const copy=ORDER_COPY[locale];const tones:Record<string,string>={processing:"processing",shipping:"shipping",completed:"completed",cancelled:"cancelled"};return <span className={`acc-status ${tones[order.status]||"neutral"}`}>{copy[order.status]||copy.unknown}</span>;}
-function DateRange(){
- const {ui,patch}=useNFV(),copy=ORDER_COPY[ui.locale];
- const [start,setStart]=useState(ui.orderStart),[end,setEnd]=useState(ui.orderEnd);const error=checkOrderRange(start,end,ui.locale),today=isoDay(new Date());
- const preset=(days:number)=>{const d=new Date();d.setDate(d.getDate()-days+1);setStart(isoDay(d));setEnd(today);};
- return <div className="hist-period order-date-filter"><span className="order-date-caption">{copy.time}</span><button className="order-date-trigger" aria-expanded={ui.orderDateOpen} onClick={()=>{setStart(ui.orderStart);setEnd(ui.orderEnd);patch({orderDateOpen:!ui.orderDateOpen});}}><Icon name="clock" size={14}/> <span className="order-date-current">{dateLabel(ui.orderStart)} – {dateLabel(ui.orderEnd)}</span><span className="order-date-caret">▾</span></button>
-   {ui.orderDateOpen&&<div className="order-date-panel" id="orderDatePanel" role="group" aria-label={copy.dateRange}><div className="order-date-panel-heading"><strong>{copy.chooseRange}</strong><button onClick={()=>patch({orderDateOpen:false})} aria-label={copy.closeRange}>×</button></div>
-     <div className="order-date-fields"><label>{copy.from} <FormInput type="date" aria-label={copy.startDate} value={start} max={today} onChange={e=>setStart(e.target.value)}/></label><label>{copy.to} <FormInput type="date" aria-label={copy.endDate} value={end} max={today} onChange={e=>setEnd(e.target.value)}/></label></div>
-     <div className="order-date-quick"><button onClick={()=>preset(7)}>{copy.last7}</button><button onClick={()=>preset(30)}>{copy.last30}</button></div><p className="order-date-hint">{copy.rangeHint}</p><p className="order-date-error" role="alert">{error}</p><Button small className="order-date-apply" disabled={!!error} onClick={()=>patch({orderStart:start,orderEnd:end,orderDateOpen:false,visible:{...ui.visible,orders:7}})}>{copy.apply}</Button>
-   </div>}</div>;
+export function OrdersView({active=true}:{active?:boolean}={}){
+ const storeRequest=useStoreSession();
+ const {ui,navigate}=useNFV(),copy=C[ui.locale],auth=useAuth();
+ const owner=auth.status==="authenticated"?auth.session?.subject??"":auth.status;
+ const [resultOwner,setResultOwner]=useState(owner);
+ const [items,setItems]=useState<StoreOrder[]>([]),[page,setPage]=useState(1),[total,setTotal]=useState(0),[status,setStatus]=useState<StoreOrderStatus|undefined>(),[state,setState]=useState("loading");
+ const seq=useRef(0),queryOwner=useRef(owner),request=useRef<number|null>(null);
+ const previousActive=useRef({owner,active});
+ const [refreshError,setRefreshError]=useState(false);
+ const cache=useRef(new Map<string,{items:StoreOrder[];total:number;page:number;receivedAt:number}>());
+ const cacheKey=(filter:StoreOrderStatus|undefined)=>JSON.stringify([owner,filter??"all"]);
+ const cachedFor=(filter:StoreOrderStatus|undefined)=>{
+  const all=cache.current.get(cacheKey(undefined)),saved=cache.current.get(cacheKey(filter));
+  if(filter&&all&&Date.now()-all.receivedAt<60000&&all.items.length>=all.total){const filtered=all.items.filter(order=>order.status===filter);return {items:filtered,total:filtered.length,page:1,receivedAt:all.receivedAt}}
+  return saved&&Date.now()-saved.receivedAt<60000?saved:undefined;
+ };
+ const load=async()=>{
+  const current=++seq.current;request.current=current;
+  try{
+   const result=await storeRequest(()=>getStoreOrders({page,status}));
+   if(current!==seq.current)return;
+   const previous=cache.current.get(cacheKey(status))?.items??[];
+   const next=page===1?result.items:[...previous,...result.items.filter(item=>!previous.some(existing=>existing.id===item.id))];
+   cache.current.set(cacheKey(status),{items:next,total:result.meta.total,page,receivedAt:Date.now()});
+   setItems(next);setTotal(result.meta.total);setResultOwner(owner);setState("ready");setRefreshError(false);
+  }catch{if(current===seq.current){setResultOwner(owner);setState(page===1?"error":"more_error")}}
+  finally{if(request.current===current)request.current=null}
+ };
+ const refresh=async()=>{
+  const saved=cache.current.get(cacheKey(status));
+  if(!ordersVisible(active,ui.accountHubOpen)||auth.status!=="authenticated"||request.current!==null||!saved||document.visibilityState==="hidden")return;
+  const current=++seq.current;request.current=current;
+  try{
+   const first=await storeRequest(()=>getStoreOrders({page:1,status}));
+   if(current!==seq.current)return;
+   const loadedPages=Math.max(saved.page,Math.ceil(saved.items.length/20));
+   const lastPage=Math.min(loadedPages,Math.max(1,Math.ceil(first.meta.total/20)));
+   const next=[...first.items],known=new Set(next.map(item=>item.id));
+   for(let index=2;index<=lastPage;index++){
+    const result=await storeRequest(()=>getStoreOrders({page:index,status}));
+    if(current!==seq.current)return;
+    for(const item of result.items)if(!known.has(item.id)){next.push(item);known.add(item.id)}
+   }
+   // A refreshed status can invalidate every filter projection. Publish loaded pages together.
+   cache.current.clear();cache.current.set(cacheKey(status),{items:next,total:first.meta.total,page:lastPage,receivedAt:Date.now()});
+   setItems(next);setTotal(first.meta.total);setPage(lastPage);setResultOwner(owner);setState("ready");setRefreshError(false);
+  }catch{if(current===seq.current)setRefreshError(true)}
+  finally{if(request.current===current)request.current=null}
+ };
+ const selectStatus=(next:StoreOrderStatus|undefined)=>{if(next===status)return;seq.current+=1;request.current=null;const saved=cachedFor(next);if(saved)cache.current.set(cacheKey(next),saved);setStatus(next);setPage(saved?.page??1);setItems(saved?.items??[]);setTotal(saved?.total??0);setResultOwner(owner);setState(saved?"ready":"loading");setRefreshError(false)};
+ // Each filter owns its request; complete All results can answer a filter locally.
+ // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+ useEffect(()=>{if(queryOwner.current!==owner){queryOwner.current=owner;cache.current.clear();setItems([]);setRefreshError(false);if(page!==1){setPage(1);return}}if(auth.status==="authenticated"){const saved=cachedFor(status);if(saved&&saved.page===page){cache.current.set(cacheKey(status),saved);setItems(saved.items);setTotal(saved.total);setResultOwner(owner);setState("ready")}else{setState(page===1?"loading":"loading_more");void load()}}return()=>{seq.current+=1;request.current=null}},[page,status,owner]);
+ useEffect(()=>{
+  const visible=ordersVisible(active,ui.accountHubOpen);
+  const previous=previousActive.current;previousActive.current={owner,active:visible};
+  if(!visible||auth.status!=="authenticated"||typeof window==="undefined")return;
+  if(previous.owner===owner&&!previous.active)void refresh();
+  const onFocus=()=>{void refresh()};
+  window.addEventListener("focus",onFocus);
+  return()=>window.removeEventListener("focus",onFocus);
+  // The current filter/page owns the listener; snapshot updates must not restart requests.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[active,owner,page,status,ui.accountHubOpen]);
+ const viewState=resultOwner===owner&&auth.status==="authenticated"?state:"loading";
+ return <StoreSection title={copy.title} className="store-commerce store-orders"><Tabs label={copy.title} value={status??"all"} items={[{value:"all",label:copy.all},...STATUSES.map(value=>({value,label:STORE_STATUS[value][ui.locale]}))]} onChange={value=>selectStatus(value==="all"?undefined:value as StoreOrderStatus)}/>{refreshError&&<DataState compact kind="error" title={copy.stale} action={{label:copy.retry,onClick:()=>void refresh()}}/>}{viewState==="loading"?<DataState kind="loading" title={copy.loading}/>:viewState==="error"?<DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/>:items.length?<><div className="store-order-list">{items.map(order=><article className="store-order-card" key={order.id}>
+ <div className="store-order-top"><div className="store-order-identity"><strong className="store-order-id">{order.referenceCode}</strong><time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></div><Status status={order.status==="payment_pending"||order.status==="pending_review"?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={STORE_STATUS[order.status][ui.locale]}/></div>
+ <div className="store-order-body"><ul className="store-order-preview">{order.lines.map(line=><li key={line.id}><span className="store-product-image"><Photo src={line.imageUrl??undefined} alt={line.name} locale={ui.locale}/></span><div><strong>{line.name}</strong><span>{line.quantity} × {formatUnitSize(line.unitSize)} {line.unitLabel}</span></div></li>)}</ul><strong className="price store-order-total">{money(order.totalVnd)}</strong></div>
+ <div className="store-order-footer"><Button small variant="plain" onClick={()=>navigate("order-detail",{productId:order.id,tab:"orders"})}>{copy.view}<Icon name="arrow" size={15}/></Button></div>
+ </article>)}</div><ListPaginationFooter locale={ui.locale} shown={items.length} total={total} hasMore={items.length<total||state==="more_error"} pageSize={20} pending={state==="loading_more"} failed={state==="more_error"} onMore={()=>{if(state==="loading_more")return;setState("loading_more");if(state==="more_error")void load();else setPage(page+1)}}/></>:<DataState title={copy.empty}/>}</StoreSection>;
 }
-
-export function OrdersView(){
- const {data,ui,patch,navigate}=useNFV(),copy=ORDER_COPY[ui.locale];
- const all=useMemo(()=>[...data.orders].sort((a,b)=>dayNumber(b.date)-dayNumber(a.date)),[data.orders]);
- const period=all.filter(o=>{const day=dayNumber(o.date);return day>=dayNumber(ui.orderStart)&&day<=dayNumber(ui.orderEnd);});
- const orders=period.filter(o=>(ui.orderStatus==="all"||o.status===ui.orderStatus)&&(!ui.orderSearch.trim()||[o.id,...o.lines.map(l=>l.name)].join(" ").toLocaleLowerCase(ui.locale).includes(ui.orderSearch.trim().toLocaleLowerCase(ui.locale))));
- const clear=()=>{const d=new Date(),prev=new Date();prev.setDate(d.getDate()-29);patch({orderSearch:"",orderStatus:"all",orderStart:isoDay(prev),orderEnd:isoDay(d),orderDateOpen:false,visible:{...ui.visible,orders:7}});};
- const filterItems=["all","processing","shipping","completed","cancelled"].map(value=>({value,label:copy[value],count:value==="all"?period.length:period.filter(o=>o.status===value).length}));
- return <section className="acc-section nfv-orders-section"><div className="acc-heading"><div><h2>{copy.title}</h2></div></div><div className="hist-control-head"><div className="acc-search-row"><SearchField small id="accountOrderSearch" value={ui.orderSearch} onChange={v=>patch({orderSearch:v,visible:{...ui.visible,orders:7}})} placeholder={copy.search}/><DateRange/></div></div><Tabs items={filterItems} value={ui.orderStatus} onChange={v=>patch({orderStatus:v,visible:{...ui.visible,orders:7}})} label={copy.filterStatus}/>
-   <div id="accountOrdersList" className="account-orders-list">{orders.length?<PagedList kind="orders" items={orders} emptyTitle={copy.empty} render={o=><article className="acc-order" key={o.id}><div className="acc-order-top"><div className="hist-shrink"><button className="acc-order-id" onClick={()=>navigate("order-detail",{productId:o.id})}>{o.id}</button><div className="acc-subline">{dateLabel(o.date)} · {o.count} {copy.units}</div></div><OrderStatus order={o} locale={ui.locale}/></div>
-     <div className="acc-order-mid"><div className="acc-order-thumbs">{o.lines.slice(0,3).map((line,i)=>{const p=data.products.find(x=>x.name===line.name);return <span className={`acc-thumb ${p?"":"acc-thumb-text"}`} key={i}>{p?<Photo src={p.image} alt={line.name} locale={ui.locale}/>:<Icon name="leaf" size={14}/>}</span>;})}</div><div className="acc-order-names">{o.lines.map(l=>l.name).join(", ")}<small>{o.credits?`${copy.usedCsa} · ${o.credits} ${copy.portions}`:""}</small></div><div className="acc-order-total">{money(o.total)}<small>{copy.goods}</small></div></div>
-     <div className="acc-order-bottom"><Button small variant="plain" onClick={()=>navigate("order-detail",{productId:o.id})}>{copy.viewDetail} <Icon name="arrow" size={14}/></Button></div></article>}/>:<DataState icon="search" title={all.length?copy.noMatch:copy.empty} description={all.length?copy.tryOther:copy.ordersHere} action={all.length?{label:copy.clear,onClick:clear}:undefined}/>}</div>
- </section>;
-}
-
-export function OrderDetail(){
- const {data,ui,navigate,patch}=useNFV(),copy=ORDER_COPY[ui.locale];const order=data.orders.find(o=>o.id===ui.productId);
- if(!order)return <main className="main-content"><div className="container"><DataState title={copy.empty} action={{label:copy.backOrders,onClick:()=>navigate("account",{tab:"orders",hub:false})}}/></div></main>;
- return <main className="main-content order-detail-page"><div className="container"><button className="mobile-order-back" onClick={()=>navigate("account",{tab:"orders",hub:false})}><Icon name="back" size={16}/> {copy.back}</button><div className="breadcrumbs"><button onClick={()=>navigate("account")}>{copy.account}</button><Icon name="chev" size={13}/><button onClick={()=>navigate("account",{tab:"orders",hub:false})}>{copy.title}</button><Icon name="chev" size={13}/><strong>{order.id}</strong></div>
-   <div className="account-title" style={{marginBottom:18}}><div><span className="eyebrow">{copy.detailEyebrow}</span><div className="order-detail-heading-line"><h1>{order.id}</h1><OrderStatus order={order} locale={ui.locale}/></div><span className="sm muted">{copy.orderedOn} {dateLabel(order.date)}</span></div></div>
-   <div className="checkout-layout order-detail-layout"><section className="acc-section order-detail-products"><div className="acc-heading"><h2>{copy.products}</h2></div><div className="acc-detail-lines">{order.lines.map((l,i)=>{const p=data.products.find(p=>p.name===l.name);return <div className="acc-detail-line" key={i}><span className="acc-detail-thumb">{p?<Photo src={p.image} alt={l.name} locale={ui.locale}/>:<Icon name="leaf" size={16}/>}</span><div className="grow"><strong>{l.name}</strong><small>{l.unit} · {l.qty} × {money(l.price)}</small></div><strong>{money(l.qty*l.price)}</strong></div>;})}</div></section>
-   <section className="acc-section order-detail-shipping"><div className="acc-heading"><h2>{copy.delivery}</h2></div><div className="acc-info-grid"><div><span>{copy.recipient}</span><strong>{order.name}</strong></div><div><span>{copy.phone}</span><strong>{order.phone}</strong></div><div className="acc-wide"><span>{copy.address}</span><strong>{order.address}</strong></div><div><span>{copy.method}</span><strong>{order.shipping==="pickup"?copy.pickup:copy.deliveryAddress}</strong></div></div></section>
-   <div className="acc-detail-actions order-detail-actions"><Button small variant="outline" onClick={()=>navigate("account",{tab:"orders",hub:false})}><Icon name="back" size={14}/> {copy.history}</Button><Button small variant="plain" onClick={()=>patch({toast:copy.supportToast})}><Icon name="info" size={14}/> {copy.support}</Button></div>
-   <aside className="checkout-summary order-detail-cost" aria-label={copy.costDetail}><h3>{copy.costDetail}</h3><MoneyLine label={copy.goodsAtOrder} value={money(order.subtotal)}/><MoneyLine label={copy.csaUsed} value={order.credits?`−${money(order.saved)} (${order.credits} ${copy.portions})`:copy.notUsed}/><hr className="summary-divider"/><MoneyLine label={copy.goods} value={money(order.total)} large/></aside></div>
- </div></main>;
+export function OrderDetail(){const {ui}=useNFV();return <main className="main-content"><StoreOrderDetail id={ui.productId} locale={ui.locale} returnTo={ui.accountTab==="csa"?"csa":"orders"}/></main>}
+export function GuestOrderLookup(){
+ const {ui}=useNFV(),copy=C[ui.locale];
+ const [reference,setReference]=useState(""),[phone,setPhone]=useState(""),[order,setOrder]=useState<StoreOrder|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const sequence=useRef(0),submitting=useRef(false);
+ useEffect(()=>{const request=++sequence.current;currentLookupStoreOrder().then(value=>{if(request===sequence.current)setOrder(value)}).catch(()=>{});return()=>{sequence.current+=1}},[]);
+ const submit=async(event:React.FormEvent)=>{
+  event.preventDefault();if(!reference.trim()||!phone.trim()||submitting.current)return;
+  const request=++sequence.current;submitting.current=true;setBusy(true);setError("");
+  try{const value=await lookupStoreOrder(reference.trim().toUpperCase(),phone);if(request===sequence.current)setOrder(value)}
+  catch(reason){if(request===sequence.current){setOrder(null);setError(reason instanceof AccountApiError&&reason.status===429?copy.limited:reason instanceof AccountApiError&&reason.status===404?copy.notFound:copy.failed)}}
+  finally{if(request===sequence.current){submitting.current=false;setBusy(false)}}
+ };
+ if(order)return <section className="account-guest-order-result"><Button variant="outline" onClick={()=>{sequence.current+=1;setOrder(null)}}>{copy.lookup}</Button><StoreOrderDetail key={order.id} id={order.id} locale={ui.locale} initialOrder={order} onLoaded={setOrder} loadOrder={()=>currentLookupStoreOrder()} readOnly/></section>;
+ return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup"><p>{copy.lookupIntro}</p><form className="form-grid" onSubmit={submit}><div><label className="label" htmlFor="guestOrderReference">{copy.reference}</label><FormInput id="guestOrderReference" maxLength={24} autoComplete="off" value={reference} onChange={event=>setReference(event.target.value.toUpperCase())}/></div><div><label className="label" htmlFor="guestOrderPhone">{copy.phone}</label><FormInput id="guestOrderPhone" autoComplete="tel" value={phone} onChange={event=>setPhone(sanitizeVietnamPhoneInput(event.target.value))}/></div><div className="wide"><Button type="submit" loading={busy} disabled={busy||!reference.trim()||!phone.trim()}>{copy.find}</Button></div></form>{error&&<p className="help-error" role="alert">{error}</p>}</StoreSection>;
 }

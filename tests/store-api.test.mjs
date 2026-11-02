@@ -81,7 +81,7 @@ function runRoute(path,{result={data:[]},error=null}={}){
 const image={id:"7346d93d-ff39-44b0-81b8-d25191f4a616",url:"/media/products/tomato.webp",width:1600,height:1200,variants:[{url:"https://cdn.example/tomato-640.webp",width:640,height:480}]};
 const category={id:"e55e4778-0528-4594-a4bf-cab97007c50f",parent_id:null,slug:"vegetables",sort_order:2,name:"Vegetables",requested_locale:"en",content_locale:"en",is_fallback:false};
 const csaQuotaGroup={id:"b2027dcb-49cc-4610-b57d-586d5a0f02b8",name:"Vegetables",cost:1};
-const product={id:"5a9ec50d-0dc7-4dbc-a9db-202c5436420f",slug:"tomato",sku:"TOMATO",name:"Tomato",alternate_name:"Cà chua",short_description:"Fresh",retail_price_vnd:45000,unit_size:"1.000",unit_label:"kg",category:{id:category.id,slug:category.slug,name:category.name},primary_image:image,csa_quota_group:csaQuotaGroup,suppliers:[{id:"28e3d9cc-5bef-469f-a1de-dc77f2c5dac7",name:"Farm A"}],requested_locale:"en",content_locale:"en",available_locales:["en","vi"],is_fallback:false};
+const product={id:"5a9ec50d-0dc7-4dbc-a9db-202c5436420f",slug:"tomato",sku:"TOMATO",name:"Tomato",alternate_name:"Cà chua",short_description:"Fresh",retail_price_vnd:45000,available_quantity:10,unit_size:"1.000",unit_label:"kg",category:{id:category.id,slug:category.slug,name:category.name},primary_image:image,csa_quota_group:csaQuotaGroup,suppliers:[{id:"28e3d9cc-5bef-469f-a1de-dc77f2c5dac7",name:"Farm A"}],requested_locale:"en",content_locale:"en",available_locales:["en","vi"],is_fallback:false};
 
 test("Store runtime parsers accept the exact public contract and normalize safe media URLs",()=>{
  const model=loadModel();
@@ -90,6 +90,7 @@ test("Store runtime parsers accept the exact public contract and normalize safe 
  const page=model.parseStorePage({data:[product],meta:{page:1,page_size:12,total:1}});
  assert.equal(page.data[0].primary_image.url,"https://naturalfarmingvietnam.com/media/products/tomato.webp");
  assert.equal(page.data[0].retail_price_vnd,45000);
+ assert.equal(page.data[0].available_quantity,10);
  assert.deepEqual(JSON.parse(JSON.stringify(page.data[0].csa_quota_group)),csaQuotaGroup);
  const retailPage=model.parseStorePage({data:[{...product,csa_quota_group:null}],meta:{page:1,page_size:12,total:1}});
  assert.equal(retailPage.data[0].csa_quota_group,null);

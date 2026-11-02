@@ -18,10 +18,7 @@ export class PublicSessionInvalidError extends Error {}
 export class AuthServiceUnavailableError extends Error {
   readonly rotatedSession?: PublicSession;
 
-  constructor(
-    message: string,
-    options?: ErrorOptions & { rotatedSession?: PublicSession },
-  ) {
+  constructor(message: string, options?: ErrorOptions & { rotatedSession?: PublicSession }) {
     super(message, options);
     this.rotatedSession = options?.rotatedSession;
   }
@@ -34,7 +31,9 @@ async function authFetch(input: string, init: RequestInit = {}): Promise<Respons
       signal: init.signal ?? AbortSignal.timeout(AUTH_TIMEOUT_MS),
     });
   } catch (error) {
-    throw new AuthServiceUnavailableError("Core Auth is unavailable", { cause: error });
+    throw new AuthServiceUnavailableError("Core Auth is unavailable", {
+      cause: error,
+    });
   }
 }
 
@@ -56,15 +55,18 @@ async function tokenRequest(parameters: URLSearchParams) {
     cache: "no-store",
   });
   if (!response.ok) {
-    const ErrorType = response.status === 400 || response.status === 401
-      ? PublicSessionInvalidError
-      : AuthServiceUnavailableError;
+    const ErrorType =
+      response.status === 400 || response.status === 401
+        ? PublicSessionInvalidError
+        : AuthServiceUnavailableError;
     throw new ErrorType(`OAuth token request failed (${response.status})`);
   }
   try {
     return parseTokenResponse(await response.json());
   } catch (error) {
-    throw new AuthServiceUnavailableError("Core Auth returned an invalid token response", { cause: error });
+    throw new AuthServiceUnavailableError("Core Auth returned an invalid token response", {
+      cause: error,
+    });
   }
 }
 
@@ -82,17 +84,21 @@ async function fetchCoreUser(accessToken: string) {
   try {
     return parseMeResponse(await response.json());
   } catch (error) {
-    throw new AuthServiceUnavailableError("Core Auth returned an invalid profile response", { cause: error });
+    throw new AuthServiceUnavailableError("Core Auth returned an invalid profile response", {
+      cause: error,
+    });
   }
 }
 
 export async function exchangeCode(code: string, verifier: string): Promise<PublicSession> {
-  const token = await tokenRequest(new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    code_verifier: verifier,
-    redirect_uri: `${publicSiteOrigin()}/api/auth/callback`,
-  }));
+  const token = await tokenRequest(
+    new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      code_verifier: verifier,
+      redirect_uri: `${publicSiteOrigin()}/api/auth/callback`,
+    }),
+  );
   return {
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? "",
@@ -103,12 +109,15 @@ export async function exchangeCode(code: string, verifier: string): Promise<Publ
 
 export async function refreshPublicSession(session: PublicSession): Promise<PublicSession> {
   if (!session.refreshToken) throw new PublicSessionInvalidError("Session cannot be refreshed");
-  const token = await tokenRequest(new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: session.refreshToken,
-    scope: PUBLIC_SCOPES,
-  }));
+  const token = await tokenRequest(
+    new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: session.refreshToken,
+      scope: PUBLIC_SCOPES,
+    }),
+  );
   const rotatedSession: PublicSession = {
+    ...session,
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? session.refreshToken,
     expiresAt: Date.now() + token.expires_in * 1000,
@@ -128,14 +137,19 @@ export async function refreshPublicSession(session: PublicSession): Promise<Publ
 }
 
 export function sessionTokensChanged(previous: PublicSession, current: PublicSession): boolean {
-  return previous.accessToken !== current.accessToken ||
+  return (
+    previous.accessToken !== current.accessToken ||
     previous.refreshToken !== current.refreshToken ||
-    previous.expiresAt !== current.expiresAt;
+    previous.expiresAt !== current.expiresAt
+  );
 }
 
 export async function currentPublicSession(session: PublicSession): Promise<PublicSession> {
   if (session.expiresAt < Date.now() + 30_000) {
-    const fingerprint = crypto.createHash("sha256").update(session.refreshToken).digest("base64url");
+    const fingerprint = crypto
+      .createHash("sha256")
+      .update(session.refreshToken)
+      .digest("base64url");
     const active = refreshes.get(fingerprint);
     if (active) return active;
     const refresh = refreshPublicSession(session).finally(() => {

@@ -2,7 +2,7 @@
 import {PagedList} from "@/components/account/PagedList";
 import {ReferralShareDialog} from "@/components/account/ReferralShareDialog";
 /* eslint-disable @next/next/no-img-element -- exact v61 gift-image DOM and unknown backend image URLs. */
-import {useRef,useState, type FormEvent, type ReactNode} from "react";
+import {useEffect,useRef,useState, type FormEvent, type ReactNode} from "react";
 import {IconButton} from "@/components/overlays/OverlayPrimitives";
 import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
 import {ActionLink,Button,DataState,Icon,Section,localized} from "@/components/UI";
@@ -16,7 +16,6 @@ import {redemptionErrorCopyKey,redemptionStatus} from "@/account/redemption-pres
 import {applyRedemptionResult} from "@/account/redemption-state";
 import {isReferralCode,normalizeReferralCode,referralErrorCopyKey,referralInvitePresentation} from "@/account/referral-presentation";
 import {mergeReferralSummary} from "@/account/referral-state";
-import {copyTextToClipboard} from "@/account/referral-share";
 import type {AccountTab,CSAQuota,CSAUsage,Gift,Invitee,RewardEntry,Resource,Paged,Referrals} from "@/types";
 
 function MetricBadge({children,tone="neutral"}:{children:ReactNode;tone?:string}){
@@ -117,20 +116,23 @@ function GiftRow({gift}:{gift:Gift}){
    <Button small variant={enough?"primary":"outline"} disabled={!enough} onClick={()=>patch({giftIntent:beginRedemptionIntent(gift.id)})}>{enough?L("rewards.redeem"):L("rewards.unavailable")}</Button></article>;
 }
 function GiftModal(){
- const {data,ui,patch,setData,call,act}=useNFV();const intent=ui.giftIntent;const gift=data.rewards?.gifts?.find(g=>g.id===intent?.giftId);
+ const {data,ui,patch,setUI,setData,call,act}=useNFV();const intent=ui.giftIntent;const gift=data.rewards?.gifts?.find(g=>g.id===intent?.giftId);
  const panelRef=useRef<HTMLElement>(null);
  const close=()=>{if(!ui.busyKeys.includes("gift:redeem"))patch({giftIntent:null});};
  useOverlayDialog({panelRef,onClose:close});
  if(!gift||!intent)return null;
  const L=(key:string)=>copyText(ui.locale,key),done=intent.phase==="success",error=intent.phase==="error";
  const balance=Number(data.rewards?.balance||0),points=Number(gift.points||0);
- const confirm=async()=>{
+ const setPhase=(phase:"error"|"success")=>setUI(state=>state.giftIntent?.idempotencyKey===intent.idempotencyKey?{...state,giftIntent:{...state.giftIntent,phase}}:state);
+ const confirm=()=>{
    const request=redemptionRequest(intent);
-   const res=await act("gift:redeem",()=>call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",request));
-   if(res?.accepted!==true){patch({giftIntent:{...intent,phase:"error"}});return;}
-   setData(s=>({...s,rewards:res.rewards||(res.redemption&&typeof res.balance==="number"?applyRedemptionResult(s.rewards,{balance:res.balance,redemption:res.redemption}):s.rewards)}));
-   patch({giftIntent:{...intent,phase:"success"}});
+   return act("gift:redeem",()=>call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",request),undefined,res=>{
+     if(res?.accepted!==true){setPhase("error");return;}
+     setData(s=>({...s,rewards:res.rewards||(res.redemption&&typeof res.balance==="number"?applyRedemptionResult(s.rewards,{balance:res.balance,redemption:res.redemption}):s.rewards)}));
+     setPhase("success");
+   });
  };
+
  return <div className="benefit-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}><section ref={panelRef} className="benefit-modal" role="dialog" aria-modal="true" aria-labelledby="giftModalTitle" tabIndex={-1}>
    <div className="benefit-modal-head"><h2 id="giftModalTitle">{L(done?"rewards.successTitle":error?"rewards.errorTitle":"rewards.modalTitle")}</h2><IconButton onClick={close} label={L("common.close")}/></div>
    {done?<p className="benefit-modal-copy">{L("rewards.successDesc")}</p>:error?<p className="benefit-modal-copy" role="alert">{L(redemptionErrorCopyKey(ui.error))}</p>:
@@ -148,43 +150,64 @@ function RewardsGifts(){
    </BenefitSection><BenefitSection title={L("rewards.history")}><div className="benefit-history-host"><RewardsHistory kind="redemptions"/></div></BenefitSection>
    {ui.giftIntent&&<GiftModal/>}</div>;
 }
-function QuotaRow({quota:q}:{quota:CSAQuota}){
+export function QuotaRow({quota:q}:{quota:CSAQuota}){
  const {ui}=useNFV();
- const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
- return <div className="csa-rights-row" role="row"><div className="csa-rights-product" role="cell"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><small>{total} {unit} / {ui.locale==="en"?"cycle":"kỳ"}</small></div><div className="csa-rights-metric is-available" role="cell"><strong>{remaining}</strong><small className="mobile-only">{ui.locale==="en"?"Available":"Còn có thể đặt"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</small></div><div className="csa-rights-metric" role="cell"><strong>—</strong><small className="mobile-only">{ui.locale==="en"?"Used":"Đã sử dụng"}</small></div></div>;
+ const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),reserved=q.reserved,used=q.used,unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
+ return <div className="csa-rights-row" role="row"><div className="csa-rights-product" role="cell"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><small>{total} {unit} / {ui.locale==="en"?"cycle":"kỳ"}</small></div><div className="csa-rights-metric is-available" role="cell"><strong>{remaining}</strong><small className="mobile-only">{ui.locale==="en"?"Available":"Còn có thể đặt"}</small></div><div className="csa-rights-metric" role="cell"><strong>{reserved??"—"}</strong><small className="mobile-only">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</small></div><div className="csa-rights-metric" role="cell"><strong>{used??"—"}</strong><small className="mobile-only">{ui.locale==="en"?"Used":"Đã sử dụng"}</small></div></div>;
 }
 function CSABenefits({status}:{status?:"loading"|"ready"|"error"}){
- const {data,ui,setData,call,act,navigate,refreshResource}=useNFV();const overview=data.csa,c=overview?.active,upcoming=overview?.upcoming||[];
- const [pageError,setPageError]=useState(false);
+ const {data,ui,setData,setUI,call,act,refreshResource}=useNFV();const overview=data.csa,c=overview?.active,upcoming=overview?.upcoming||[];
+ const [pageError,setPageError]=useState(false),historyEpoch=useRef(0);
+ useEffect(()=>{historyEpoch.current+=1;if(window.location.hash==="#csa-points-history")document.getElementById("csa-points-history")?.scrollIntoView({block:"start"});return()=>{historyEpoch.current+=1}},[c?.id]);
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
  const purchaseLabel=!c?.planName&&!upcoming.length?L("csa.explore"):c?.status==="ended"||c?.status==="revoked"?L("csa.registerAgain"):L("csa.managePurchase");
  const heading=<div className="csa-account-heading"><div><h2>{L("csa.title")}</h2><p>{L("navDesc.csa")}</p></div><ActionLink href={csaLandingHref(ui.locale,"packages")}>{purchaseLabel}</ActionLink></div>;
  if(!c?.planName)return <div className="benefits-page csa-benefits-page">{heading}<AccountCsaUpcoming items={upcoming} locale={ui.locale}/>{status==="loading"?<section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>:status==="error"?<section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource("csa")}}/></section>:!upcoming.length&&<BenefitSection title={L("csa.noPackage")} description={L("csa.noPackageDesc")}><ActionLink variant="outline" href={csaLandingHref(ui.locale,"packages")}>{L("csa.explore")}</ActionLink></BenefitSection>}</div>;
  const quotas=c.quotas||[],usage=c.usage||c.history||[],contract=c.contract||{},page=c.pagination?.usage||{};
- const loadMore=async()=>{if(!page.nextCursor)return;const result=await act("page:csa",()=>call<Paged<CSAUsage>>("getCsaUsagePage",{cursor:page.nextCursor,limit:30}));if(!result){setPageError(true);return;}const known=new Set(usage.map(item=>item.id));setData(state=>({...state,csa:state.csa?.active?{...state.csa,active:{...state.csa.active,usage:[...(state.csa.active.usage||[]),...result.items.filter(item=>!item.id||!known.has(item.id))],pagination:{...state.csa.active.pagination,usage:{nextCursor:result.nextCursor,total:result.total}}}}:state.csa}));setPageError(false);};
+ const loadMore=async()=>{
+  if(!page.nextCursor)return;
+  const epoch=historyEpoch.current;
+  const result=await act("page:csa",()=>call<Paged<CSAUsage>>("getCsaUsagePage",{cursor:page.nextCursor,limit:30}));
+  if(epoch!==historyEpoch.current)return;
+  if(!result||!result.items.length&&result.nextCursor===page.nextCursor){setPageError(true);return}
+  setData(state=>{
+   const overview=state.csa,active=overview?.active;
+   if(!overview||!active||active.id!==c.id)return state;
+   const current=active.usage||active.history||[],known=new Set(current.map(item=>item.id));
+   return {...state,csa:{...overview,active:{...active,usage:[...current,...result.items.filter(item=>!item.id||!known.has(item.id))],pagination:{...active.pagination,usage:{nextCursor:result.nextCursor,total:result.total}}}}};
+  });
+  setUI(state=>({...state,visible:{...state.visible,csa:(state.visible.csa||7)+7}}));setPageError(false);
+ };
+
  return <div className="benefits-page csa-benefits-page">{heading}<AccountCsaUpcoming items={upcoming} locale={ui.locale}/>
    <BenefitSection title={L("csa.currentPlan")} className="csa-current-section"><AccountCsaPlanSummary planName={localized(c as unknown as Record<string,unknown>,"planName",ui.locale)||L("csa.current")} statusLabel={L("csa."+c.status)} statusTone="completed" locale={ui.locale} durationMonths={c.durationMonths} amount={c.totalPriceVnd} startDate={c.startDate} endDate={c.endDate}/><div className="csa-contract-inline"><div className="csa-contract-meta"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{contract.number||L("csa.contractPending")}</strong>{contract.signedAt&&<span className="csa-contract-subtle">{L("csa.signed")} {dateLabel(contract.signedAt)}</span>}</div>{contract.downloadUrl?<ActionLink small variant="outline" className="csa-contract-action" href={contract.downloadUrl}><Icon name="file" size={14}/>{L("csa.viewContract")}</ActionLink>:<Button small variant="outline" className="csa-contract-action" disabled><Icon name="file" size={14}/>{L("csa.viewContract")}</Button>}</div>{quotas.length?<div className="csa-rights" role="table" aria-label={L("csa.quota")}><div className="csa-rights-header" role="row"><span role="columnheader">{ui.locale==="en"?"Produce group":"Nhóm nông sản"}</span><span role="columnheader">{ui.locale==="en"?"Available":"Còn có thể đặt"}</span><span role="columnheader">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</span><span role="columnheader">{ui.locale==="en"?"Used":"Đã sử dụng"}</span></div>{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>}</BenefitSection>
-   <BenefitSection title={L("csa.usage")}><div className="benefit-history-host csa-history-footer"><PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} nextCursor={page.nextCursor} total={page.total} pending={ui.busyKeys.includes("page:csa")} failed={pageError} onMore={()=>void loadMore()} render={(u,i)=><BenefitTransactionRow key={u.id||i} title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={dateLabel(u.date)} action={u.orderId?<button type="button" className="acc-text-link" onClick={()=>navigate("order-detail",{productId:u.orderId})}>{L("csa.viewOrder")} {u.orderId}<Icon name="chev" size={13}/></button>:undefined} amount={`−${u.quantity} ${ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"")}`}/>}/></div></BenefitSection>
+   <BenefitSection title={L("csa.usage")}><div id="csa-points-history" className="benefit-history-host csa-history-footer"><PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} nextCursor={page.nextCursor} total={page.nextCursor?null:usage.length} pending={ui.busyKeys.includes("page:csa")} failed={pageError} onMore={()=>void loadMore()} render={(u,i)=><CsaPointHistoryRow key={u.id||i} usage={u}/>}/></div></BenefitSection>
  </div>;
 }
+function CsaPointHistoryRow({usage:u}:{usage:CSAUsage}){
+ const {ui,navigate}=useNFV(),reversed=u.status==="reversed";
+ const unit=ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"");
+ return <BenefitTransactionRow title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={dateLabel(u.date)} action={u.orderId?<button type="button" className="acc-text-link" onClick={()=>navigate("order-detail",{productId:u.orderId,tab:"csa"})}>{copyText(ui.locale,"csa.viewOrder")}<Icon name="chev" size={13}/></button>:undefined} amount={`${reversed?"":"−"}${u.quantity} ${unit}`} badge={reversed?<MetricBadge>{ui.locale==="vi"?"Đã hoàn điểm":"Points restored"}</MetricBadge>:undefined}/>;
+}
 function ReferralBenefits(){
- const {data,ui,patch,call,act,setData,toast}=useNFV();const {next,error,pending}=useCursor();
+ const {data,ui,patch,call,act,setData,toast,copyToClipboard}=useNFV();const {next,error,pending}=useCursor();
  const ref=data.referrals||{},invites=ref.invitees||ref.history||[],person=ref.referrer;
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
  const code=String(ref.code||"");const eligible=!!ref.canEnterReferrer&&!person;
  const inputValid=isReferralCode(ui.referrerDraft);
  const attach=async(e:FormEvent)=>{e.preventDefault();if(!inputValid||!eligible)return;
    let failureCode="";
-   const result=await act("referral:apply",async()=>{
+   await act("referral:apply",async()=>{
      try{return await call<Referrals>("applyReferralCode",{code:normalizeReferralCode(ui.referrerDraft)});}
      catch(error){failureCode=error instanceof Error?error.message:"";throw error;}
+   },undefined,result=>{
+     if(result?.referrer){setData(s=>({...s,referrals:mergeReferralSummary(s.referrals,result)}));patch({referrerDraft:"",referrerError:""});toast(L("ref.attachSuccess"));}
+     else patch({referrerError:L(referralErrorCopyKey(failureCode))});
    });
-   if(result?.referrer){setData(s=>({...s,referrals:mergeReferralSummary(s.referrals,result)}));patch({referrerDraft:"",referrerError:""});toast(L("ref.attachSuccess"));}
-   else patch({referrerError:L(referralErrorCopyKey(failureCode))});
  };
  const copy=async()=>{
    if(!code)return;
-   try {await copyTextToClipboard(code);toast(L("ref.copied"));}catch {toast(L("ref.copyFail"));}
+   await copyToClipboard(code);
  };
  const page=ref.pagination?.invitees||ref.pagination?.referrals||{};
  const count=Number.isFinite(Number(ref.invitedCount))?Number(ref.invitedCount):invites.length;

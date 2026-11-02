@@ -49,7 +49,7 @@ test("shipping service reads only supported areas and preserves Backend fees wit
 test("shipping service maps the owner's saved address and keeps a disabled area readable",()=>run(`
   import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});const calls=[];
   globalThis.fetch=async path=>{calls.push(path);const data=path==='/api/account/shipping-address'?{id:'address-1',recipient_name:'Nguyễn Văn An',phone_number:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12',is_supported:false,shipping_fee_vnd:null,created_at:'2026-10-28T00:00:00Z',updated_at:'2026-10-28T00:00:00Z'}:path==='/api/account/administrative-provinces'?[{code:'66',name:'Đắk Lắk'}]:[{code:'22015',name:'Phường Tuy Hoà'}];return new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}})};
-  assert.deepEqual(await service.getShippingAddress('vi'),{id:'address-1',name:'Nguyễn Văn An',phone:'+84901234567',city:'Đắk Lắk',ward:'Phường Tuy Hoà',detail:'Số 12',provinceCode:'66',wardCode:'22015',isSupported:false,shippingFeeVnd:null,isDefault:true});
+  assert.deepEqual(await service.getShippingAddress('vi'),{id:'address-1',name:'Nguyễn Văn An',phone:'+84901234567',city:'Đắk Lắk',ward:'Phường Tuy Hoà',detail:'Số 12',provinceCode:'66',wardCode:'22015',isSupported:false,shippingFeeVnd:null,updatedAt:'2026-10-28T00:00:00Z',isDefault:true});
   assert.deepEqual(calls,['/api/account/shipping-address','/api/account/administrative-provinces','/api/account/administrative-wards?province=66']);
 `));
 
@@ -57,7 +57,7 @@ test("shipping service saves one address with codes and never sends a client shi
   import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});let submitted;
   globalThis.fetch=async (path,options)=>{submitted={path,method:options.method,body:JSON.parse(options.body)};return new Response(JSON.stringify({data:{id:'address-1',recipient_name:'Nguyễn Văn An',phone_number:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12',is_supported:true,shipping_fee_vnd:'30000',created_at:'2026-10-28T00:00:00Z',updated_at:'2026-10-28T00:00:00Z'}}),{status:200,headers:{'Content-Type':'application/json'}})};
   const draft={name:'Nguyễn Văn An',phone:'+84901234567',provinceCode:'66',provinceName:'Đắk Lắk',wardCode:'22015',wardName:'Phường Tuy Hoà',address:'Số 12'};
-  assert.deepEqual(await service.saveShippingAddress(draft),{id:'address-1',name:'Nguyễn Văn An',phone:'+84901234567',city:'Đắk Lắk',ward:'Phường Tuy Hoà',detail:'Số 12',provinceCode:'66',wardCode:'22015',isSupported:true,shippingFeeVnd:'30000',isDefault:true});
+  assert.deepEqual(await service.saveShippingAddress(draft),{id:'address-1',name:'Nguyễn Văn An',phone:'+84901234567',city:'Đắk Lắk',ward:'Phường Tuy Hoà',detail:'Số 12',provinceCode:'66',wardCode:'22015',isSupported:true,shippingFeeVnd:'30000',updatedAt:'2026-10-28T00:00:00Z',isDefault:true});
   assert.deepEqual(submitted,{path:'/api/account/shipping-address',method:'PUT',body:{recipient_name:'Nguyễn Văn An',phone_number:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12'}});
 `));
 
@@ -68,7 +68,7 @@ test("Account and guest CSA use the same supported-area address fields without s
   const types=source("src/types.ts");
   const accountCss=source("app/styles/10-account-and-responsive.css");
   assert.match(account,/ShippingAddressFields/);
-  assert.match(csa,/ShippingAddressFields/);
+  assert.match(csa,/GuestBuyerFields/);
   assert.match(csa,/useSupportedShippingAreas/);
   assert.doesNotMatch(csa,/getAdministrativeProvinces|getAdministrativeWards/);
   assert.doesNotMatch(csa,/shippingFeeVnd/);

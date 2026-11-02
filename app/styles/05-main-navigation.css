@@ -127,3 +127,4 @@
   .nfv-mobile-nav-panel { animation: nfv-nav-slide-in .2s ease-out both; }
   @keyframes nfv-nav-slide-in { from { transform: translateX(18px); opacity: .8; } to { transform: translateX(0); opacity: 1; } }
 }
+.header-cart-button{position:relative}.header-cart-badge{position:absolute;inset-block-start:-4px;inset-inline-end:-5px;display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--deep-green);color:#fff;font-size:10px;font-weight:700;line-height:1}

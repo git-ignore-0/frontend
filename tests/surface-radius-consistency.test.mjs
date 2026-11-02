@@ -32,7 +32,7 @@ test('Public content surfaces share one radius without changing controls or spec
     assert.match(knowledge,new RegExp(`\\.${selector.replaceAll('.', '\\.').replaceAll(' ', '\\s+')}\\s*\\{[^}]*border-radius:\\s*var\\(--knowledge-surface-radius\\)`,'s'),selector);
 
   assert.match(foundation,/\.btn\s*\{[^}]*border-radius:4px/s);
-  assert.match(foundation,/\.product-card\s*\{[^}]*border-radius:4px/s);
+  assert.match(foundation,/\.product-card,\.store-panel,\.store-order-card\s*\{[^}]*border-radius:var\(--radius\)/s);
   assert.match(account,/\.acc-section\s*\{[^}]*border-radius:4px/s);
   assert.match(csa,/\.csa-v2-help-action\.btn\s*\{[^}]*border-radius:var\(--radius\)/s);
   assert.match(csa,/border-radius:999px/);

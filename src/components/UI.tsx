@@ -65,8 +65,8 @@ export function Photo({src,alt="",className="",locale="vi"}:{src?:string;alt?:st
   if(!src||failedSrc===src)return <span className={`nfv-photo-placeholder ${className}`} role="img" aria-label={alt||(locale==="en"?"No product image":"Chưa có ảnh sản phẩm")}>{fallback}</span>;
   return <img src={src} alt={alt} className={className} loading="lazy" onError={()=>setFailedSrc(src)}/>;
 }
-export function Quantity({count,onMinus,onPlus,id,min=1,locale="vi"}:{count:number;onMinus:()=>void;onPlus:()=>void;id?:string;min?:number;locale?:Locale}){
-  return <div className="qty"><button type="button" onClick={onMinus} aria-label={locale==="en"?`Decrease quantity ${id||""}`:`Giảm số lượng ${id||""}`} disabled={count<=min}><Icon name="minus" size={16}/></button><strong>{count}</strong><button type="button" onClick={onPlus} aria-label={locale==="en"?`Increase quantity ${id||""}`:`Tăng số lượng ${id||""}`} disabled={count>=99}><Icon name="plus" size={16}/></button></div>;
+export function Quantity({count,onMinus,onPlus,id,min=1,max=99,locale="vi"}:{count:number;onMinus:()=>void;onPlus:()=>void;id?:string;min?:number;max?:number;locale?:Locale}){
+  return <div className="qty"><button type="button" onClick={onMinus} aria-label={locale==="en"?`Decrease quantity ${id||""}`:`Giảm số lượng ${id||""}`} disabled={count<=min}><Icon name="minus" size={16}/></button><strong>{count}</strong><button type="button" onClick={onPlus} aria-label={locale==="en"?`Increase quantity ${id||""}`:`Tăng số lượng ${id||""}`} disabled={count>=max}><Icon name="plus" size={16}/></button></div>;
 }
 export function SearchField({value,onChange,placeholder,id,small=false,maxLength}:{value:string;onChange:(value:string)=>void;placeholder:string;id:string;small?:boolean;maxLength?:number}){
   return <label className={small?"acc-order-search":"store-search"}><Icon name="search" size={small?15:19}/><FormInput id={id} type="search" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} autoComplete="off" maxLength={maxLength}/></label>;

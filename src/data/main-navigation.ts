@@ -59,7 +59,9 @@ export function navigationItemForPage(page:Screen):MainNavItem|undefined {
   return page==="account" ? MAIN_NAV_ACCOUNT : MAIN_NAV_ITEMS.find(item=>item.screen===page);
 }
 
-export function navigationHrefForPage(page:Screen,locale:Locale,accountTab?:AccountTab):string|null {
+export function navigationHrefForPage(page:Screen,locale:Locale,accountTab?:AccountTab,resourceId?:string):string|null {
+  if(page==="checkout")return `/store/checkout/${locale}`;
+  if(page==="order-detail"&&resourceId)return `/store/orders/${resourceId}/${locale}${accountTab==="csa"?"?from=csa":""}`;
   const item=navigationItemForPage(page);
   if(!item)return null;
   const href=mainNavHref(item,locale);
@@ -78,7 +80,7 @@ export function activeMainNavId(page:Screen):MainNavId|null {
 }
 
 /** Only locally implemented routes participate in the client-side router. */
-export function localScreenFromPath(pathname:string):Extract<Screen,"home"|"about"|"workshops"|"plants"|"animals"|"tracker"|"testimonials"|"store"|"csa"|"account">|null {
+export function localScreenFromPath(pathname:string):Screen|null {
   if(/^\/(vi|en)\/?$/.test(pathname))return "home";
   if(/^\/about\/(vi|en)\/?$/.test(pathname))return "about";
   if(/^\/workshops\/(vi|en)\/?$/.test(pathname))return "workshops";
@@ -87,6 +89,8 @@ export function localScreenFromPath(pathname:string):Extract<Screen,"home"|"abou
   if(/^\/tracker\/(vi|en)\/?$/.test(pathname))return "tracker";
   if(/^\/testimonials\/(vi|en)\/?$/.test(pathname))return "testimonials";
   if(/^\/store\/(vi|en)\/?$/.test(pathname))return "store";
+  if(/^\/store\/checkout\/(vi|en)\/?$/.test(pathname))return "checkout";
+  if(/^\/store\/orders\/[0-9a-f-]+\/(vi|en)\/?$/i.test(pathname))return "order-detail";
   if(/^\/csa\/(vi|en)\/?$/.test(pathname))return "csa";
   if(/^\/account\/(vi|en)\/?$/.test(pathname))return "account";
   return null;

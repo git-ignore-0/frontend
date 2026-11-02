@@ -1,4 +1,4 @@
-import {normalizeVietnamPhone,reviewShippingAddress,sanitizeVietnamPhoneInput,type ShippingAddressDraft,type ShippingAddressField,type SupportedShippingProvince} from "../../account/shipping-address-model.ts";
+import {EMPTY_SHIPPING_ADDRESS,normalizeVietnamPhone,reviewGuestBuyer,sanitizeVietnamPhoneInput,type ShippingAddressDraft,type ShippingAddressField,type SupportedShippingProvince} from "../../account/shipping-address-model.ts";
 
 export type CsaGuestBuyer=ShippingAddressDraft;
 
@@ -12,10 +12,10 @@ export type CsaGuestIdentity={
 
 export type CsaGuestBuyerField=ShippingAddressField;
 
-export const EMPTY_CSA_GUEST_BUYER:CsaGuestBuyer={name:"",phone:"",provinceCode:"",wardCode:"",address:""};
+export const EMPTY_CSA_GUEST_BUYER:CsaGuestBuyer=EMPTY_SHIPPING_ADDRESS;
 export {normalizeVietnamPhone,sanitizeVietnamPhoneInput};
 
 export function csaGuestBuyerReview(buyer:CsaGuestBuyer,areas:ReadonlyArray<SupportedShippingProvince>):{complete:boolean;missing:CsaGuestBuyerField[];identity:CsaGuestIdentity|null}{
-  const review=reviewShippingAddress(buyer,areas);
+  const review=reviewGuestBuyer(buyer,areas);
   return {complete:review.complete,missing:review.missing,identity:review.value?{name:review.value.name,phone:review.value.phone,province_code:review.value.provinceCode,ward_code:review.value.wardCode,address:review.value.address}:null};
 }

@@ -49,7 +49,7 @@ test("existing CSA component branches only the buyer step and sends guest identi
   assert.doesNotMatch(component,/csaPendingGuestPhone/);
   assert.match(component,/useSupportedShippingAreas/);
   assert.match(component,/useSupportedShippingAreas\(ui\.locale,guestMode&&\["account","terms","payment"\]\.includes\(step\)\)/);
-  assert.match(component,/ShippingAddressFields/);
+  assert.match(component,/GuestBuyerFields/);
   assert.doesNotMatch(component,/getAdministrativeProvinces|getAdministrativeWards/);
   assert.doesNotMatch(source("src/screens/account-csa/csa-guest-buyer.ts"),/email/);
   assert.match(source("src/screens/account-csa/AccountCsaTracker.tsx"),/setPhone\(sanitizeVietnamPhoneInput\(event\.target\.value\)\)/);

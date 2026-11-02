@@ -12,6 +12,7 @@ import "./styles/50-date-range-and-actions.css";
 import "./styles/60-data-states.css";
 import "./styles/70-order-detail-layout.css";
 import "./styles/80-checkout-flow.css";
+import "./styles/81-store-commerce.css";
 import "./styles/90-coupon.css";
 import "./styles/95-category-hierarchy.css";
 import "./styles/96-account-benefits.css";
@@ -30,6 +31,7 @@ import "./styles/12-testimonials.css";
 import "./styles/13-csa.css";
 import "./styles/14-referral-share.css";
 import "./styles/15-csa-public-flow.css";
+import "./styles/16-notifications.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),

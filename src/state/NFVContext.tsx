@@ -1,7 +1,6 @@
 "use client";
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction} from "react";
 import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen, Order} from "@/types";
-import {formatAddress} from "@/lib/format";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
 import {localeFromPath,localScreenFromPath,navigationHrefForPage} from "@/data/main-navigation";
@@ -12,16 +11,23 @@ import * as csaService from "@/account/csa-service";
 import * as shippingService from "@/account/shipping-service";
 import {ACCOUNT_SERVICE_RESOURCES,initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
 import {loadCart,saveCart} from "./cart-persistence";
+import {loadCartProducts,saveCartProducts} from "./cart-persistence";
+import type {StoreProductCard} from "@/store/store-model";
+import {copyWithFeedback,type ToastTone} from "@/lib/copy-feedback";
+import {mergeStoreProductSnapshots} from "@/store/store-product-snapshots";
+import {createCartProductRefreshCoordinator} from "@/store/cart-product-refresh";
+import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
+  cartHydrated:boolean; accountSessionKey:string;
   data: CatalogData; setData: Dispatch<SetStateAction<CatalogData>>;
   ui: UIState; setUI: Dispatch<SetStateAction<UIState>>;
   patch: (update:Partial<UIState>)=>void; navigate:(page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>void;
   call: <T=unknown>(method:keyof Backend, arg?:unknown)=>Promise<T>;
-  act: <T>(key:string, task:()=>Promise<T>, success?:string)=>Promise<T|undefined>;
-  toast: (message:string)=>void; addCart:(id:string,quantity?:number)=>void;
-  updateCart:(id:string,delta:number)=>void; beginCheckout:()=>void;
+  act: <T>(key:string, task:()=>Promise<T>, success?:string,onCurrentResult?:(result:T|undefined)=>void)=>Promise<T|undefined>;
+  toast: (message:string,tone?:ToastTone)=>void; copyToClipboard:(value:string)=>Promise<boolean>; addCart:(product:StoreProductCard,quantity?:number)=>void; cacheStoreProducts:(products:StoreProductCard[],source?:"catalog"|"verified")=>void;
+  updateCart:(id:string,delta:number)=>void; acknowledgeCartProduct:(id:string)=>void; retryCartProduct:(id:string)=>void; markCartProductsUnavailable:(ids:readonly string[])=>void; beginCheckout:()=>void;
   loadWards:(province:string,force?:boolean)=>Promise<void>; refreshResource:(resource:Resource)=>Promise<void>;
 };
 const Context=createContext<Ctx|null>(null);
@@ -34,22 +40,63 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   const [data,setData]=useState(initialData);
   const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountTab:initialAccountTab,accountHubOpen:initialPage==="account"&&initialAccountHubOpen,referrerDraft:initialReferrerCode}));
   const [cartReady,setCartReady]=useState(false);
+  const [accountSessionKey,setAccountSessionKey]=useState("checking");
   // Synchronous guards prevent double submits before React has committed the pending state.
-  const activeActions=useRef(new Set<string>());
+  const activeActions=useRef(new Map<string,number>());
   const wardRequests=useRef(new Map<string,Promise<void>>());
   const loadedWards=useRef(new Set<string>());
   const authEpoch=useRef(0);
+  const giftIntentOwner=useRef<string|null>(null);
+  const resourceSequences=useRef(new Map<Resource,number>());
+  const beginResourceRequest=useCallback((resource:Resource)=>{
+    const sequence=(resourceSequences.current.get(resource)??0)+1,epoch=authEpoch.current;
+    resourceSequences.current.set(resource,sequence);
+    return ()=>epoch===authEpoch.current&&resourceSequences.current.get(resource)===sequence;
+  },[]);
   const patch=useCallback((change:Partial<UIState>)=>setUI(s=>({...s,...change})),[]);
-  const toast=useCallback((message:string)=>setUI(s=>({...s,toast:message})),[]);
+  const toast=useCallback((message:string,tone:ToastTone="success")=>setUI(s=>({...s,toast:message,toastTone:tone,toastSequence:s.toastSequence+1})),[]);
+  const copyToClipboard=useCallback((value:string)=>copyWithFeedback(value,ui.locale,toast),[ui.locale,toast]);
+  const cartRefresh=useMemo(()=>createCartProductRefreshCoordinator({
+    onState:(id,state)=>setUI(current=>current.cart[id]
+      ? {...current,cartProductState:{...current.cartProductState,[id]:state}}
+      : current),
+    onReady:(id,product,notice)=>{
+      setData(current=>({...current,storeProducts:{...current.storeProducts,[id]:product}}));
+      setUI(current=>{
+        if(!current.cart[id])return current;
+        const cartProductNotice={...current.cartProductNotice};
+        if(notice)cartProductNotice[id]=notice;
+        return {...current,cartProductState:{...current.cartProductState,[id]:"ready"},cartProductNotice};
+      });
+    },
+  }),[]);
   useEffect(()=>{
-    setUI(state=>({...state,cart:loadCart(window.sessionStorage)}));
+    const cart=loadCart(window.sessionStorage),cached=loadCartProducts(window.sessionStorage) as Record<string,StoreProductCard>;
+    setData(state=>({...state,storeProducts:cached}));setUI(state=>({...state,cart,cartProductState:Object.fromEntries(Object.keys(cart).map(id=>[id,"loading"]))}));
     setCartReady(true);
   },[]);
   useEffect(()=>{
     if(cartReady)saveCart(window.sessionStorage,ui.cart);
   },[cartReady,ui.cart]);
-  useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,patch]);
+  useEffect(()=>{if(cartReady)saveCartProducts(window.sessionStorage,data.storeProducts)},[cartReady,data.storeProducts]);
+  // Revalidate only when cart ownership or locale changes; retries use the coordinator directly.
+  useEffect(()=>{
+    if(!cartReady)return;
+    for(const id of Object.keys(ui.cart)){
+      const cached=data.storeProducts[id];
+      if(!cached){
+        setUI(state=>({...state,cartProductState:{...state.cartProductState,[id]:"unavailable"}}));
+        continue;
+      }
+      void cartRefresh.refresh({id,cached,locale:ui.locale});
+    }
+    return()=>cartRefresh.cancelAll();
+  // cart ID membership is the ownership trigger; cached metadata is refreshed by this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[cartReady,ui.locale,Object.keys(ui.cart).join(",")]);
+  useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,ui.toastSequence,patch]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
+    const epoch=authEpoch.current;
     try {
       if(method==="getRewards")return await rewardsService.getRewards(ui.locale) as T;
       if(method==="getRewardGiftsPage")return await rewardsService.getRewardGiftsPage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
@@ -69,28 +116,39 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(typeof fn!=="function")throw new Error(ui.locale==="en"?`API is not connected: ${method}`:`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
     }
-    catch(error){if(isUnauthorized(error))expire();throw error;}
+    catch(error){if(epoch===authEpoch.current&&isUnauthorized(error))expire();throw error;}
   },[expire,ui.locale]);
-  const act=useCallback(async<T,>(key:string,task:()=>Promise<T>,success?:string):Promise<T|undefined>=>{
-    if(activeActions.current.has(key))return undefined;
-    activeActions.current.add(key);
-    setUI(s=>({...s,busyKeys:[...s.busyKeys,key],error:""}));
+  const act=useCallback(async<T,>(key:string,task:()=>Promise<T>,success?:string,onCurrentResult?:(result:T|undefined)=>void):Promise<T|undefined>=>{
+    const epoch=authEpoch.current;
+    if(activeActions.current.get(key)===epoch)return undefined;
+    activeActions.current.set(key,epoch);
+    const current=()=>epoch===authEpoch.current&&activeActions.current.get(key)===epoch;
+    setUI(s=>({...s,busyKeys:[...s.busyKeys.filter(item=>item!==key),key],error:""}));
     try {
       const result=await task();
+      if(!current())return undefined;
       if(success)toast(success);
+      // Ignored and duplicate actions never invoke UI completion handlers.
+      onCurrentResult?.(result);
       return result;
-    } catch (e) {
-      setUI(s=>({...s,error:e instanceof Error?e.message:(ui.locale==="en"?"Unable to complete the action. Please try again.":"Không thể thực hiện. Vui lòng thử lại.")}));
+    } catch(e) {
+      if(current()){
+        setUI(s=>({...s,error:e instanceof Error?e.message:(ui.locale==="en"?"Unable to complete the action. Please try again.":"Không thể thực hiện. Vui lòng thử lại.")}));
+        onCurrentResult?.(undefined);
+      }
       return undefined;
     } finally {
-      activeActions.current.delete(key);
-      setUI(s=>({...s,busyKeys:s.busyKeys.filter(item=>item!==key)}));
+      // A late completion must not release a newer owner's action with the same key.
+      if(activeActions.current.get(key)===epoch){
+        activeActions.current.delete(key);
+        if(epoch===authEpoch.current)setUI(s=>({...s,busyKeys:s.busyKeys.filter(item=>item!==key)}));
+      }
     }
   },[toast,ui.locale]);
   const navigate=useCallback((page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>{
     // Only locally implemented screens own their own public URLs.
     if(typeof window!=="undefined"){
-      const href=navigationHrefForPage(page,ui.locale,opts?.tab);
+      const href=navigationHrefForPage(page,ui.locale,opts?.tab,opts?.productId);
       if(syncBrowserRoute(window,href,{replace:opts?.replace}))return;
     }
     setUI(s=>({...s,page,cartOpen:false,filterOpen:false,categoryOpen:false,
@@ -108,27 +166,46 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     window.addEventListener("popstate",handlePopState);
     return ()=>window.removeEventListener("popstate",handlePopState);
   },[]);
-  const addCart=useCallback((id:string,quantity=1)=>{
-    if(!data.products.some(p=>p.id===id))return;
-    setUI(s=>({...s,cart:{...s.cart,[id]:Math.min(99,(s.cart[id]||0)+quantity)},toast:ui.locale==="en"?"Added to cart":"Đã thêm vào giỏ"}));
-  },[data.products,ui.locale]);
+  const cacheStoreProducts=useCallback((products:StoreProductCard[],source:"catalog"|"verified"="catalog")=>{
+    if(source==="verified"){
+      for(const product of products)cartRefresh.cancel(product.id);
+      setUI(current=>({...current,cartProductState:{...current.cartProductState,...Object.fromEntries(products.filter(product=>current.cart[product.id]).map(product=>[product.id,"ready" as const]))}}));
+    }
+    setData(state=>({...state,storeProducts:mergeStoreProductSnapshots(state.storeProducts,products,ui.cart,source)}));
+  },[cartRefresh,ui.cart]);
+  const markCartProductsUnavailable=useCallback((ids:readonly string[])=>{
+    for(const id of ids)cartRefresh.cancel(id);
+    setUI(state=>{
+      const cartProductState={...state.cartProductState},cartProductNotice={...state.cartProductNotice};
+      for(const id of ids)if(state.cart[id]){cartProductState[id]="unavailable";delete cartProductNotice[id]}
+      return {...state,cartProductState,cartProductNotice};
+    });
+  },[cartRefresh]);
+  const addCart=useCallback((product:StoreProductCard,quantity=1)=>{
+    const snapshot=ui.cart[product.id]?data.storeProducts[product.id]??product:product;
+    if(snapshot.available_quantity<=0){toast(ui.locale==="en"?"This product is out of stock.":"Sản phẩm hiện đã hết hàng.");return}
+    cacheStoreProducts([product]);setUI(s=>{if(!s.cart[product.id]&&Object.keys(s.cart).length>=STORE_MAX_ORDER_LINES)return {...s,cartOpen:true,toastTone:"error",toastSequence:s.toastSequence+1,toast:ui.locale==="en"?`Your cart can contain up to ${STORE_MAX_ORDER_LINES} different products.`:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau.`};const cartProductNotice={...s.cartProductNotice};if(!s.cart[product.id])delete cartProductNotice[product.id];return {...s,cart:{...s.cart,[product.id]:Math.min(STORE_MAX_LINE_QUANTITY,snapshot.available_quantity,(s.cart[product.id]||0)+quantity)},cartProductState:{...s.cartProductState,[product.id]:s.cart[product.id]?s.cartProductState[product.id]:"ready"},cartProductNotice,cartOpen:true,toastTone:"success",toastSequence:s.toastSequence+1,toast:ui.locale==="en"?"Added to cart":"Đã thêm vào giỏ"}});
+  },[cacheStoreProducts,data.storeProducts,ui.cart,toast,ui.locale]);
   const updateCart=useCallback((id:string,delta:number)=>{
-    setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA};cart[id]=Math.max(0,Math.min(99,(cart[id]||0)+delta));
-      if(cart[id]===0){delete cart[id];delete applyCSA[id];}
-      return {...s,cart,applyCSA,couponCode:"",couponAmount:0,couponError:""};
+    setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},limit=Math.min(STORE_MAX_LINE_QUANTITY,data.storeProducts[id]?.available_quantity??STORE_MAX_LINE_QUANTITY);cart[id]=Math.max(0,Math.min(limit,(cart[id]||0)+delta));
+      if(cart[id]===0){delete cart[id];delete applyCSA[id];delete cartProductNotice[id];}
+      return {...s,cart,applyCSA,cartProductNotice};
     });
-  },[]);
+  },[data.storeProducts]);
+  const acknowledgeCartProduct=useCallback((id:string)=>setUI(s=>{const cartProductNotice={...s.cartProductNotice};delete cartProductNotice[id];return {...s,cartProductNotice}}),[]);
+  const retryCartProduct=useCallback((id:string)=>{
+    const cached=data.storeProducts[id];
+    if(!cached||!ui.cart[id]){
+      setUI(state=>({...state,cartProductState:{...state.cartProductState,[id]:"unavailable"}}));
+      return;
+    }
+    void cartRefresh.refresh({id,cached,locale:ui.locale});
+  },[cartRefresh,data.storeProducts,ui.cart,ui.locale]);
   const beginCheckout=useCallback(()=>{
-    setUI(s=>{
-      const saved=data.authenticated?data.addresses[0]:undefined;
-      const recipient=saved?{...recipientEmpty,...saved,address:formatAddress(saved),note:s.recipient.note}:
-        data.authenticated?{...recipientEmpty,name:data.profile.name,phone:data.profile.phone,note:s.recipient.note}:s.recipient;
-      const skip=!!saved && recipient.name.trim().length>=2 && recipient.phone.length===10 && !!recipient.city && !!recipient.ward && recipient.detail.trim().length>=3;
-      return {...s,page:"checkout",cartOpen:false,checkoutStep:skip?1:0,checkoutEditRecipient:false,
-        checkoutEditFromReview:false,recipient,applyCSA:{},couponDraft:"",couponCode:"",couponAmount:0,couponError:""};
-    });
+    setUI(s=>({...s,page:"checkout",cartOpen:false,applyCSA:{}}));
+    if(typeof window!=="undefined")syncBrowserRoute(window,navigationHrefForPage("checkout",ui.locale)??`/store/checkout/${ui.locale}`);
     window.scrollTo({top:0,behavior:"instant"});
-  },[data]);
+  },[ui.locale]);
   const loadWards=useCallback((province:string,force=false):Promise<void>=>{
     if(!province)return Promise.resolve();
     const existing=wardRequests.current.get(province);
@@ -161,16 +238,16 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   },[]);
   const refreshResource=useCallback(async(resource:Resource)=>{
     if(!data.authenticated)return;
-    const epoch=authEpoch.current;
+    const current=beginResourceRequest(resource);
     if(resource==="address"){
       setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"loading"}}));
       try{
         const value=await call<Address|null>("getShippingAddress");
-        if(epoch!==authEpoch.current)return;
+        if(!current())return;
         setData(s=>({...s,shippingAddress:value}));
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"ready"}}));
       }catch{
-        if(epoch===authEpoch.current)setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));
+        if(current())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));
       }
       return;
     }
@@ -179,13 +256,13 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"loading"}}));
     try {
       const value=await call(name);
-      if(epoch!==authEpoch.current)return;
+      if(!current())return;
       setData(s=>({...s,[resource]:value}));
       setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"ready"}}));
     } catch {
-      if(epoch===authEpoch.current)setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"error"}}));
+      if(current())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[resource]:"error"}}));
     }
-  },[call,data.authenticated]);
+  },[beginResourceRequest,call,data.authenticated]);
   // Address lookup data is public and does not depend on the customer's session.
   useEffect(()=>{
     let active=true;
@@ -205,10 +282,16 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   // One session owner (AuthProvider); reload private resources whenever it changes.
   useEffect(()=>{
     const epoch=++authEpoch.current;
+    if(auth.status!=="checking"){
+      const owner=auth.status==="authenticated"?auth.session?.subject??null:null;
+      if(giftIntentOwner.current!==owner){giftIntentOwner.current=owner;setUI(s=>({...s,giftIntent:null}));}
+    }
+    setUI(s=>({...s,busyKeys:[],error:""}));
     let active=true;
     const stillCurrent=()=>active&&epoch===authEpoch.current;
     if(auth.status!=="authenticated"){
       if(auth.status!=="checking"){
+        setAccountSessionKey(auth.status);
         setData(s=>({...s,authenticated:false,hasCSA:false,profile:{name:"",phone:"",email:"",dateOfBirth:null},
           addresses:[],shippingAddress:null,orders:[],csa:null,rewards:null,referrals:null}));
         setUI(s=>({...s,recipient:{...recipientEmpty},accountFetchState:{},applyCSA:{},
@@ -217,6 +300,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       }
       return ()=>{active=false;};
     }
+    setAccountSessionKey(auth.session?.subject??"");
     setData(s=>({...s,authenticated:true,hasCSA:!!auth.session?.hasCSA,
       profile:{name:"",phone:"",email:"",dateOfBirth:null,...auth.session?.profile},
       addresses:[],shippingAddress:null,orders:[],csa:null,rewards:null,referrals:null}));
@@ -227,25 +311,27 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       try{const value=await call<T>(method);if(stillCurrent())apply(value);}
       catch(error){if(stillCurrent())console.error("NFV account data:",method,error);}
     };
+    const addressCurrent=beginResourceRequest("address");
     void Promise.all([
-      call<Address|null>("getShippingAddress").then(v=>{if(stillCurrent()){
+      call<Address|null>("getShippingAddress").then(v=>{if(stillCurrent()&&addressCurrent()){
         setData(s=>({...s,shippingAddress:v}));
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"ready"}}));
-      }}).catch(()=>{if(stillCurrent())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));}),
+      }}).catch(()=>{if(stillCurrent()&&addressCurrent())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,address:"error"}}));}),
       safe<Address|null>("getAddress",v=>setData(s=>({...s,addresses:v?[v]:[]}))),
       safe<Order[]>("getOrders",v=>setData(s=>({...s,orders:Array.isArray(v)?v:[]}))),
       ...ACCOUNT_SERVICE_RESOURCES.map(kind=>{
         const method=({csa:"getCSA",rewards:"getRewards",referrals:"getReferrals"} as const)[kind];
+        const current=beginResourceRequest(kind);
         setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"loading"}}));
-        return call(method).then(v=>{if(stillCurrent()){
+        return call(method).then(v=>{if(stillCurrent()&&current()){
           setData(s=>({...s,[kind]:v}));
           setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"ready"}}));
-        }}).catch(()=>{if(stillCurrent())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"error"}}));});
+        }}).catch(()=>{if(stillCurrent()&&current())setUI(s=>({...s,accountFetchState:{...s.accountFetchState,[kind]:"error"}}));});
       })
     ]);
     return ()=>{active=false;};
-  },[auth.status,auth.session,call,ui.locale]);
-  const value=useMemo(()=>({data,setData,ui,setUI,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource}),
-    [data,ui,patch,navigate,call,act,toast,addCart,updateCart,beginCheckout,loadWards,refreshResource]);
+  },[auth.status,auth.session,beginResourceRequest,call,ui.locale]);
+  const value=useMemo(()=>({cartHydrated:cartReady,accountSessionKey,data,setData,ui,setUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource}),
+    [cartReady,accountSessionKey,data,ui,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

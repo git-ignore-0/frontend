@@ -244,6 +244,7 @@ test("refresh verifies the rotated access token through Core /me before authenti
     },
   });
   const current = await oauth.currentPublicSession({
+    sessionId: "6a44a12c-8888-4000-8000-123456789abc",
     accessToken: "expired-access",
     refreshToken: "old-refresh",
     expiresAt: Date.now() - 1,
@@ -251,6 +252,7 @@ test("refresh verifies the rotated access token through Core /me before authenti
   });
   assert.deepEqual(calls, ["/oauth/token", "/api/v1/me"]);
   assert.equal(current.accessToken, "rotated-access");
+  assert.equal(current.sessionId, "6a44a12c-8888-4000-8000-123456789abc");
   assert.equal(current.user.name, "Fresh Profile");
 });
 
@@ -287,6 +289,7 @@ test("refresh exposes rotated credentials when Core /me is transiently unavailab
 
   await assert.rejects(
     oauth.currentPublicSession({
+      sessionId: "6a44a12c-8888-4000-8000-123456789abc",
       accessToken: "expired-access",
       refreshToken: "old-refresh",
       expiresAt: Date.now() - 1,
@@ -295,6 +298,7 @@ test("refresh exposes rotated credentials when Core /me is transiently unavailab
     (error) => {
       assert.ok(error instanceof oauth.AuthServiceUnavailableError);
       assert.equal(error.rotatedSession?.accessToken, "rotated-access");
+      assert.equal(error.rotatedSession?.sessionId, "6a44a12c-8888-4000-8000-123456789abc");
       assert.equal(error.rotatedSession?.refreshToken, "rotated-refresh");
       assert.equal(error.rotatedSession?.user, staleUser);
       return true;

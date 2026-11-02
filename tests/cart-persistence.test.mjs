@@ -6,7 +6,9 @@ import test from "node:test";
 async function loadCartPersistence(){
   const url=new URL("../src/state/cart-persistence.ts",import.meta.url);
   assert.equal(existsSync(url),true,"cart persistence module must exist");
-  return import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(readFileSync(url,"utf8")))}`);
+  const limits=stripTypeScriptTypes(readFileSync(new URL("../src/store/store-limits.ts",import.meta.url),"utf8"));
+  const source=stripTypeScriptTypes(readFileSync(url,"utf8")).replace("../store/store-limits",`data:text/javascript,${encodeURIComponent(limits)}`);
+  return import(`data:text/javascript,${encodeURIComponent(source)}`);
 }
 
 function memoryStorage(initial={}){
@@ -28,9 +30,9 @@ test("cart survives a document reload within the browser session",async()=>{
 test("invalid or unsafe persisted cart entries are discarded",async()=>{
   const {CART_STORAGE_KEY,loadCart}=await loadCartPersistence();
   const storage=memoryStorage({
-    [CART_STORAGE_KEY]:JSON.stringify({good:3,zero:0,negative:-1,huge:500,fraction:1.5,"bad id":2}),
+    [CART_STORAGE_KEY]:JSON.stringify({good:3,zero:0,negative:-1,huge:1500,fraction:1.5,"bad id":2}),
   });
-  assert.deepEqual(loadCart(storage),{good:3,huge:99});
+  assert.deepEqual(loadCart(storage),{good:3,huge:999});
 });
 
 test("empty carts remove stale session data",async()=>{

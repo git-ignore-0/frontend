@@ -48,34 +48,35 @@ test("Ward fetch has in-flight de-duplication and separate ready/error statuses"
   assert.doesNotMatch(context, /catch\s*\{setData\(s=>\(\{\.\.\.s,wards:\{\.\.\.s\.wards,\[province\]:\[\]/);
 });
 
-test("Checkout validates saved wards before submission and offers recovery", () => {
-  assert.match(checkout, /useWardOptions\(ui\.recipient\.city\)/);
-  assert.match(checkout, /wardOptions\.loading&&/);
-  assert.match(checkout, /wardOptions\.error&&/);
-  assert.match(checkout, /setValidation\(recipientErrors\)/);
-  assert.match(checkout, /checkoutStep:0,checkoutEditRecipient:true,checkoutEditFromReview:false/);
+test("Checkout validates a versioned saved address and supported shipping quote before submission", () => {
+  assert.match(checkout, /address\?\.updatedAt/);
+  assert.match(checkout, /address\.isSupported!==false/);
+  assert.match(checkout, /getShippingQuote\(provinceCode,wardCode\)/);
 });
 
-test("Cancel from review restores pre-edit recipient, and changed address invalidates coupon", () => {
-  assert.match(checkout, /reviewRecipient\.current=\{\.\.\.ui\.recipient\}/);
-  assert.match(checkout, /recipient:reviewRecipient\.current\?\?ui\.recipient/);
-  assert.match(checkout, /onChange=\{recipient=>\{patch\(\{recipient,couponCode:"",couponAmount:0/);
+test("Checkout uses code-based guest addresses and has no unsupported coupon state", () => {
+  assert.match(checkout, /province_code:guestReview\.value!\.provinceCode/);
+  assert.match(checkout, /ward_code:guestReview\.value!\.wardCode/);
+  assert.doesNotMatch(checkout, /couponCode|couponAmount|couponDraft/);
 });
 
 test("Concurrent API actions maintain per-key busy state and reject duplicate submissions", () => {
-  assert.match(context, /new Set<string>\(\)/);
-  assert.match(context, /activeActions\.current\.has\(key\)/);
-  assert.match(context, /activeActions\.current\.add\(key\)/);
-  assert.match(context, /busyKeys:\[\.\.\.s\.busyKeys,key\]/);
+  assert.match(context, /activeActions=useRef\(new Map<string,number>\(\)\)/);
+  assert.match(context, /activeActions\.current\.get\(key\)===epoch/);
+  assert.match(context, /activeActions\.current\.set\(key,epoch\)/);
+  assert.match(context, /busyKeys:\[\.\.\.s\.busyKeys\.filter\(item=>item!==key\),key\]/);
   assert.match(context, /busyKeys:s\.busyKeys\.filter\(item=>item!==key\)/);
   assert.doesNotMatch(context, /busy:null/);
-  assert.match(checkout, /act\("place-order"/);
+  assert.match(checkout, /submitting\.current/);
+  assert.match(checkout, /crypto\.randomUUID\(\)/);
+  assert.match(checkout, /saveCheckoutIntent\(window.sessionStorage,attempt\)/);
 });
 
-test("CSA prices are clearly provisional without a defined backend quote schema", () => {
-  assert.match(checkout, /copy\.provisionalTotal/);
-  assert.match(checkout, /copy\.csaNotDeducted/);
-  assert.match(checkout, /copy\.shippingExcluded/);
+test("Checkout uses the Store quote contract and explicitly handles stale quotes", () => {
+  assert.match(checkout, /buildStoreQuote/);
+  assert.match(checkout, /checkoutPayload/);
+  assert.match(checkout, /reason instanceof AccountApiError&&checkoutDefinitelyRejected\(reason\)/);
+  assert.match(checkout, /setRequote\(true\)/);
 });
 
 test("Account stylesheet no longer contains shared transaction history selectors", () => {

@@ -7,18 +7,19 @@ import {copyText} from "@/data/account-copy";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
 import type {AccountTab} from "@/types";
-import {OrdersView} from "@/screens/AccountOrders";
+import {GuestOrderLookup,OrdersView} from "@/screens/AccountOrders";
 import {AddressView, ProfileView} from "@/screens/AccountProfile";
 import {BenefitsView} from "@/screens/AccountBenefits";
 import {LogoutButton} from "@/components/auth/LogoutButton";
 import {GuestAuthActions} from "@/components/auth/GuestAuthActions";
 
 export function Account() {
-  const {ui, patch} = useNFV();
+  const {ui, patch,refreshResource,accountSessionKey} = useNFV();
   const auth=useAuth();
   const navigation=accountNavigationFor(auth.status);
   const activeTab=accountTabForAuth(ui.accountTab,auth.status);
   const authenticated=auth.status==="authenticated";
+  const ownerReady=authenticated&&!!auth.session?.subject&&accountSessionKey===auth.session.subject;
   const [persistentTabs,setPersistentTabs]=useState<ReadonlyArray<AccountTab>>(()=>accountPersistentTabs([],activeTab));
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hubLinkRefs = useRef<Partial<Record<AccountTab,HTMLButtonElement|null>>>({});
@@ -40,9 +41,19 @@ export function Account() {
     const nextTab=activeTab;
     if(nextTab!==ui.accountTab)patch({accountTab:nextTab,accountHubOpen:true,error:""});
   },[activeTab,auth.status,patch,ui.accountTab]);
+  useEffect(()=>{
+    if(!ownerReady||activeTab!=="csa")return;
+    let pending=false;
+    const refresh=async()=>{if(pending||document.visibilityState==="hidden")return;pending=true;try{await refreshResource("csa")}finally{pending=false}};
+    if(ui.accountFetchState.csa==="ready")void refresh();
+    window.addEventListener("focus",refresh);
+    return()=>window.removeEventListener("focus",refresh);
+    // Fetch status is checked on entry only; refreshing it must not trigger another request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[activeTab,ownerReady,auth.session?.subject,refreshResource]);
   const translate = (key: string) => copyText(ui.locale, key);
 
-  if(auth.status==="checking")return <main className="main-content"><div className="container nfv-auth-feedback"><DataState kind="loading" title={translate("account.checking")}/></div></main>;
+  if(auth.status==="checking"||authenticated&&!ownerReady)return <main className="main-content"><div className="container nfv-auth-feedback"><DataState kind="loading" title={translate("account.checking")}/></div></main>;
   if(auth.status==="error")return <main className="main-content"><div className="container nfv-auth-feedback"><DataState kind="error" title={translate("state.failedTitle")} description={auth.error} action={{label:translate("common.retry"),onClick:()=>void auth.refresh()}}/></div></main>;
 
   const selectTab = (tab: AccountTab) => {
@@ -65,9 +76,9 @@ export function Account() {
     <p>{translate("guestAccount.noticeBody")}</p>
     <GuestAuthActions locale={ui.locale}/>
   </Section>;
-  if(!authenticated)return <main className="main-content"><div className="container"><div className="account-title"><h1>{translate("account.titleMobile")}</h1></div>{guestNotice("content")}</div></main>;
+  if(!authenticated)return <main className="main-content"><div className="container"><div className="account-title"><h1>{translate("account.titleMobile")}</h1></div>{guestNotice("content")}<GuestOrderLookup/></div></main>;
   const renderTab = (tab:AccountTab) => {
-    if(tab==="orders")return <OrdersView/>;
+    if(tab==="orders")return <OrdersView active={activeTab==="orders"}/>;
     if(tab==="address")return <AddressView/>;
     if(tab==="profile")return <ProfileView/>;
     if(tab==="csa-tracker")return null;
@@ -132,7 +143,7 @@ export function Account() {
             {guestNotice("content")}
             {renderedTabs.map(tab=>{
               const content=renderTab(tab);
-              return content?<div key={`${auth.status}:${tab}`} hidden={activeTab!==tab}>{content}</div>:null;
+              return content?<div key={`${auth.status}:${auth.session?.subject??""}:${tab}`} hidden={activeTab!==tab}>{content}</div>:null;
             })}
           </div>
         </div>

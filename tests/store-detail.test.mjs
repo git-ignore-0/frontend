@@ -44,16 +44,17 @@ test("Store detail presents product data without the supplier placeholder",()=>{
  assert.match(detail,/product\.csa_quota_group/);
  assert.doesNotMatch(detail,/product\.csa_eligible/);
  assert.match(detail,/href=\{`\/store\/\$\{locale\}`\}/);
- assert.doesNotMatch(detail,/useNFV|mobile-sticky/);
+ assert.match(detail,/useNFV/);
+ assert.doesNotMatch(detail,/mobile-sticky/);
 });
 
 test("Store detail has local quantity controls and an add-to-cart UI button",()=>{
  const detail=read("src/screens/store/ProductDetail.tsx");
  assert.match(detail,/^"use client";/);
  assert.match(detail,/useState\(1\)/);
- assert.match(detail,/<Quantity[^>]*count=\{quantity\}[^>]*onMinus=\{\(\)=>setQuantity\(value=>Math\.max\(1,value-1\)\)\}[^>]*onPlus=\{\(\)=>setQuantity\(value=>Math\.min\(99,value\+1\)\)\}/);
+ assert.match(detail,/<Quantity[^>]*count=\{quantity\}[^>]*onMinus=\{\(\)=>setQuantity\(value=>Math\.max\(1,value-1\)\)\}[^>]*onPlus=\{\(\)=>setQuantity\(value=>Math\.min\(STORE_MAX_LINE_QUANTITY,product\.available_quantity,value\+1\)\)\}/);
  assert.match(detail,/className="buy-row"/);
- assert.match(detail,/<Button><Icon name="bag"[^>]*\/> \{copy\.addCart\}<\/Button>/);
+ assert.match(detail,/onClick=\{\(\)=>addCart\(product,quantity\)\}/);
  assert.match(detail,/addCart:"Thêm vào giỏ hàng"/);
  assert.match(detail,/addCart:"Add to cart"/);
 });

@@ -201,3 +201,9 @@ textarea.nfv-control {
  .categories>.selection-chips{width:100%}
 }
 
+
+/* Guest purchase fields share the CSA form layout in Store and CSA. */
+.guest-buyer-fields{align-items:start;gap:var(--nfv-control-grid-gap)}
+.guest-buyer-fields .nfv-control{width:100%}
+.guest-buyer-fields .guest-buyer-error{margin:0}
+@media(max-width:560px){.guest-buyer-fields{grid-template-columns:minmax(0,1fr)}}

@@ -3,12 +3,14 @@ type JsonRecord = Record<string, unknown>;
 export class AccountApiError extends Error {
   readonly code: string;
   readonly status: number;
+  readonly context?: JsonRecord;
 
-  constructor(code: string, status: number) {
+  constructor(code: string, status: number, context?: JsonRecord) {
     super(code);
     this.name = "AccountApiError";
     this.code = code;
     this.status = status;
+    this.context = context;
   }
 }
 
@@ -39,7 +41,7 @@ export async function accountApi(path: string, init?: RequestInit): Promise<Json
       : typeof body.error === "string"
         ? body.error
         : "request_failed";
-    throw new AccountApiError(code, response.status);
+    throw new AccountApiError(code, response.status, first.context&&typeof first.context==="object"&&!Array.isArray(first.context)?first.context as JsonRecord:undefined);
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new AccountApiError("invalid_response", 502);

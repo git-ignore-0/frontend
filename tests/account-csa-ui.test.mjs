@@ -59,8 +59,31 @@ const UI={
  FormSelect:({children,...props})=>React.createElement("select",props,children),
 };
 
+const transferPanel=runModule("src/components/BankTransferPanel.tsx",id=>{
+ if(id==="@/state/NFVContext")return {useNFV:()=>({copyToClipboard:async()=>true})};
+ if(id==="react")return React;
+ if(id==="react/jsx-runtime")return jsxRuntime;
+ if(id==="@/components/UI")return UI;
+ if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
+ throw Error(`Unexpected transfer import ${id}`);
+});
+const shippingFields=runModule("src/components/account/ShippingAddressFields.tsx",id=>{
+ if(id==="react/jsx-runtime")return jsxRuntime;
+ if(id==="@/components/UI")return UI;
+ if(id==="@/account/shipping-address-model")return shippingAddressModel;
+ throw Error(`Unexpected shipping fields import ${id}`);
+});
+const guestFields=runModule("src/components/account/GuestBuyerFields.tsx",id=>{
+ if(id==="react/jsx-runtime")return jsxRuntime;
+ if(id==="@/components/account/ShippingAddressFields")return shippingFields;
+ if(id==="@/account/shipping-address-model")return shippingAddressModel;
+ if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
+ throw Error(`Unexpected guest fields import ${id}`);
+});
 function loadComponent(){
  return runModule("src/screens/account-csa/AccountCsaPackageSelection.tsx",id=>{
+  if(id==="@/components/account/GuestBuyerFields")return guestFields;
+  if(id==="@/components/BankTransferPanel")return transferPanel;
   if(id==="react")return React;
   if(id==="react/jsx-runtime")return jsxRuntime;
   if(id==="@/components/UI")return UI;
@@ -71,7 +94,7 @@ function loadComponent(){
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(id==="@/lib/date-format")return dateFormat;
   if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
-  if(id==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated"})};
+  if(id==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated",session:{subject:"A"}})};
   if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
   if(id==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false,retry:()=>{}})};
   if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
@@ -79,7 +102,7 @@ function loadComponent(){
   if(id==="./csa-terms-model")return termsModel;
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
   if(id==="@/screens/csa/useCsaPackages")return {useCsaPackages:(locale,page)=>{hookCalls.push([locale,page]);return hookState;}};
-  if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}})};
+  if(id==="@/state/NFVContext")return {useNFV:()=>({accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}})};
   if(id==="./csa-selection-model")return selectionModel;
 	  if(id==="./csa-account-review")return accountReview;
 	  if(id==="./csa-pending-storage")return pendingStorage;
@@ -221,7 +244,7 @@ test("Account CSA state markup follows the approved active and pending surfaces"
  assert.match(benefits,/className="csa-rights-row"/);
  assert.match(benefits,/className="[^"]*csa-history-footer[^"]*"/);
  assert.match(benefits,/className="acc-text-link"/);
- assert.match(benefits,/navigate\("order-detail",\{productId:u\.orderId\}\)/);
+ assert.match(benefits,/navigate\("order-detail",\{productId:u\.orderId,tab:"csa"\}\)/);
  assert.match(purchase,/className="benefit-plan-title"/);
  assert.match(purchase,/className="benefit-detail-grid"/);
  assert.match(purchase,/className="csa-notice csa-condensed"/);
@@ -322,7 +345,7 @@ test("payment step presents a branded QR and compact accessible copy actions",()
 
 test("payment detail rows reserve the same value height with or without a copy action",()=>{
  const css=source("app/styles/96-account-benefits.css");
- assert.match(css,/\.account-tab-csa \.csa-transfer-row dd\{[^}]*min-height:34px/);
+ assert.match(css,/\.account-tab-csa \.csa-transfer-row dd,\.bank-transfer \.csa-transfer-row dd\{[^}]*min-height:34px/);
 });
 
 test("quote expiry helper rejects expired and malformed Backend timestamps",()=>{
@@ -331,4 +354,43 @@ test("quote expiry helper rejects expired and malformed Backend timestamps",()=>
  assert.equal(component.csaQuoteExpired("2026-10-25T01:00:00Z",now),true);
  assert.equal(component.csaQuoteExpired("2026-10-25T01:00:01Z",now),false);
  assert.equal(component.csaQuoteExpired("not-a-date",now),true);
+});
+
+
+test("CSA quota rows render available, held and consumed units rather than placeholders",()=>{
+ const component=runModule("src/screens/AccountBenefits.tsx",id=>{
+  if(id==="react")return React;
+  if(id==="react/jsx-runtime")return jsxRuntime;
+  if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi"}})};
+  if(id==="@/components/UI")return {localized:(value,key)=>value[key]};
+  return {};
+ });
+ const html=renderToStaticMarkup(React.createElement(component.QuotaRow,{quota:{productName:"Gia vị",total:10,remaining:7,reserved:2,used:1,unit:"Túi"}}));
+ assert.deepEqual([...html.matchAll(/<strong>(.*?)<\/strong>/g)].map(match=>match[1]),["Gia vị","7","2","1"]);
+ assert.doesNotMatch(html,/—/);
+ const empty=renderToStaticMarkup(React.createElement(component.QuotaRow,{quota:{productName:"Rau",total:10,remaining:10,reserved:0,used:0,unit:"Túi"}}));
+ assert.deepEqual([...empty.matchAll(/<strong>(.*?)<\/strong>/g)].map(match=>match[1]),["Rau","10","0","0"]);
+});
+
+test("points history opens the linked Store order and omits details for unlinked legacy usage",()=>{
+ const id="12345678-1234-4123-8123-123456789012",navigation=[];
+ const context={data:{csa:{active:{planName:"CSA",status:"active",quotas:[],usage:[{id:"new",orderId:id,productName:"Rau",date:"2026-11-01",quantity:2,unit:"điểm"},{id:"old",productName:"Rau",date:"2026-10-01",quantity:1,unit:"điểm"}]}}},ui:{locale:"vi",accountFetchState:{csa:"ready"},busyKeys:[]},navigate:(...args)=>navigation.push(args)};
+ const jsx=(type,props)=>typeof type==="function"?type(props):({type,props});
+ const component=runModule("src/screens/AccountBenefits.tsx",name=>{
+  if(name==="react")return {useEffect:()=>{},useState:value=>[value,()=>{}],useRef:value=>({current:value})};
+  if(name==="react/jsx-runtime")return {jsx,jsxs:jsx};
+  if(name==="@/state/NFVContext")return {useNFV:()=>context};
+  if(name==="@/components/account/PagedList")return {PagedList:({items,render})=>jsx("div",{children:items.map(render)})};
+  if(name==="@/components/UI")return {localized:(value,key)=>value[key]};
+  if(name==="@/data/account-copy")return {copyText:(_locale,key)=>key==="csa.viewOrder"?"Chi tiết":key};
+  if(name==="@/lib/format")return {dateLabel:value=>value};
+  if(name==="@/lib/csa-navigation")return {csaLandingHref:()=>"/csa/vi"};
+  return {};
+ });
+ const all=tree=>Array.isArray(tree)?tree.flatMap(all):!tree||typeof tree!=="object"?[]:[tree,...all(tree.props?.children)];
+ const tree=component.BenefitsView({kind:"csa"}),buttons=all(tree).filter(node=>node.type==="button");
+ assert.equal(buttons.length,1);
+ assert.equal(buttons[0].props.children[0],"Chi tiết");
+ buttons[0].props.onClick();
+ assert.equal(navigation.length,1);assert.equal(navigation[0][0],"order-detail");assert.equal(navigation[0][1].productId,id);assert.equal(navigation[0][1].tab,"csa");
 });

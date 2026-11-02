@@ -10,12 +10,12 @@ test("CSA service maps active membership and every upcoming item from the overvi
   const service=await import(${JSON.stringify(serviceUrl)});const id='11111111-1111-4111-8111-111111111111';
   const payloads={
     '/api/account/csa-overview?locale=vi':{data:{active_membership:{id,package_name:'Gói Rau',package_description:'Mô tả',status:'active',start_date:'2026-10-01',end_date:'2027-03-31',duration_months:6,monthly_price_vnd:'500000',total_price_vnd:'3000000'},upcoming:[{kind:'membership',id:'scheduled-1',package_name:'Gói Rau 3 tháng',status:'scheduled',start_date:'2027-03-31',end_date:'2027-06-30',duration_months:3,total_price_vnd:'1500000'},{kind:'purchase_request',id:'request-1',request_code:'CSA-001',package_name:'Gói Rau 6 tháng',status:'payment_confirmed',duration_months:6,amount:'3000000',currency:'VND',created_at:'2026-10-29T00:00:00Z',expires_at:null}]}},
-    '/api/account/csa-quota?locale=vi':{data:{membership_id:id,products:[{product_name:'Rau',quota_units_per_cycle:4,remaining_units:3,unit_label_vi:'kg',unit_label_en:'kg'}]}},
-    '/api/account/csa-usage?locale=vi&page=1':{data:[{id:'usage-old',status:'confirmed',created_at:'2026-10-20T00:00:00Z',lines:[{product_name:'Rau',units:1,unit_label_vi:'kg',unit_label_en:'kg'}]},{id:'usage-new',order_id:'NFV-2026-0142',status:'confirmed',created_at:'2026-10-21T00:00:00Z',lines:[{product_name:'Củ',units:2,unit_label_vi:'phần',unit_label_en:'portion'}]}],meta:{page:1,page_size:30,total:31}},
+    '/api/account/csa-quota?locale=vi':{data:{membership_id:id,products:[{product_name:'Rau',quota_units_per_cycle:4,remaining_units:3,available_units:2,reserved_units:1,used_units:1,unit_label_vi:'kg',unit_label_en:'kg'}]}},
+    '/api/account/csa-usage?locale=vi&page=1':{data:[{id:'usage-old',status:'confirmed',created_at:'2026-10-20T00:00:00Z',lines:[{product_name:'Rau',units:1,unit_label_vi:'kg',unit_label_en:'kg'}]},{id:'usage-new',order_id:'12345678-1234-4123-8123-123456789012',status:'confirmed',created_at:'2026-10-21T00:00:00Z',lines:[{product_name:'Củ',units:2,unit_label_vi:'phần',unit_label_en:'portion'}]}],meta:{page:1,page_size:30,total:31}},
     ['/api/account/memberships/'+id+'/contract']:{data:{reference_code:'CSA-2026-1',issued_at:'2026-10-01T00:00:00Z',status:'active',available_locales:['vi','en']}},
   };
   globalThis.fetch=async path=>new Response(JSON.stringify(payloads[path]),{status:200,headers:{'Content-Type':'application/json'}});
-  const result=await service.getCSA('vi');assert.equal(result.active.planName,'Gói Rau');assert.equal(result.active.quotas[0].remaining,3);assert.equal(result.active.usage[0].quantity,1);assert.equal(result.active.usage[0].orderId,undefined);assert.equal(result.active.usage[1].orderId,'NFV-2026-0142');assert.equal(result.active.pagination.usage.nextCursor,'2');assert.equal(result.active.contract.downloadUrl,'/api/account/memberships/'+id+'/contract/pdf?locale=vi');assert.deepEqual(result.upcoming,[{kind:'membership',id:'scheduled-1',planName:'Gói Rau 3 tháng',status:'scheduled',durationMonths:3,amount:'1500000',currency:'VND',startDate:'2027-03-31',endDate:'2027-06-30'},{kind:'purchase_request',id:'request-1',requestCode:'CSA-001',planName:'Gói Rau 6 tháng',status:'payment_confirmed',durationMonths:6,amount:'3000000',currency:'VND',createdAt:'2026-10-29T00:00:00Z'}]);
+  const result=await service.getCSA('vi');assert.equal(result.active.planName,'Gói Rau');assert.equal(result.active.quotas[0].remaining,2);assert.equal(result.active.quotas[0].reserved,1);assert.equal(result.active.quotas[0].used,1);assert.equal(result.active.usage[0].quantity,1);assert.equal(result.active.usage[0].orderId,undefined);assert.equal(result.active.usage[1].orderId,'12345678-1234-4123-8123-123456789012');assert.equal(result.active.pagination.usage.nextCursor,'2');assert.equal(result.active.contract.downloadUrl,'/api/account/memberships/'+id+'/contract/pdf?locale=vi');assert.deepEqual(result.upcoming,[{kind:'membership',id:'scheduled-1',planName:'Gói Rau 3 tháng',status:'scheduled',durationMonths:3,amount:'1500000',currency:'VND',startDate:'2027-03-31',endDate:'2027-06-30'},{kind:'purchase_request',id:'request-1',requestCode:'CSA-001',planName:'Gói Rau 6 tháng',status:'payment_confirmed',durationMonths:6,amount:'3000000',currency:'VND',createdAt:'2026-10-29T00:00:00Z'}]);
 `));
 
 test("CSA service preserves upcoming items when there is no active membership",()=>run(`
@@ -56,4 +56,14 @@ test("approved CSA purchase status preserves the scheduled membership dates",()=
   assert.equal(result.status,'approved');
   assert.equal(result.membershipStartDate,'2026-12-01');
   assert.equal(result.membershipEndDate,'2027-06-01');
+`));
+
+
+test("CSA history keeps its cursor in transaction units without reporting transaction totals as group-row totals",()=>run(`
+ import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});
+ const entry=i=>({id:'usage-'+i,created_at:'2026-11-01',status:'applied',lines:['Rau','Củ quả','Gia vị'].map(product_name=>({product_name,units:1,unit_label_vi:'Túi'}))});
+ globalThis.fetch=async()=>new Response(JSON.stringify({data:Array.from({length:30},(_,i)=>entry(i)),meta:{page:1,page_size:30,total:31}}),{status:200});
+ const first=await service.getCsaUsagePage({locale:'vi'});assert.equal(first.items.length,90);assert.equal(first.nextCursor,'2');assert.equal(first.total,null);
+ globalThis.fetch=async()=>new Response(JSON.stringify({data:[entry(30)],meta:{page:2,page_size:30,total:31}}),{status:200});
+ const last=await service.getCsaUsagePage({locale:'vi',cursor:'2'});assert.equal(last.items.length,3);assert.equal(last.nextCursor,null);assert.equal(last.total,null);
 `));

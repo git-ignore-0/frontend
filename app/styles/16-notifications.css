@@ -1,0 +1,6 @@
+/* Single floating-message surface for all FEv1 notifications. */
+.nfv-toast-region{position:fixed;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));z-index:200;width:min(350px,calc(100vw - 32px));pointer-events:none}
+.nfv-toast{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink);font-size:13px;font-weight:500;line-height:1.5;box-shadow:0 4px 16px #25332b14;overflow-wrap:anywhere}
+.nfv-toast .ico{color:var(--green)}
+.nfv-toast[data-tone="error"] .ico{color:var(--error)}
+.nfv-toast span{min-width:0}

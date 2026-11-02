@@ -12,7 +12,7 @@ const require=createRequire(import.meta.url);
 const ts=require("typescript");
 function load(path,stub=()=>({}),globals={}){
   const exp={};
-  vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,require:stub,URL,URLSearchParams,crypto,structuredClone,...globals});
+  vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,require:id=>id.endsWith("/csa-units.ts")?load("src/lib/csa-units.ts"):stub(id),URL,URLSearchParams,crypto,structuredClone,...globals});
   return exp;
 }
 const product=(id,group,cost,price=45000,stock=10)=>({id,slug:id,sku:id,name:id,alternate_name:null,short_description:"",retail_price_vnd:price,available_quantity:stock,unit_size:"1.000",unit_label:"kg",category:{id:"11111111-1111-4111-8111-111111111111",slug:"veg",name:"Veg"},primary_image:null,csa_quota_group:group?{id:group,name:"Group",cost}:null,suppliers:[],requested_locale:"vi",content_locale:"vi",available_locales:["vi"],is_fallback:false});
@@ -124,4 +124,47 @@ test("order reads use sequence guards so stale responses cannot replace newer st
   assert.match(detail,/seq===requestSeq\.current/);
   assert.match(list,/const current=\+\+seq\.current/);
   assert.match(list,/current===seq\.current/);
+});
+
+
+test("fractional quota uses exact hundredths across a shared group and mixed cash",()=>{
+ const {buildStoreQuote}=load("src/store/store-quote.ts");
+ const rows=Array.from({length:10},(_,i)=>product(String(i),"g",.1));
+ const result=buildStoreQuote({products:rows,quantities:Object.fromEntries(rows.map(p=>[p.id,1])),useQuota:Object.fromEntries(rows.map(p=>[p.id,true])),quota:[{productId:"g",availableUnits:.3}],shippingFeeVnd:30000,hasActiveCsa:true});
+ assert.equal(result.lines.reduce((n,l)=>n+l.quotaQuantity,0),3);
+ assert.equal(result.lines[0].quotaUnits,.1);assert.equal(result.lines[3].quotaUnits,0);
+ const quarter=buildStoreQuote({products:[product("a","g",.25),product("b","g",9.75)],quantities:{a:1,b:1},useQuota:{a:true,b:true},quota:[{productId:"g",availableUnits:10}],shippingFeeVnd:0,hasActiveCsa:true});
+ assert.equal(quarter.lines[0].quotaQuantity,1);assert.equal(quarter.lines[1].quotaQuantity,1);
+ const four=buildStoreQuote({products:[product("a","g",.25)],quantities:{a:4},useQuota:{a:true},quota:[{productId:"g",availableUnits:1}],shippingFeeVnd:0,hasActiveCsa:true});
+ assert.equal(four.lines[0].quotaQuantity,4);assert.equal(four.lines[0].quotaUnits,1);
+ const mixed=buildStoreQuote({products:[product("a","g",.25),product("b","g",.5)],quantities:{a:3,b:2},useQuota:{a:true,b:true},quota:[{productId:"g",availableUnits:1.25}],shippingFeeVnd:30000,hasActiveCsa:true});
+ assert.equal(mixed.lines[0].quotaUnits,.75);assert.equal(mixed.lines[1].quotaUnits,.5);
+ assert.equal(mixed.lines[0].quotaQuantity,3);assert.equal(mixed.lines[1].quotaQuantity,1);assert.equal(mixed.lines[1].cashQuantity,1);assert.equal(mixed.totalVnd,45000);
+ for(const cost of [.001,NaN,Infinity,"0.25",0,-.25]) assert.throws(()=>buildStoreQuote({products:[product("a","g",cost)],quantities:{a:1},useQuota:{a:true},quota:[{productId:"g",availableUnits:1}],shippingFeeVnd:0,hasActiveCsa:true}));
+});
+
+test("Store order keeps fractional quota snapshots and integer item counts",()=>{
+ const {parseStoreOrder}=load("src/store/store-order-model.ts");
+ const line={id:"line",product_id:"p",sku:"p",name:"Produce",unit_size:"1.000",unit_label:"kg",unit_price_vnd:45000,quantity:4,quota_group_id:"g",quota_cost:.25,quota_quantity:4,quota_units:1,cash_quantity:0,cash_subtotal_vnd:0};
+ const raw={id:"o",reference_code:"S1",status:"pending_review",payment_status:"not_required",locale:"en",lines:[line],shipping_address:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"1",address:"12 Street"},subtotal_vnd:0,shipping_fee_vnd:0,shipping_discount_reason:null,total_vnd:0,payment:null,expires_at:null,server_time:"now",transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:"",created_at:"now",updated_at:"now"};
+ assert.equal(parseStoreOrder(raw).lines[0].quotaCost,.25);
+ assert.equal(parseStoreOrder({...raw,lines:[{...line,quantity:1,quota_quantity:1,quota_units:.25}]}).lines[0].quotaUnits,.25);
+ for(const field of ["quota_cost","quota_units"])for(const value of [".25",.001,NaN,Infinity,-.25])assert.throws(()=>parseStoreOrder({...raw,lines:[{...line,[field]:value}]}));
+ for(const field of ["quantity","quota_quantity","cash_quantity","unit_price_vnd"])assert.throws(()=>parseStoreOrder({...raw,lines:[{...line,[field]:.25}]}));
+});
+
+test("checkout quota parser accepts numeric hundredths and rejects malformed balances",async()=>{
+ class AccountApiError extends Error{constructor(code,status){super(code);this.status=status}}
+ let value=.25;
+ const service=load("src/store/store-order-service.ts",name=>name==="@/account/account-api"?{AccountApiError}:name==="./store-order-model"?load("src/store/store-order-model.ts"):{} ,{fetch:async()=>new Response(JSON.stringify({data:{products:[{product_id:"g",available_units:value,available_units_for_order:value}]}})),Response});
+ assert.equal((await service.getStoreQuota("en")).products[0].availableUnits,.25);
+ assert.equal((await service.getStoreQuota("en","o")).products[0].availableUnits,.25);
+ for(value of ["0.25",null,.001,-.25])await assert.rejects(()=>service.getStoreQuota("en"));
+});
+
+test("quota boundary preserves decimal hundredths without changing integer fields",()=>{
+ const {csaUnits,csaHundredths}=load("src/lib/csa-units.ts");
+ for(const value of [.01,.1,.25,.29,.5,9.75,10])assert.equal(csaUnits(value),value);
+ assert.equal(csaHundredths(.29),29);
+ for(const value of [null,undefined,"0.25",NaN,Infinity,-.25,.001,.1+.2,Number.MAX_SAFE_INTEGER])assert.throws(()=>csaUnits(value));
 });

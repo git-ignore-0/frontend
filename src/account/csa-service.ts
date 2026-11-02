@@ -1,3 +1,4 @@
+import {csaUnits} from "../lib/csa-units.ts";
 import type {CSA, CSAOverview, CSAUpcoming, CSAUsage, Locale, Paged} from "@/types";
 import {accountApi, AccountApiError} from "./account-api.ts";
 import type {CsaGuestIdentity} from "../screens/account-csa/csa-guest-buyer.ts";
@@ -22,6 +23,9 @@ function integer(value:unknown,minimum=0):number{
   if(!Number.isInteger(value)||Number(value)<minimum)throw new AccountApiError("invalid_response",502);
   return Number(value);
 }
+function quotaUnits(value:unknown,minimum=0):number{
+  try{const units=csaUnits(value);if(units<minimum)throw Error();return units}catch{throw new AccountApiError("invalid_response",502)}
+}
 function decimal(value:unknown):string{
   const result=string(value);
   if(!/^\d+(?:\.\d+)?$/.test(result))throw new AccountApiError("invalid_response",502);
@@ -42,7 +46,7 @@ function usageRows(value:unknown):CSAUsage[]{
     const entryId=string(entry.id),date=string(entry.created_at),status=string(entry.status),orderId=optionalString(entry.order_id);
     return lines.map((lineValue,index)=>{
       const line=record(lineValue);
-      return {id:`${entryId}:${index}`,date,orderId,productName:string(line.product_name),quantity:integer(line.units,1),unit:optionalString(line.unit_label_vi),unitEn:optionalString(line.unit_label_en),status};
+      return {id:`${entryId}:${index}`,date,orderId,productName:string(line.product_name),quantity:quotaUnits(line.units,.01),unit:optionalString(line.unit_label_vi),unitEn:optionalString(line.unit_label_en),status};
     });
   });
 }
@@ -106,7 +110,7 @@ export async function getCSA(locale:Locale):Promise<CSAOverview>{
     monthlyPriceVnd:decimal(current.monthly_price_vnd),
     totalPriceVnd:decimal(current.total_price_vnd),
     contract,
-    quotas:quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:integer(item.quota_units_per_cycle),remaining:integer(item.available_units),reserved:integer(item.reserved_units),used:integer(item.used_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};}),
+    quotas:quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:integer(item.quota_units_per_cycle),remaining:quotaUnits(item.available_units),reserved:quotaUnits(item.reserved_units),used:quotaUnits(item.used_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};}),
     usage:usage.items,
     pagination:{usage:{nextCursor:usage.nextCursor,total:usage.total}},
   };

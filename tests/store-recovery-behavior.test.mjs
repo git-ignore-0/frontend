@@ -45,6 +45,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/auth/auth-service")return {isUnauthorized:error=>error?.status===401};
   if(name==="@/store/store-order-service")return services;
   if(name==="@/store/checkout-intent")return load("src/store/checkout-intent.ts");
+  if(name.endsWith("/csa-units.ts"))return load("src/lib/csa-units.ts");
   if(name==="@/store/store-quote")return load("src/store/store-quote.ts");
   if(name==="@/store/store-order-presentation")return load("src/store/store-order-presentation.ts");
   if(name==="@/store/store-format")return {formatUnitSize:Number};

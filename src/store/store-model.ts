@@ -1,3 +1,4 @@
+import {csaHundredths} from "../lib/csa-units.ts";
 import {SITE_ORIGIN} from "@/config/site-brand";
 
 export type StoreLocale="vi"|"en";
@@ -42,8 +43,9 @@ function parseSupplier(value:unknown,detail:boolean):StoreSupplier|null{
  if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,240)||detail&&!nonEmpty(value.location,240))return null;
  return {id:value.id,name:value.name,...(detail?{location:value.location as string}:{})};
 }
+function validQuotaCost(value:unknown){try{return csaHundredths(value)>0}catch{return false}}
 function parseCsaQuotaGroup(value:unknown):StoreCsaQuotaGroup|null{
- if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,200)||!Number.isSafeInteger(value.cost)||Number(value.cost)<=0)return null;
+ if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,200)||!validQuotaCost(value.cost))return null;
  return {id:value.id,name:value.name,cost:Number(value.cost)};
 }
 function parseProduct(value:unknown,detail:boolean):StoreProductCard|StoreProductDetail|null{

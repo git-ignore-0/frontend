@@ -7,11 +7,11 @@ const require=createRequire(import.meta.url),React=require("react"),jsx=require(
 const root=new URL("../",import.meta.url);
 const read=path=>readFileSync(new URL(path,root),"utf8");
 const product={id:"p",name:"Rau cải",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,primary_image:null,csa_quota_group:{id:"g",cost:1,name:"Rau"}};
-export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false}={}){
+export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false,quotaCost=1}={}){
  let hook=0;
  // Render the settled checkout, after quote, shipping and pending-intent ownership hydrate.
  const seeds=[[],{name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"},{active,products:[{productId:"g",availableUnits:2}]},30000,true,false];
- const data={authenticated,storeProducts:{p:product},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01"}:null};
+ const data={authenticated,storeProducts:{p:{...product,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01"}:null};
  const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}};
  const cache=new Map();
  function load(path){
@@ -31,6 +31,7 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
    if(name==="@/data/account-copy")return load("src/data/account-copy.ts");
    if(name==="@/components/UI")return load("src/components/UI.tsx");
    if(name==="@/store/store-format")return load("src/store/store-format.ts");
+   if(name.endsWith("/csa-units.ts"))return load("src/lib/csa-units.ts");
    if(name==="@/store/store-quote")return load("src/store/store-quote.ts");
    if(name==="@/lib/format")return {money:value=>`${Number(value).toLocaleString("vi-VN")}đ`};
    if(name==="@/account/shipping-address-model")return load("src/account/shipping-address-model.ts");
@@ -73,4 +74,13 @@ test("CSA summary reserves the same benefit row before and after applying points
  assert.match(selected,/class="store-summary-benefit" data-active="true" aria-hidden="false"/);
  assert.match(unselected,/class="store-summary-benefit" data-active="false" aria-hidden="true"/);
  assert.doesNotMatch(renderStoreFixture(),/class="store-summary-benefit"/);
+});
+
+
+test("checkout displays exact quarter-point totals and historical decimal costs",()=>{
+ const quarter=renderStoreFixture({authenticated:true,active:true,useQuota:true,quotaCost:.75});
+ assert.match(quarter,/Dùng 1.5 điểm CSA/);
+ const historical=renderStoreFixture({authenticated:true,active:true,useQuota:true,quotaCost:.1});
+ assert.match(historical,/Dùng 0.3 điểm CSA/);
+ assert.doesNotMatch(historical,/0.30000000000000004/);
 });

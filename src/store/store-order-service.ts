@@ -1,3 +1,4 @@
+import {csaUnits} from "../lib/csa-units.ts";
 import {AccountApiError} from "@/account/account-api";
 import type {Locale} from "@/types";
 import {parseStoreOrder,type StoreOrder,type StoreOrderStatus} from "./store-order-model";
@@ -12,6 +13,18 @@ export async function lookupStoreOrder(referenceCode:string,phoneNumber:string){
 export async function currentLookupStoreOrder(){return parseStoreOrder((await api("lookup/current")).data)}
 export async function getStoreOrders(input:{page:number;status?:StoreOrderStatus}){const query=new URLSearchParams({page:String(input.page),page_size:"20"});if(input.status)query.set("status",input.status);const payload=await api(`user-orders?${query}`),meta=payload.meta as R;if(!Array.isArray(payload.data)||!meta)throw new AccountApiError("invalid_response",502);return {items:payload.data.map(parseStoreOrder),meta:{page:Number(meta.page),pageSize:Number(meta.page_size),total:Number(meta.total)}}}
 export async function getUserStoreOrder(id:string){return parseStoreOrder((await api(`user-orders/${id}`)).data)}
-export async function getStoreQuota(locale:Locale,orderId?:string):Promise<{active:boolean;products:StoreQuotaAvailability[]}>{const query=new URLSearchParams({locale});if(orderId)query.set("store_order_id",orderId);const data=(await api(`quota?${query}`)).data;if(data===null)return {active:false,products:[]};const value=data as R;if(!Array.isArray(value.products))throw new AccountApiError("invalid_response",502);return {active:true,products:value.products.map(row=>{const item=row as R;return {productId:String(item.product_id),availableUnits:Number(orderId?item.available_units_for_order:item.available_units)}})}}
+export async function getStoreQuota(locale:Locale,orderId?:string):Promise<{active:boolean;products:StoreQuotaAvailability[]}>{
+ const query=new URLSearchParams({locale});if(orderId)query.set("store_order_id",orderId);
+ const data=(await api(`quota?${query}`)).data;
+ if(data===null)return {active:false,products:[]};
+ try{
+  const value=data as R;if(!Array.isArray(value.products))throw Error();
+  const products=value.products.map(row=>{
+   const item=row as R;
+   return {productId:String(item.product_id),availableUnits:csaUnits(orderId?item.available_units_for_order:item.available_units)};
+  });
+  return {active:true,products};
+ }catch{throw new AccountApiError("invalid_response",502)}
+}
 export async function getShippingQuote(provinceCode:string,wardCode:string){const data=(await api("shipping-quote",{method:"POST",body:JSON.stringify({province_code:provinceCode,ward_code:wardCode})})).data as R;return {supported:data.supported===true,shippingFeeVnd:data.shipping_fee_vnd===null?null:Number(data.shipping_fee_vnd)}}
 export function storeOrderHref(order:Pick<StoreOrder,"id"|"locale">){return `/store/orders/${order.id}/${order.locale}`}

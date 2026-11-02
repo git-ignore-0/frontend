@@ -14,7 +14,7 @@ const compile=(path,jsx=false)=>ts.transpileModule(source(path),{compilerOptions
 
 function runModule(path,requireStub=()=>({}),extra={}){
  const exp={};
- vm.runInNewContext(compile(path),{exports:exp,require:requireStub,URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
+ vm.runInNewContext(compile(path),{exports:exp,require:id=>id.endsWith("/csa-units.ts")?runModule("src/lib/csa-units.ts"):requireStub(id),URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
  return exp;
 }
 
@@ -124,7 +124,7 @@ test("Store runtime parsers reject malformed envelopes, money, locale and unsafe
   {data:[{...product,csa_quota_group:{...csaQuotaGroup,id:"bad"}}],meta:{page:1,page_size:12,total:1}},
   {data:[{...product,csa_quota_group:{...csaQuotaGroup,name:""}}],meta:{page:1,page_size:12,total:1}},
   {data:[{...product,csa_quota_group:{...csaQuotaGroup,cost:0}}],meta:{page:1,page_size:12,total:1}},
-  {data:[{...product,csa_quota_group:{...csaQuotaGroup,cost:1.5}}],meta:{page:1,page_size:12,total:1}},
+  {data:[{...product,csa_quota_group:{...csaQuotaGroup,cost:1.555}}],meta:{page:1,page_size:12,total:1}},
   {data:[product],meta:{page:0,page_size:12,total:1}},
  ])assert.throws(()=>model.parseStorePage(payload));
  assert.throws(()=>model.parseStoreCategories({data:[{...category,id:"bad"}]}));
@@ -180,4 +180,14 @@ test("Store BFF routes preserve typed calls and safe upstream statuses",async()=
  assert.equal((await failed.route.GET(new Request("http://localhost/api/store/products?locale=en"))).status,502);
  const underscore=runRoute("app/api/store/products/[slug]/route.ts",{result:{data:{}}});
  assert.equal((await underscore.route.GET(new Request("http://localhost/api/store/products/root_vegetables?locale=vi"),{params:Promise.resolve({slug:"root_vegetables"})})).status,200);
+});
+
+test("Store catalog accepts fractional CSA costs while stock and VND remain integers",()=>{
+ const model=loadModel();
+ for(const cost of [.25,.5,.1,1]){
+  const parsed=model.parseStorePage({data:[{...product,csa_quota_group:{...csaQuotaGroup,cost}}],meta:{page:1,page_size:12,total:1}});
+  assert.equal(parsed.data[0].csa_quota_group.cost,cost);
+ }
+ for(const cost of ["0.25",NaN,Infinity,.001,-.25]) assert.throws(()=>model.parseStorePage({data:[{...product,csa_quota_group:{...csaQuotaGroup,cost}}],meta:{page:1,page_size:12,total:1}}));
+ for(const field of ["available_quantity","retail_price_vnd"])assert.throws(()=>model.parseStorePage({data:[{...product,[field]:.25}],meta:{page:1,page_size:12,total:1}}));
 });

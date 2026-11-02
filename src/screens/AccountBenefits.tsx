@@ -91,13 +91,13 @@ function RewardsHistory({kind}:{kind:"rewards"|"redemptions"}){
    render={item=>points?<PointRow item={item} key={item.id}/>:<RedemptionRow item={item} key={item.id}/>}/>;
 }
 function PointRow({item}:{item:RewardEntry}){
- const {ui}=useNFV();return <div className="benefit-history-item"><BenefitTransactionRow title={ui.locale==="en"&&item.descriptionEn?item.descriptionEn:item.description||"—"} meta={[dateLabel(item.date),item.id].filter(Boolean).join(" · ")} amount={`${item.points>0?"+":""}${item.points} ${copyText(ui.locale,"common.points")}`}/></div>;
+ const {ui}=useNFV();return <div className="benefit-history-item"><BenefitTransactionRow title={ui.locale==="en"&&item.descriptionEn?item.descriptionEn:item.description||"—"} meta={dateLabel(item.date)} amount={`${item.points>0?"+":""}${item.points} ${copyText(ui.locale,"common.points")}`}/></div>;
 }
 function RedemptionRow({item}:{item:RewardEntry}){
  const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);
  const {copyKey,tone}=redemptionStatus(item.status);
  return <BenefitTransactionRow title={localized(item as unknown as Record<string,unknown>,"giftName",ui.locale)||item.giftName||"—"}
-   meta={[dateLabel(item.date),item.id].join(" · ")} badge={<><MetricBadge tone={tone}>{L(copyKey)}</MetricBadge><small>−{item.points??0} {L("common.points")}</small></>}/>;
+   meta={dateLabel(item.date)} badge={<><MetricBadge tone={tone}>{L(copyKey)}</MetricBadge><small>−{item.points??0} {L("common.points")}</small></>}/>;
 }
 function RewardsPoints(){
  const {ui}=useNFV();const L=(key:string)=>copyText(ui.locale,key);

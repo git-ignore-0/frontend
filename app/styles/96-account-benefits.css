@@ -145,9 +145,8 @@
 .account-tab-csa .csa-account-package-selection{container-name:account-csa;container-type:inline-size;min-width:0}
 .account-tab-csa .csa-package-selection-section{overflow:hidden}
 .account-tab-csa .csa-terms-list{display:grid;margin-top:4px;border:1px solid var(--line);border-radius:8px;overflow:hidden}.account-tab-csa .csa-term-item{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;padding:11px 13px;background:#fff;color:var(--ink2);font-size:12px;line-height:1.55;cursor:pointer}.account-tab-csa .csa-term-item+.csa-term-item{border-top:1px solid var(--line)}.account-tab-csa .csa-term-item input{width:16px;height:16px;margin:2px 0 0;accent-color:var(--green)}.account-tab-csa .csa-term-item:has(input:checked){background:#f5f9f3;color:var(--ink)}.account-tab-csa .csa-term-item:has(input[aria-invalid="true"]){background:#fff6f3}.account-tab-csa .csa-terms-all{position:sticky;bottom:0;background:#edf5eb;color:var(--green);font-size:13px}.account-tab-csa .csa-terms-all:has(input:checked){background:#e4f1e1}
-.account-tab-csa .csa-bank-details{display:grid;border-top:1px solid var(--line)}.account-tab-csa .csa-bank-details>div{display:grid;grid-template-columns:minmax(100px,.6fr) minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.account-tab-csa .csa-bank-details span{color:var(--muted);font-size:11px}.account-tab-csa .csa-bank-details strong{font-size:13px;overflow-wrap:anywhere}.account-tab-csa .csa-quote-expiry{margin:12px 0 0;color:var(--muted);font-size:11px}
+.account-tab-csa .csa-quote-expiry{margin:12px 0 0;color:var(--muted);font-size:11px}
 .account-tab-csa .csa-qr-unavailable,.bank-transfer .csa-qr-unavailable{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:18px;color:#a94736;text-align:center;font-size:12px;line-height:1.45;background:#fff8f5}
-@container account-csa (max-width:620px){.account-tab-csa .csa-bank-details>div{grid-template-columns:minmax(0,1fr)}}
 
 /* Approved Account → CSA state surfaces. */
 .account-tab-csa .csa-account-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}.account-tab-csa .csa-account-heading h2{margin:0;color:var(--green);font-size:21px}.account-tab-csa .csa-account-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}.account-tab-csa .csa-account-heading .btn{flex:none}.account-tab-csa .csa-account-pending{margin-bottom:12px}
@@ -204,7 +203,6 @@
 .account-tab-csa .csa-payment-total,.bank-transfer .csa-payment-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.account-tab-csa .csa-payment-total span,.bank-transfer .csa-payment-total span{color:var(--muted);font-size:11px}.account-tab-csa .csa-payment-total strong,.bank-transfer .csa-payment-total strong{font-size:13px;font-weight:650}
 .account-tab-csa .csa-transfer-details,.bank-transfer .csa-transfer-details{display:grid;margin:0}.account-tab-csa .csa-transfer-row,.bank-transfer .csa-transfer-row{display:grid;grid-template-columns:minmax(128px,.65fr) minmax(0,1fr);align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed #dfe7dc}.account-tab-csa .csa-transfer-row:last-child,.bank-transfer .csa-transfer-row:last-child{border-bottom:0}.account-tab-csa .csa-transfer-row dt,.bank-transfer .csa-transfer-row dt{color:var(--muted);font-size:11px}.account-tab-csa .csa-transfer-row dd,.bank-transfer .csa-transfer-row dd{display:flex;align-items:center;justify-content:space-between;gap:9px;min-width:0;min-height:34px;margin:0}.account-tab-csa .csa-transfer-row strong,.bank-transfer .csa-transfer-row strong{min-width:0;font-size:13px;font-weight:650;overflow-wrap:anywhere}
 .account-tab-csa .csa-copy-button,.bank-transfer .csa-copy-button{display:inline-grid;place-items:center;flex:0 0 34px;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--green)}.account-tab-csa .csa-copy-button:hover,.bank-transfer .csa-copy-button:hover{border-color:#b9cbb9;background:#edf4eb}.account-tab-csa .csa-copy-button:disabled,.bank-transfer .csa-copy-button:disabled{opacity:.45}
-.account-tab-csa .v2-purchase-brief{margin:0 0 13px;color:var(--ink2);font-size:12px;line-height:1.55}
 .account-tab-csa .v2-package-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
 .account-tab-csa .v2-package-toolbar strong{font-size:12px;color:var(--ink2);font-weight:650}
 .account-tab-csa .v2-plan-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;overflow:visible;padding:3px 0 4px;min-width:0}
@@ -238,15 +236,27 @@
 .account-tab-csa .payment-plan-choice-v2:hover{border-color:#b5cbb6}.account-tab-csa .payment-plan-choice-v2.selected{border-color:#86aa8d;background:#f4f8f2}
 .account-tab-csa .v2-pay-radio{flex:none;width:16px;height:16px;border:1.5px solid #afc4b2;border-radius:50%;margin-top:2px;position:relative;background:white}.account-tab-csa .payment-plan-choice-v2.selected .v2-pay-radio{border-color:var(--green)}.account-tab-csa .payment-plan-choice-v2.selected .v2-pay-radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--green)}
 .account-tab-csa .v2-pay-body{display:grid;gap:4px;min-width:0;flex:1}.account-tab-csa .v2-pay-body strong{color:var(--ink);font-size:12px;font-weight:700}.account-tab-csa .v2-pay-body small{font-size:11px;color:var(--muted);line-height:1.4}.account-tab-csa .v2-pay-amount{font-size:14px;font-weight:750;color:var(--green)}
-.account-tab-csa .v2-checkout-review{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-top:16px;flex-wrap:wrap}.account-tab-csa .v2-checkout-review .v2-total-col{display:grid;gap:3px}.account-tab-csa .v2-checkout-review .v2-total-col span{font-size:11px;color:var(--muted)}.account-tab-csa .v2-checkout-review .v2-total-col strong{font-size:21px;letter-spacing:-.5px;color:var(--green);line-height:1.2}.account-tab-csa .v2-checkout-review .btn{padding-inline:20px}
-.account-tab-csa .v2-legal-demo{color:var(--muted);font-size:10px;line-height:1.5;margin:12px 0 0}
+.account-tab-csa .csa-selection-review{display:grid;grid-template-columns:minmax(0,1fr);margin-top:20px;padding-top:20px;border-top:1px solid var(--line);min-width:0}
+.account-tab-csa .csa-selection-review-details{display:grid;gap:14px;min-width:0;width:100%}
+.account-tab-csa .csa-selection-review .money-line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0;margin:0}
+.account-tab-csa .csa-selection-review .money-line>span{min-width:0;overflow-wrap:anywhere}
+.account-tab-csa .csa-selection-review .money-line>strong{flex:none;text-align:right;font-variant-numeric:tabular-nums}
+.account-tab-csa .csa-selection-review-discount .money-line{color:var(--green)}
+.account-tab-csa .csa-selection-review-total{padding-top:14px;border-top:1px solid var(--line)}
+.account-tab-csa .csa-selection-review-total .money-line>strong{font-size:21px;letter-spacing:-.5px;color:var(--green);line-height:1.25}
+.account-tab-csa .csa-selection-review .discount-code-field{min-width:0}
+.account-tab-csa .csa-selection-review .discount-code-controls{align-items:stretch}
+.account-tab-csa .csa-selection-review .discount-code-input .nfv-control,
+.account-tab-csa .csa-selection-review .discount-code-controls>.btn{height:40px;min-height:40px}
+.account-tab-csa .csa-selection-review .discount-code-clear{width:36px}
+.account-tab-csa .csa-selection-review-details>[data-csa-continue]{width:100%;min-height:44px;height:auto;padding:10px 20px}
+
 .account-tab-csa .v2-scroll-hint{display:none;font-size:11px;font-weight:500;color:var(--muted);white-space:nowrap}
 @container account-csa (max-width:760px){
  .account-tab-csa .v2-scroll-hint{display:inline}
  .account-tab-csa .v2-plan-cards{display:flex;gap:11px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#b9cbb9 transparent;padding:3px 2px 13px}
  .account-tab-csa .v2-plan-card{flex:0 0 min(275px,calc(100% - 44px));width:min(275px,calc(100% - 44px));scroll-snap-align:start}
  .account-tab-csa .payment-plan-list-v2{grid-template-columns:1fr}
- .account-tab-csa .v2-checkout-review{align-items:stretch}.account-tab-csa .v2-checkout-review .btn{width:100%}
 }
 @container account-csa (max-width:620px){.account-tab-csa .csa-buy-steps{margin-bottom:12px}.account-tab-csa .csa-buy-step{font-size:10px}.account-tab-csa .csa-buy-step:not(:last-child)::after{margin:0 5px;min-width:5px}.account-tab-csa .csa-rights-header,.account-tab-csa .csa-rights-row{grid-template-columns:minmax(106px,1.45fr) repeat(3,minmax(0,.95fr));gap:5px}.account-tab-csa .csa-rights-header{font-size:10px}.account-tab-csa .csa-rights-product>strong{font-size:12px}.account-tab-csa .csa-rights-product>small{font-size:10px}.account-tab-csa .csa-rights-metric strong{font-size:17px}.account-tab-csa .csa-plan-meta{gap:7px 14px}}
 @container account-csa (max-width:560px){.account-tab-csa .csa-qr-area,.bank-transfer .csa-qr-area{grid-template-columns:1fr;gap:16px}.account-tab-csa .csa-qr-frame,.bank-transfer .csa-qr-frame{width:min(220px,100%)}.account-tab-csa .csa-payment-information,.bank-transfer .csa-payment-information{width:100%}}
@@ -276,3 +286,9 @@
 @container bank-transfer (max-width:430px){.bank-transfer .csa-transfer-row{grid-template-columns:minmax(0,1fr);gap:4px}}
 
 #csa-points-history{scroll-margin-top:88px}
+
+@container account-csa (max-width:360px){
+ .account-tab-csa .csa-selection-review .money-line.big{flex-wrap:wrap;gap:4px 12px}
+ .account-tab-csa .csa-selection-review .money-line.big>strong{margin-inline-start:auto}
+ .account-tab-csa .csa-selection-review .discount-code-controls>.btn{padding-inline:10px}
+}

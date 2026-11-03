@@ -1,10 +1,12 @@
 "use client";
 
-import {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import {useRouter,useSearchParams} from "next/navigation";
 import {StoreSection,StorePageHeading,StoreProductRow,StoreRecipientSummary,StoreSummaryAmounts} from "@/components/store/StorePrimitives";
 import {SideDrawer} from "@/components/overlays/OverlayPrimitives";
-import {Button,DataState,FormInput,Icon,MoneyLine,Photo,Quantity} from "@/components/UI";
+import {Button,DataState,Icon,MoneyLine,Photo,Quantity} from "@/components/UI";
+import {DiscountCodeField} from "@/components/DiscountCodeField";
+import {VOUCHER_COPY,couponErrorMessage} from "@/lib/voucher-copy";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
@@ -15,13 +17,14 @@ import {prepareBuyAgain,type BuyAgainLine} from "@/store/store-order-service";
 import {useStoreSession} from "@/store/use-store-session";
 import {formatUnitSize} from "@/store/store-format";
 import {money} from "@/lib/format";
+import {csaHundredths} from "../lib/csa-units.ts";
 import {getSupportedShippingAreas} from "@/account/shipping-service";
 import type {SupportedShippingProvince} from "@/account/shipping-address-model";
 import {EMPTY_SHIPPING_ADDRESS,reviewGuestBuyer,type ShippingAddressDraft} from "@/account/shipping-address-model";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {buildStoreQuote,checkoutPayload} from "@/store/store-quote";
 import {parseStoreProductDetail} from "@/store/store-model";
-import {createStoreCheckout,getShippingQuote,getStoreQuota,storeOrderHref} from "@/store/store-order-service";
+import {createStoreCheckout,getShippingQuote,getStoreQuota,storeOrderHref,previewStoreVoucher,type StoreVoucherPreview} from "@/store/store-order-service";
 import {readCheckoutIntent,pendingCheckoutOwner,saveCheckoutIntent,clearCheckoutIntent,checkoutSignInOwner,requireCheckoutSignIn,clearCheckoutSignIn,checkoutDefinitelyRejected,checkoutRequoteReason,type StoreCheckoutIntent} from "@/store/checkout-intent";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
 import {cartAfterCheckout} from "@/store/cart-checkout";
@@ -53,6 +56,17 @@ export function CartDrawer(){
 type Guest=ShippingAddressDraft;
 const EMPTY=EMPTY_SHIPPING_ADDRESS;
 const GUEST_DRAFT="nfv_store_checkout_guest_v1";
+function voucherMessage(error:unknown,locale:"vi"|"en"){
+ const c=VOUCHER_COPY[locale],code=error instanceof AccountApiError?error.code:"";
+ if(code.startsWith("coupon_"))return couponErrorMessage(code,locale);
+ const messages:Record<string,string>={store_phone_invalid:COPY[locale].addressRequote};
+ return Object.prototype.hasOwnProperty.call(messages,code)?messages[code]:c.failed;
+}
+function sameAddressVersion(left:string,right:string){
+ // Normalize equivalent offsets without dropping the backend's microseconds.
+ const fraction=(value:string)=>(/\.(\d{1,6})(?:Z|[+-]\d{2}:\d{2})$/.exec(value)?.[1]??"").padEnd(6,"0");
+ return Date.parse(left)===Date.parse(right)&&fraction(left)===fraction(right);
+}
 
 export function Checkout(){
  const storeRequest=useStoreSession(),searchParams=useSearchParams(),buyAgainRequested=searchParams.get("source")==="buy-again";
@@ -122,6 +136,47 @@ export function Checkout(){
  const cartReady=buyAgainMode?sourceInitialized&&sourceKey===`${owner}:${ui.locale}:${sourceVersion}`&&!sourceError&&!!buyAgainSession&&buyAgainRows.length>0&&buyAgainRows.every(line=>line.reason===null):cartHydrated&&!tooManyProducts&&products.length===Object.keys(ui.cart).length&&products.every(product=>ui.cartProductState[product.id]==="ready"&&!ui.cartProductNotice[product.id]&&product.available_quantity>=ui.cart[product.id]&&ui.cart[product.id]>0);
  const quoteFinal=accountSessionKey===owner&&(!authenticated||addressState==="ready")&&!quotePending&&!loadError&&!shippingError&&supported&&shippingKnown&&cartReady&&requoteState!=="loading"&&requoteState!=="error";
  const ready=quoteFinal&&accountSessionKey===owner&&(authenticated?!!address?.updatedAt&&address.isSupported!==false&&addressState==="ready":guestValid);
+ const voucherCopy=VOUCHER_COPY[ui.locale];
+ type VoucherScope={key:string;session:typeof auth.session};
+ const [voucherResult,setVoucherResult]=useState<{context:VoucherScope;quote:StoreVoucherPreview}|null>(null),[voucherError,setVoucherError]=useState<{context:VoucherScope;message:string}|null>(null),[voucherPending,setVoucherPending]=useState<VoucherScope|null>(null),[voucherVersion,setVoucherVersion]=useState(0);
+ const voucherRequest=useRef(0),voucherInFlight=useRef<string|null>(null),voucherContext=useRef("");
+ const voucherKey=JSON.stringify({owner,authenticated,session:auth.session,code:discountCode,locale:ui.locale,source:buyAgainMode?buyAgainSession:null,sourceKey,sourceVersion,quantities,useQuota,address,quota,quote,loadKey,shippingKey,ready,version:voucherVersion});
+ const voucherScope=useMemo(()=>({key:voucherKey,session:auth.session}),[voucherKey,auth.session]);
+ useLayoutEffect(()=>{voucherContext.current=voucherKey;return()=>{voucherContext.current="";voucherRequest.current+=1;voucherInFlight.current=null}},[voucherKey,auth.session]);
+ const currentVoucher=authenticated&&voucherResult?.context===voucherScope?voucherResult.quote:undefined;
+ const voucherWanted=authenticated&&discountCode.trim().length>0;
+ const voucherLoading=voucherPending===voucherScope;
+ const voucherReady=!voucherWanted||!!currentVoucher;
+ const displayQuote=currentVoucher?(()=>{
+  const lines=quote.lines.map(line=>{
+   const expected=currentVoucher.lines.find(item=>item.product_id===line.product.id)!;
+   return {...line,product:{...line.product,retail_price_vnd:expected.expected_unit_price_vnd,available_quantity:expected.expected_available_quantity},quantity:expected.quantity,useQuota:expected.use_quota,quotaQuantity:expected.expected_quota_quantity,quotaUnits:expected.expected_quota_quantity*csaHundredths(line.product.csa_quota_group?.cost??0)/100,cashQuantity:expected.quantity-expected.expected_quota_quantity,cashSubtotalVnd:(expected.quantity-expected.expected_quota_quantity)*expected.expected_unit_price_vnd};
+  });
+  return {...quote,lines,goodsValueVnd:lines.reduce((sum,line)=>sum+line.quantity*line.product.retail_price_vnd,0),quotaValueVnd:lines.reduce((sum,line)=>sum+line.quotaQuantity*line.product.retail_price_vnd,0),cashSubtotalVnd:currentVoucher.subtotalVnd,shippingFeeVnd:currentVoucher.shippingFeeVnd,totalVnd:currentVoucher.totalVnd};
+ })():quote;
+ const applyVoucher=async()=>{
+  if(!authenticated||!ready||busy||intent.current||checkoutCompleted.current||voucherInFlight.current===voucherKey)return;
+  if(!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(discountCode.trim().toUpperCase())){setVoucherError({context:voucherScope,message:voucherCopy.invalid});return;}
+  const request=++voucherRequest.current,key=voucherKey,code=discountCode.trim().toUpperCase();
+  voucherInFlight.current=key;setVoucherPending(voucherScope);setVoucherResult(null);setVoucherError(null);if(!requote)setError("");
+  try{
+   const result=await storeRequest(()=>previewStoreVoucher({locale:ui.locale,coupon_code:code,lines:quote.lines.map(line=>({product_id:line.product.id,quantity:line.quantity,use_quota:line.useQuota}))}));
+   if(request!==voucherRequest.current||key!==voucherContext.current)return;
+   if(result.coupon.code!==code||result.lines.length!==quote.lines.length||result.lines.some(line=>!quote.lines.some(item=>item.product.id===line.product_id&&item.quantity===line.quantity&&item.useQuota===line.use_quota)))throw new AccountApiError("invalid_response",502);
+   if(!address?.updatedAt||!sameAddressVersion(result.shippingAddressUpdatedAt,address.updatedAt)){
+    requoteReason.current="shipping_address_changed";setRequote(true);setError(copy.addressRequote);await refreshRequote();return;
+   }
+   setVoucherResult({context:voucherScope,quote:result});
+  }catch(reason){
+   if(request!==voucherRequest.current||key!==voucherContext.current)return;
+   const refreshReason=reason instanceof AccountApiError?checkoutRequoteReason(reason):null;
+   if(refreshReason&&refreshReason!=="voucher_changed"){
+    requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(refreshReason));await refreshRequote();
+   }else setVoucherError({context:voucherScope,message:voucherMessage(reason,ui.locale)});
+  }
+  finally{if(request===voucherRequest.current){voucherInFlight.current=null;setVoucherPending(null)}}
+ };
+ const removeVoucher=()=>{if(busy||intent.current||checkoutCompleted.current)return;setDiscountCode("");setVoucherResult(null);setVoucherError(null);setVoucherVersion(value=>value+1)};
  const refreshRequote=async()=>{
   const request=lifecycle.current,sequence=++requoteRequest.current;setRequoteState("loading");setShippingVersion(value=>value+1);
   try{
@@ -156,8 +211,8 @@ export function Checkout(){
   if(!authReady||checkoutCompleted.current||submitting.current||intentOwner!==owner||intentError||pendingOwner!==null&&pendingOwner!==owner)return;
   if(!intent.current){
    if(!authenticated){setGuestSubmitted(true);if(!guestReview.complete)return;}
-   if(!ready)return;
-   const payload=checkoutPayload({quote,locale:ui.locale,shippingAddressUpdatedAt:authenticated?address?.updatedAt:undefined,guest:authenticated?undefined:{recipient_name:guestReview.value!.name,phone_number:guestReview.value!.phone,province_code:guestReview.value!.provinceCode,ward_code:guestReview.value!.wardCode,address:guestReview.value!.address},idempotencyKey:crypto.randomUUID()});
+   if(!ready||!voucherReady||voucherLoading)return;
+   const payload=checkoutPayload({quote,voucher:currentVoucher,locale:ui.locale,shippingAddressUpdatedAt:authenticated?address?.updatedAt:undefined,guest:authenticated?undefined:{recipient_name:guestReview.value!.name,phone_number:guestReview.value!.phone,province_code:guestReview.value!.provinceCode,ward_code:guestReview.value!.wardCode,address:guestReview.value!.address},idempotencyKey:crypto.randomUUID()});
    const attempt:StoreCheckoutIntent={owner,payload,...(buyAgainMode&&buyAgainSession?{buyAgain:{orderId:buyAgainSession.orderId,sessionId:buyAgainSession.sessionId}}:{})};
    try{saveCheckoutIntent(window.sessionStorage,attempt)}catch{setIntentError(true);return;}
    intent.current=attempt;setPendingOwner(owner);
@@ -182,7 +237,9 @@ export function Checkout(){
    if(reason instanceof AccountApiError&&checkoutDefinitelyRejected(reason)){
     try{clearCheckoutIntent(window.sessionStorage,attempt.owner);clearCheckoutSignIn(window.sessionStorage,attempt.owner);setReauthOwner(null);setPendingOwner(null);intent.current=null;setRecovering(false)}catch{setIntentError(true);return;}
     const refreshReason=checkoutRequoteReason(reason);
-    if(refreshReason){requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(requoteReason.current));await refreshRequote()}else setError(reason.code==="store_payment_unavailable"?copy.paymentUnavailable:copy.failed);
+    setVoucherVersion(value=>value+1);
+    if(refreshReason==="voucher_changed"){setVoucherError(null);setError(reason.code.startsWith("coupon_")?voucherMessage(reason,ui.locale):voucherCopy.changed)}
+    else if(refreshReason){requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(requoteReason.current));await refreshRequote()}else setError(reason.code==="store_payment_unavailable"?copy.paymentUnavailable:copy.failed);
    }else{setRecoveryTotal(attempt.payload.expected_total_vnd);setRecovering(true);setError("");}
   }finally{if(request===lifecycle.current&&!checkoutCompleted.current){submitting.current=false;setBusy(false)}}
  };
@@ -211,7 +268,7 @@ export function Checkout(){
   <div className="checkout-flow-layout store-checkout">
    <div className="checkout-flow-main">
     <StoreSection title={copy.recipient}>{addressPanel}</StoreSection>
-    <StoreSection title={ui.locale==="vi"?"Sản phẩm":"Products"}>{quote.lines.map(line=><StoreProductRow key={line.product.id} name={line.product.name} image={<Photo src={line.product.primary_image?.url} alt={line.product.name} locale={ui.locale}/>} meta={<>{line.quantity} × {formatUnitSize(line.product.unit_size)} {line.product.unit_label}</>} amount={money(line.quantity*line.product.retail_price_vnd)} actions={authenticated&&!quotePending&&quota.active&&line.product.csa_quota_group?<>
+    <StoreSection title={ui.locale==="vi"?"Sản phẩm":"Products"}>{displayQuote.lines.map(line=><StoreProductRow key={line.product.id} name={line.product.name} image={<Photo src={line.product.primary_image?.url} alt={line.product.name} locale={ui.locale}/>} meta={<>{line.quantity} × {formatUnitSize(line.product.unit_size)} {line.product.unit_label}</>} amount={money(line.quantity*line.product.retail_price_vnd)} actions={authenticated&&!quotePending&&quota.active&&line.product.csa_quota_group?<>
       <label className="csa-apply"><input type="checkbox" checked={!!useQuota[line.product.id]} disabled={busy||requoteState==="loading"} onChange={event=>buyAgainMode?setBuyAgainCSA({...buyAgainCSA,[line.product.id]:event.target.checked}):patch({applyCSA:{...ui.applyCSA,[line.product.id]:event.target.checked}})}/><span>{!line.useQuota?copy.quota:line.quotaQuantity===0?copy.quotaInsufficient:`${copy.quotaPoints.replace("{points}",String(line.quotaUnits))}${line.cashQuantity>0?` · ${copy.quotaPartial} ${money(line.cashSubtotalVnd)}`:""}`}</span></label>
     </>:undefined}>
       {!buyAgainMode&&ui.cartProductState[line.product.id]==="loading"&&<DataState kind="loading" compact title={copy.refreshing}/>}
@@ -227,15 +284,14 @@ export function Checkout(){
     {error&&<div className="callout" role="alert">{error}</div>}
    </div>
    <StoreSection as="aside" className="store-summary" title={ui.locale==="vi"?"Đơn hàng của bạn":"Your order"}>
-    <StoreSummaryAmounts locale={ui.locale} goods={money(quote.goodsValueVnd)} shipping={!shippingKnown||quotePending?"—":quote.shippingFeeVnd===0?(ui.locale==="vi"?"Miễn phí":"Free"):money(quote.shippingFeeVnd)} benefit={authenticated&&quote.quotaValueVnd>0?`−${money(quote.quotaValueVnd)}`:undefined} reserveBenefit={authenticated&&quota.active&&quote.lines.some(line=>!!line.product.csa_quota_group)} total={quoteFinal?money(quote.totalVnd):"—"} discounts={
+    <StoreSummaryAmounts locale={ui.locale} goods={money(displayQuote.goodsValueVnd)} shipping={!shippingKnown||quotePending?"—":displayQuote.shippingFeeVnd===0?(ui.locale==="vi"?"Miễn phí":"Free"):money(displayQuote.shippingFeeVnd)} benefit={authenticated&&displayQuote.quotaValueVnd>0?`−${money(displayQuote.quotaValueVnd)}`:undefined} reserveBenefit={authenticated&&quota.active&&displayQuote.lines.some(line=>!!line.product.csa_quota_group)} total={quoteFinal&&voucherReady&&!voucherLoading?money(displayQuote.totalVnd):"—"} voucher={currentVoucher?{code:currentVoucher.coupon.code,discount:`−${money(currentVoucher.discountAmountVnd)}`}:undefined} cashSubtotal={currentVoucher?money(currentVoucher.subtotalVnd):undefined} discounts={
     <div className="store-discount-code">
-     <label className="store-discount-label" htmlFor="storeDiscountCode">{ui.locale==="vi"?"Mã giảm giá":"Discount code"}</label>
-     <div className="store-discount-controls"><FormInput id="storeDiscountCode" autoComplete="off" maxLength={50} placeholder={ui.locale==="vi"?"Nhập mã giảm giá":"Enter discount code"} value={discountCode} onChange={event=>setDiscountCode(event.target.value.toUpperCase())}/><Button small type="button" variant="outline" disabled title={ui.locale==="vi"?"Tính năng sẽ được hỗ trợ sau":"Coming soon"}>{ui.locale==="vi"?"Áp dụng":"Apply"}</Button></div>
+     <DiscountCodeField id="storeDiscountCode" locale={ui.locale} value={authenticated?discountCode:""} disabled={!authenticated||busy} loading={voucherLoading} applyDisabled={!ready} error={voucherError?.context===voucherScope?voucherError.message:undefined} signInHref={!authenticated?siteAuthHref("login",ui.locale,`/store/checkout/${ui.locale}${buyAgainMode||buyAgainRequested?"?source=buy-again":""}`):undefined} onChange={value=>{if(busy||intent.current)return;setDiscountCode(value);setVoucherResult(null);setVoucherError(null)}} onClear={removeVoucher} onApply={()=>void applyVoucher()}/>
     </div>}/>
    <div className="checkout-flow-actions store-checkout-actions">
     {(quotePending||requoteState==="loading")&&<p className="sm muted" role="status">{copy.loading}</p>}
     {requote&&<Button variant="outline" disabled={busy||requoteState!=="ready"||!quoteFinal} onClick={()=>{setRequote(false);setError("")}}>{copy.acceptQuote}</Button>}
-    <Button loading={busy} disabled={busy||intentError||intentOwner!==owner||requote||(authenticated?!ready:!cartReady||quotePending||loadError||requoteState==="loading"||requoteState==="error"||(guestValid&&!ready))} onClick={()=>void submit()}>{copy.confirm}<Icon name="arrow" size={17}/></Button>
+    <Button loading={busy} disabled={busy||voucherLoading||!voucherReady||intentError||intentOwner!==owner||requote||(authenticated?!ready:!cartReady||quotePending||loadError||requoteState==="loading"||requoteState==="error"||(guestValid&&!ready))} onClick={()=>void submit()}>{copy.confirm}<Icon name="arrow" size={17}/></Button>
    </div>
    </StoreSection>
   </div>

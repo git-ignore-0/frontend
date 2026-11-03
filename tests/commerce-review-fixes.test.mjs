@@ -12,7 +12,8 @@ const nodes=tree=>!tree||typeof tree!=="object"?[]:[tree,...[tree.props?.childre
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return {promise,resolve}};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-function csaRuntime(){
+function csaRuntime(voucher={ready:true,loading:false,code:"",change:()=>{},clear:()=>{},apply:async()=>{}}){
+ const quoteInputs=[];
  let cursor=0,states=[],deps=[],effects=[],cleanups=[],saved=0,tree;
  const quoteRequest=deferred(),confirmRequest=deferred(),auth={status:"authenticated",session:{subject:"A"}};
  const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"A",phone:"0901234567",email:"a@example.test"}},refreshResource(){}};
@@ -24,22 +25,24 @@ function csaRuntime(){
   if(name==="@/auth/AuthProvider")return {useAuth:()=>auth};
   if(name==="@/state/NFVContext")return {useNFV:()=>context};
   if(name==="@/components/UI")return {DataState:"DataState"};
+  if(name==="@/lib/voucher-copy")return {VOUCHER_COPY:{vi:{changed:"changed"}},couponErrorMessage:code=>code};
   if(name==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(name==="@/screens/csa/useCsaPackages")return {useCsaPackages:()=>({status:"ready",page:{data:[{id:"p"}]}})};
   if(name==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false})};
+  if(name==="./useCsaVoucher")return {useCsaVoucher:()=>voucher};
   if(name==="./useCsaTerms")return {useCsaTerms:()=>({document:doc,status:"ready"})};
   if(name==="./csa-terms-model")return {csaTermsAcceptanceKey:()=>"terms"};
   if(name==="./csa-guest-buyer")return {EMPTY_CSA_GUEST_BUYER:{},csaGuestBuyerReview:()=>({complete:false}),normalizeVietnamPhone:x=>x};
   if(name==="./csa-account-review")return {csaAuthenticatedPendingOwner:profile=>({email:profile.email,phone:profile.phone})};
   if(name==="./csa-pending-storage")return {csaPendingStorage:()=>({}),parseCsaPending:()=>null,csaPendingMemberPhone:()=>"",saveCsaPending:()=>{saved++}};
   if(name==="./csa-selection-model")return {csaSelectionSummary:()=>null,createCsaSelection:()=>selection};
-  if(name==="@/account/csa-service")return {createCsaPaymentQuote:()=>quoteRequest.promise,confirmCsaTransfer:()=>confirmRequest.promise};
+  if(name==="@/account/csa-service")return {createCsaPaymentQuote:input=>{quoteInputs.push(input);return quoteRequest.promise;},confirmCsaTransfer:()=>confirmRequest.promise};
   return {};
  });
  // pendingStorageSnapshot only reads storage when a browser exists; no browser/global window here.
  const render=(component="CsaPurchaseSession")=>{cursor=0;return tree=exports[component]({})};
  const flush=()=>{for(const {i,fn} of effects.splice(0)){cleanups[i]?.();cleanups[i]=fn()}};
- return {auth,context,quoteRequest,confirmRequest,get tree(){return tree},get saved(){return saved},render,flush,dispose(){cleanups.forEach(fn=>fn?.())},async toTerms(){render();flush();nodes(tree).find(n=>n.props?.onContinue)?.props.onContinue();render();tree.props.onContinue();render()}};
+ return {auth,context,quoteInputs,quoteRequest,confirmRequest,get tree(){return tree},get saved(){return saved},render,flush,dispose(){cleanups.forEach(fn=>fn?.())},async toTerms(){render();flush();nodes(tree).find(n=>n.props?.onContinue)?.props.onContinue();render();tree.props.onContinue();render()}};
 }
 
 test("public CSA owner boundary changes key and hides all content until account resources belong to the new subject",()=>{
@@ -135,4 +138,25 @@ test("pending owner blocks replacing another account's unresolved request withou
  assert.throws(()=>saveCheckoutIntent(storage,{owner:"B",payload:{...payload,idempotency_key:"33333333-3333-4333-8333-333333333333"}}),/conflicting_checkout_intents/);
  assert.equal(readCheckoutIntent(storage,"A").payload.idempotency_key,payload.idempotency_key);
  clearCheckoutIntent(storage,"A");assert.equal(pendingCheckoutOwner(storage,"B"),null);
+});
+
+
+test("CSA voucher input belongs to package selection and applied code reaches quote only after terms",async()=>{
+ const summary={paymentType:"full",totalAmount:"500000",initialPaymentAmount:"400000",installmentCount:1,installments:[{sequence:1,amount:"400000",cycleCount:1}]};
+ const voucher={ready:true,loading:false,code:"SAVE",applied:{coupon:{code:"SAVE",discountAmount:"100000",customerPayableTotal:"400000"},summary},invalidate:()=>{throw Error("Unexpected invalidation");}};
+ const r=csaRuntime(voucher);r.render();r.flush();const choose=nodes(r.tree).find(n=>n.props?.discounts);
+ assert.ok(choose);assert.equal(choose.props.discounts.props.id,"csaDiscountCode");assert.equal(r.quoteInputs.length,0);
+ await r.toTerms();r.tree.props.onCreatePayment();assert.equal(r.quoteInputs.length,1);assert.equal(r.quoteInputs[0].couponCode,"SAVE");assert.equal(r.quoteInputs[0].termsVersion,"v1");
+ r.quoteRequest.resolve({quoteToken:"discounted",expiresAt:"2099-01-01",coupon:voucher.applied.coupon,summary});await tick();const payment=r.render();assert.equal(payment.props.quote.quoteToken,"discounted");assert.equal(payment.props.discounts,undefined);assert.equal(payment.props.selection,undefined);r.dispose();
+});
+
+test("a changed CSA voucher total returns to selection instead of showing the payment quote",async()=>{
+ let invalidated=0;const voucher={ready:true,loading:false,code:"SAVE",applied:{coupon:{code:"SAVE",discountAmount:"100000",customerPayableTotal:"400000"},summary:{initialPaymentAmount:"400000"}},invalidate:()=>{invalidated++;}};
+ const r=csaRuntime(voucher);await r.toTerms();r.tree.props.onCreatePayment();r.quoteRequest.resolve({quoteToken:"changed",coupon:{code:"SAVE",discountAmount:"50000",customerPayableTotal:"450000"},summary:{initialPaymentAmount:"450000"}});await tick();const tree=r.render();assert.equal(invalidated,1);assert.ok(nodes(tree).some(n=>n.props?.discounts));assert.equal(tree.props.quote,undefined);r.dispose();
+});
+
+test("invalidated CSA preview at terms returns to selection instead of silently stopping",async()=>{
+ const voucher={ready:true,loading:false,code:"SAVE",change(){},clear(){},apply(){}};
+ const r=csaRuntime(voucher);await r.toTerms();voucher.ready=false;r.context.ui.locale="en";r.render();r.tree.props.onCreatePayment();await tick();const next=r.render();
+ assert.equal(r.quoteInputs.length,0);assert.ok(nodes(next).some(node=>node.props?.discounts));r.dispose();
 });

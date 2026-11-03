@@ -14,10 +14,10 @@
 .nfv-brand-logo--footer img { width: 100%; height: 100%; object-fit: contain; }
 .site-header .nfv-brand-logo { margin-right: auto; }
 
-/* Only guarded Account / order-detail routes need a short-page footer layout.
+/* Account, order-detail and Store checkout share the short-page footer layout.
    Other screens (including Home and Store) retain their original document flow. */
-.nfv-app--auth-route { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-.nfv-app--auth-route > .nfv-site-footer { margin-top: auto; }
+.nfv-app--full-height { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.nfv-app--full-height > .nfv-site-footer { margin-top: auto; }
 
 /* Footer uses the primary button's base green, deepened slightly.
    Derived from --green so both surfaces stay aligned when the theme changes. */

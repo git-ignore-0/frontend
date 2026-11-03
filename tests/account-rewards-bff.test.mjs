@@ -71,6 +71,8 @@ test("account BFF only allows the account endpoints used by v1", () => {
   assert.deepEqual(target(["csa-overview"], "GET"), {path:"/api/v1/memberships/overview",session:"required",query:"localized"});
   assert.deepEqual(target(["csa-quota"], "GET"), {path:"/api/v1/memberships/quota",session:"required",query:"localized"});
   assert.deepEqual(target(["csa-usage"], "GET"), {path:"/api/v1/memberships/usage",session:"required",query:"localized-page"});
+  assert.deepEqual(target(["csa-voucher-preview"], "POST"), {path:"/api/v1/csa-voucher-preview",session:"required",query:"none"});
+  assert.equal(target(["csa-voucher-preview"], "GET"), null);
   assert.deepEqual(target(["csa-payment-quotes"], "POST"), {path:"/api/v1/public/csa-payment-quotes",session:"optional",query:"none"});
   assert.deepEqual(target(["csa-confirm-transfer"], "POST"), {path:"/api/v1/public/csa-purchase-requests/confirm-transfer",session:"optional",query:"none"});
   assert.deepEqual(target(["csa-purchase-status"], "POST"), {path:"/api/v1/public/csa-contract-tracker/lookup",session:"optional",query:"none",trackerCookie:true});

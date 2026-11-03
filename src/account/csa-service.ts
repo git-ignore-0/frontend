@@ -119,26 +119,58 @@ export async function getCSA(locale:Locale):Promise<CSAOverview>{
 
 export type CsaQuote={
   quoteToken:string;expiresAt:string;requestCode:string;
+  coupon?:{code:string;discountAmount:string;contractTotalBeforeDiscount:string;paymentPlanTotalBeforeDiscount:string;initialPaymentBeforeDiscount:string;customerPayableTotal:string};
   payment:{amount:string;bankCode:string;bankName:string;accountNumber:string;accountName:string;transferContent:string};
   summary:{paymentType:PaymentType;totalAmount:string;initialPaymentAmount:string;installmentCount:number;installments:{sequence:number;amount:string;cycleCount:number}[]};
   terms:{version:string;locale:string;hash:string};
   qr:{acqId:string;accountNo:string;accountName:string;amount:string;addInfo:string;format:string;template:string};
 };
 
-function quoteFrom(value:unknown):CsaQuote{
-  const data=record(value),payment=record(data.payment),summary=record(data.payment_summary),terms=record(data.terms),qr=record(data.qr_payload);
-  const paymentType=string(summary.payment_type);
-  if(paymentType!=="full"&&paymentType!=="installment")throw new AccountApiError("invalid_response",502);
-  const installmentCount=integer(summary.installment_count,1);
-  if(!Array.isArray(summary.installments))throw new AccountApiError("invalid_response",502);
-  const installments=summary.installments.map((value,index)=>{const item=record(value);const sequence=integer(item.sequence,1),cycleCount=integer(item.cycle_count,1);if(sequence!==index+1)throw new AccountApiError("invalid_response",502);return {sequence,amount:decimal(item.amount),cycleCount};});
-  if(installments.length!==installmentCount)throw new AccountApiError("invalid_response",502);
-  return {quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},summary:{paymentType,totalAmount:decimal(summary.total_amount),initialPaymentAmount:decimal(summary.initial_payment_amount),installmentCount,installments},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
+export type CsaVoucherPreview={coupon:NonNullable<CsaQuote["coupon"]>;summary:CsaQuote["summary"]};
+
+function wholeVnd(value:string):bigint{
+ if(!/^\d+(?:\.0+)?$/.test(value))throw new AccountApiError("invalid_response",502);
+ return BigInt(value.split(".")[0]);
 }
 
-export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale;termsVersion:string;termsHash:string;guestIdentity?:CsaGuestIdentity|null}):Promise<CsaQuote>{
-  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale,terms_version:input.termsVersion,terms_hash:input.termsHash,...(input.guestIdentity?{guest_identity:input.guestIdentity}:{})})});
-  return quoteFrom(payload.data);
+function paymentSummaryFrom(data:JsonRecord):Pick<CsaQuote,"coupon"|"summary">{
+ const summary=record(data.payment_summary),paymentType=string(summary.payment_type);
+ if(paymentType!=="full"&&paymentType!=="installment")throw new AccountApiError("invalid_response",502);
+ const installmentCount=integer(summary.installment_count,1);
+ if(!Array.isArray(summary.installments))throw new AccountApiError("invalid_response",502);
+ const installments=summary.installments.map((value,index)=>{const item=record(value),sequence=integer(item.sequence,1);if(sequence!==index+1)throw new AccountApiError("invalid_response",502);return {sequence,amount:decimal(item.amount),cycleCount:integer(item.cycle_count,1)};});
+ if(installments.length!==installmentCount)throw new AccountApiError("invalid_response",502);
+ const parsed:CsaQuote["summary"]={paymentType,totalAmount:decimal(summary.total_amount),initialPaymentAmount:decimal(summary.initial_payment_amount),installmentCount,installments};
+ let coupon:CsaQuote["coupon"];
+ if(data.coupon!==undefined&&data.coupon!==null){
+  const value=record(data.coupon);
+  coupon={code:string(value.code),discountAmount:decimal(value.discount_amount),contractTotalBeforeDiscount:decimal(summary.contract_total_before_discount),paymentPlanTotalBeforeDiscount:decimal(summary.payment_plan_total_before_discount),initialPaymentBeforeDiscount:decimal(summary.initial_payment_before_discount),customerPayableTotal:decimal(summary.customer_payable_total)};
+  const amount=wholeVnd;
+  const discount=amount(coupon.discountAmount),initial=amount(parsed.initialPaymentAmount),total=amount(coupon.customerPayableTotal);
+  if(!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(coupon.code)||discount<=BigInt(0)||amount(decimal(summary.discount_amount))!==discount||amount(coupon.initialPaymentBeforeDiscount)-discount!==initial||amount(parsed.totalAmount)!==amount(coupon.paymentPlanTotalBeforeDiscount)||amount(coupon.paymentPlanTotalBeforeDiscount)-discount!==total||amount(installments[0].amount)!==initial||installments.reduce((sum,row)=>sum+amount(row.amount),BigInt(0))!==total)throw new AccountApiError("invalid_response",502);
+ }
+ return {summary:parsed,...(coupon?{coupon}:{})};
+}
+
+function quoteFrom(value:unknown):CsaQuote{
+ const data=record(value),payment=record(data.payment),terms=record(data.terms),qr=record(data.qr_payload),result=paymentSummaryFrom(data);
+ if(result.coupon&&(wholeVnd(decimal(payment.amount))!==wholeVnd(result.summary.initialPaymentAmount)||wholeVnd(decimal(qr.amount))!==wholeVnd(result.summary.initialPaymentAmount)))throw new AccountApiError("invalid_response",502);
+ return {...result,quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
+}
+
+export async function previewCsaVoucher(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;couponCode:string}):Promise<CsaVoucherPreview>{
+ const code=input.couponCode.trim().toUpperCase();
+ const payload=await accountApi("csa-voucher-preview",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),coupon_code:code})});
+ const result=paymentSummaryFrom(record(payload.data));
+ if(!result.coupon||result.coupon.code!==code)throw new AccountApiError("invalid_response",502);
+ return {...result,coupon:result.coupon};
+}
+
+export async function createCsaPaymentQuote(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;locale:Locale;termsVersion:string;termsHash:string;guestIdentity?:CsaGuestIdentity|null;couponCode?:string}):Promise<CsaQuote>{
+  const payload=await accountApi("csa-payment-quotes",{method:"POST",body:JSON.stringify({package_id:input.packageId,price_option_id:input.priceOptionId,...(input.paymentPlanId?{payment_plan_id:input.paymentPlanId}:{}),terms_accepted:true,terms_locale:input.locale,terms_version:input.termsVersion,terms_hash:input.termsHash,...(input.couponCode?.trim()?{coupon_code:input.couponCode.trim().toUpperCase()}:{}),...(input.guestIdentity?{guest_identity:input.guestIdentity}:{})})});
+  const quote=quoteFrom(payload.data);
+  if(input.couponCode?.trim()&&quote.coupon?.code!==input.couponCode.trim().toUpperCase()||!input.couponCode?.trim()&&quote.coupon)throw new AccountApiError("invalid_response",502);
+  return quote;
 }
 
 export type CsaPurchaseState="pending"|"payment_confirmed"|"approved"|"rejected"|"expired";

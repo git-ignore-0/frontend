@@ -173,3 +173,50 @@ test("admin-entered prototype property names remain literal cancellation reasons
  const {storeCancellationReason}=presentation();
  for(const locale of ["vi","en"])for(const reason of ["__proto__","constructor","toString","hasOwnProperty"])assert.equal(storeCancellationReason(reason,locale),reason);
 });
+
+// Catch using live coupon economics, double deductions, or pre-discount QR amounts.
+test("voucher detail shows one snapshot discount and backend cash subtotal and total in both locales",()=>{
+ for(const locale of ["vi","en"]){
+  const value=order({coupon:{id:"coupon-old",code:"HARVEST30",discountType:"percent",discountValue:"25.00",maximumDiscountAmount:null,subtotalVnd:120000,eligibleSubtotalVnd:120000,discountAmountVnd:30000,totalVnd:120000},discountAmountVnd:30000,totalVnd:120000,payment:{...order().payment,qrPayload:{...order().payment.qrPayload,amount:120000}}});
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
+  const lines=all(tree).filter(node=>node.type==="MoneyLine"),voucher=lines.filter(node=>node.props.label.includes("HARVEST30"));
+  assert.equal(voucher.length,1);
+  assert.equal(voucher[0].props.value,"−30000đ");
+  assert.equal(lines.find(node=>node.props.label===(locale==="vi"?"Tiền hàng cần trả":"Cash goods subtotal")).props.value,"120000đ");
+  assert.equal(lines.find(node=>node.props.label===(locale==="vi"?"Tổng chuyển khoản":"Transfer total")).props.value,"120000đ");
+  assert.ok(all(tree).some(node=>node.type==="img"&&node.props.src.includes("amount=120000")));
+  assert.match(text(tree),/120000đ/);
+ }
+});
+
+test("mixed quota voucher keeps goods, CSA deduction and backend totals without double deductions",()=>{
+ const value=order({lines:[line({quotaQuantity:2,quotaUnits:2,cashQuantity:1,cashSubtotalVnd:40000})],subtotalVnd:40000,discountAmountVnd:10000,coupon:{id:"coupon-old",code:"MIXED10",discountType:"fixed",discountValue:"10000.00",maximumDiscountAmount:null,subtotalVnd:40000,eligibleSubtotalVnd:40000,discountAmountVnd:10000,totalVnd:60000},totalVnd:60000,payment:{...order().payment,qrPayload:{...order().payment.qrPayload,amount:60000}}});
+ const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:"vi",initialOrder:value});
+ const lines=all(tree).filter(node=>node.type==="MoneyLine"),amount=label=>lines.find(node=>node.props.label===label)?.props.value;
+ assert.equal(amount("Tiền hàng"),"120000đ");
+ assert.equal(amount("CSA thanh toán"),"−80000đ");
+ assert.equal(amount("Tiền hàng cần trả"),"40000đ");
+ assert.equal(amount("Voucher · MIXED10"),"−10000đ");
+ assert.equal(amount("Phí giao"),"30000đ");
+ assert.equal(amount("Tổng chuyển khoản"),"60000đ");
+});
+
+test("fully discounted order keeps zero payable review workflow without QR or transfer instructions",()=>{
+ const value=order({discountAmountVnd:120000,coupon:{id:"coupon-old",code:"FULL",discountType:"fixed",discountValue:"120000.00",maximumDiscountAmount:null,subtotalVnd:120000,eligibleSubtotalVnd:120000,discountAmountVnd:120000,totalVnd:0},shippingFeeVnd:0,totalVnd:0,status:"pending_review",paymentStatus:"not_required",payment:null});
+ const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:"vi",initialOrder:value});
+ const lines=all(tree).filter(node=>node.type==="MoneyLine");
+ assert.equal(lines.find(node=>node.props.label==="Voucher · FULL")?.props.value,"−120000đ");
+ assert.equal(lines.find(node=>node.props.label==="Tổng chuyển khoản")?.props.value,"0đ");
+ assert.match(text(tree),/đang chờ cửa hàng duyệt/);
+ assert.equal(all(tree).some(node=>node.type==="img"&&node.props.src.includes("vietqr")),false);
+ assert.doesNotMatch(text(tree),/998877|Tôi đã chuyển khoản/);
+});
+
+test("legacy and current no-coupon orders show no artificial voucher or cash subtotal row",()=>{
+ for(const value of [order(),order({coupon:null,discountAmountVnd:0})]){
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:"vi",initialOrder:value});
+  const lines=all(tree).filter(node=>node.type==="MoneyLine");
+  assert.equal(lines.some(node=>/Voucher|Tiền hàng cần trả/.test(node.props.label)),false);
+  assert.equal(lines.find(node=>node.props.label==="Tổng chuyển khoản")?.props.value,"150000đ");
+ }
+});

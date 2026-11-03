@@ -37,6 +37,9 @@ export function accountUpstreamTarget(
   if (path[0] === "csa-usage" && method === "GET") {
     return {path:"/api/v1/memberships/usage",session:"required",query:"localized-page"};
   }
+  if (path[0] === "csa-voucher-preview" && method === "POST") {
+    return {path:"/api/v1/csa-voucher-preview",session:"required",query:"none"};
+  }
   if (path[0] === "csa-payment-quotes" && method === "POST") {
     return {path:"/api/v1/public/csa-payment-quotes",session:"optional",query:"none"};
   }

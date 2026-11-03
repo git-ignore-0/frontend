@@ -1,12 +1,16 @@
 "use client";
 
-import {useCallback,useEffect,useRef,useState,useSyncExternalStore} from "react";
-import {ActionLink,Button,DataState,Icon,Section} from "@/components/UI";
+import {useCallback,useEffect,useRef,useState,useSyncExternalStore,type ReactNode} from "react";
+import {ActionLink,Button,DataState,Icon,MoneyLine,Section} from "@/components/UI";
+import {DiscountCodeField} from "@/components/DiscountCodeField";
+import {useCsaVoucher} from "./useCsaVoucher";
+import {VOUCHER_COPY,couponErrorMessage} from "@/lib/voucher-copy";
+import {siteAuthHref} from "@/auth/site-auth";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {copyText} from "@/data/account-copy";
 import {formatDate,formatDateTime} from "@/lib/date-format";
 import {useAuth} from "@/auth/AuthProvider";
-import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote} from "@/account/csa-service";
+import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote,CsaVoucherPreview} from "@/account/csa-service";
 import {AccountApiError,confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus} from "@/account/csa-service";
 import {useSupportedShippingAreas} from "@/hooks/useSupportedShippingAreas";
 import {BankTransferPanel} from "@/components/BankTransferPanel";
@@ -39,6 +43,9 @@ type ViewProps={
   onSelectDuration:(packageId:string,priceOptionId:string)=>void;
   onSelectPayment:(paymentPlanId:string)=>void;
   onContinue?:()=>void;
+  discounts?:ReactNode;
+  voucher?:CsaVoucherPreview;
+  canContinue?:boolean;
 };
 
 type PurchaseStep="choose"|"account"|"terms"|"payment"|"pending";
@@ -85,6 +92,8 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   const {status,page,retry}=useCsaPackages(ui.locale,initialPackagePage);
   const packages=page?.data;
   const [selected,setSelected]=useState<CsaSelection|null>(null);
+  const current=csaSelectionSummary(packages??[],selected)?selected:createCsaSelection(packages??[],initialPackageId);
+  const voucher=useCsaVoucher(current,ui.locale);
   const [step,setStep]=useState<PurchaseStep>("choose");
   const [quote,setQuote]=useState<CsaQuote|null>(null);
   const [confirmation,setConfirmation]=useState<CsaPurchaseConfirmation|null>(null);
@@ -140,7 +149,6 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   if(status==="error")return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:retry}}/></Section>;
   if(!packages?.length)return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState title={L("csa.noPackagesAvailable")} description={L("csa.noPackagesAvailableDesc")} icon="leaf"/></Section>;
 
-  const current=csaSelectionSummary(packages,selected)?selected:createCsaSelection(packages,initialPackageId);
   const back=()=>{setError("");setStep(step==="account"?"choose":step==="terms"?"account":"terms");};
   if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} areas={shipping.areas} loading={shipping.loading} error={shipping.error} onRetry={shipping.retry} onChange={value=>{setQuote(null);setGuest(value);}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(!shipping.loading&&!shipping.error&&guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={data.shippingAddress??undefined} addressLoading={ui.accountFetchState.address==="loading"} addressError={ui.accountFetchState.address==="error"} onRetryAddress={()=>void refreshResource("address")} onBack={back} onContinue={()=>setStep("terms")}/>;
   if(step==="terms"){
@@ -148,10 +156,10 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
     const updateAcceptance=(update:(keys:string[])=>string[],submitted=termsSubmitted)=>{if(!document)return;setTermsAcceptance({documentKey:csaTermsAcceptanceKey(document),keys:update(acceptedTerms),submitted});};
     const toggle=(id:string,checked:boolean)=>{setError("");updateAcceptance(keys=>checked?[...new Set([...keys,id])]:keys.filter(item=>item!==id));};
     const accepted=Boolean(document&&document.content.sections.every(section=>acceptedTerms.includes(section.key)));
-    const createQuote=async()=>{updateAcceptance(keys=>keys,true);setError("");if(quoteSubmitting.current||!accepted||!current||!document||(guestMode&&!guestIdentity))return;const request=generation.current;quoteSubmitting.current=true;setBusy(true);try{const result=await createCsaPaymentQuote({...current,locale:ui.locale,termsVersion:document.version,termsHash:document.hash,guestIdentity});if(request!==generation.current)return;setQuote(result);setStep("payment");}catch(value){if(request!==generation.current)return;const code=value instanceof AccountApiError?value.code:value instanceof Error?value.message:"request_failed";setError(code);if(code==="csa_purchase_terms_changed"){setTermsAcceptance({documentKey:"",keys:[],submitted:false});terms.retry();}}finally{if(request===generation.current){quoteSubmitting.current=false;setBusy(false);}}};
+    const createQuote=async()=>{updateAcceptance(keys=>keys,true);setError("");if(quoteSubmitting.current||!accepted||!current||!document||(guestMode&&!guestIdentity))return;if(!voucher.ready||voucher.loading){setStep("choose");return;}const request=generation.current;quoteSubmitting.current=true;setBusy(true);try{const result=await createCsaPaymentQuote({...current,locale:ui.locale,termsVersion:document.version,termsHash:document.hash,guestIdentity,...(voucher.applied?{couponCode:voucher.applied.coupon.code}:{})});if(request!==generation.current)return;if(voucher.applied&&(result.coupon?.discountAmount!==voucher.applied.coupon.discountAmount||result.coupon.customerPayableTotal!==voucher.applied.coupon.customerPayableTotal||JSON.stringify(result.summary)!==JSON.stringify(voucher.applied.summary))){voucher.invalidate(VOUCHER_COPY[ui.locale].changed);setStep("choose");return;}setQuote(result);setStep("payment");}catch(value){if(request!==generation.current)return;const code=value instanceof AccountApiError?value.code:value instanceof Error?value.message:"request_failed";if(code.startsWith("coupon_")){voucher.invalidate(couponErrorMessage(code,ui.locale,"csa"));setStep("choose");return;}setError(code);if(code==="csa_purchase_terms_changed"){setTermsAcceptance({documentKey:"",keys:[],submitted:false});terms.retry();}}finally{if(request===generation.current){quoteSubmitting.current=false;setBusy(false);}}};
     return <AccountCsaTermsStep locale={ui.locale} status={terms.status} document={document} acceptedTerms={acceptedTerms} submitted={termsSubmitted} busy={busy} error={error} onToggle={toggle} onToggleAll={checked=>{setError("");updateAcceptance(()=>checked&&document?document.content.sections.map(section=>section.key):[]);}} onBack={back} onRetry={terms.retry} onCreatePayment={()=>void createQuote()}/>;
   }
-  if(step==="payment"&&quote)return <AccountCsaPaymentStep locale={ui.locale} quote={quote} busy={busy} error={error} onBack={back} onConfirm={async()=>{if(confirmingRef.current||csaQuoteExpired(quote.expiresAt)||(guestMode&&!guestIdentity))return;const request=generation.current;confirmingRef.current=true;setBusy(true);setError("");try{const result=await confirmCsaTransfer(quote.quoteToken,guestIdentity);if(request!==generation.current)return;try{const storage=csaPendingStorage(!guestMode,window);if(storage)saveCsaPending(storage,owner,result);}catch{/* The Backend response still controls the current-session state. */}setConfirmation(result);setStep("pending");}catch(value){if(request!==generation.current)return;setError(value instanceof Error?value.message:"request_failed");}finally{if(request===generation.current){confirmingRef.current=false;setBusy(false);}}}}/>;
+  if(step==="payment"&&quote&&current)return <AccountCsaPaymentStep locale={ui.locale} quote={quote} busy={busy} error={error} onBack={back} onConfirm={async()=>{if(confirmingRef.current||csaQuoteExpired(quote.expiresAt)||(guestMode&&!guestIdentity))return;const request=generation.current;confirmingRef.current=true;setBusy(true);setError("");try{const result=await confirmCsaTransfer(quote.quoteToken,guestIdentity);if(request!==generation.current)return;try{const storage=csaPendingStorage(!guestMode,window);if(storage)saveCsaPending(storage,owner,result);}catch{/* The Backend response still controls the current-session state. */}setConfirmation(result);setStep("pending");}catch(value){if(request!==generation.current)return;setError(value instanceof Error?value.message:"request_failed");}finally{if(request===generation.current){confirmingRef.current=false;setBusy(false);}}}}/>;
   return <><Steps locale={ui.locale} current="choose"/><AccountCsaPackageSelectionView
     locale={ui.locale}
     packages={packages}
@@ -163,7 +171,10 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
       return base?changeCsaPriceOption(packages,base,priceOptionId):null;
     })}
     onSelectPayment={paymentPlanId=>setSelected(value=>{const active=value??current;return active?changeCsaPaymentPlan(packages,active,paymentPlanId):value;})}
-    onContinue={()=>setStep("account")}
+    canContinue={voucher.ready&&!voucher.loading}
+    voucher={voucher.applied}
+    discounts={<DiscountCodeField id="csaDiscountCode" locale={ui.locale} value={guestMode?"":voucher.code} disabled={guestMode} loading={voucher.loading} applyDisabled={!current} error={voucher.error} signInHref={guestMode?siteAuthHref("login",ui.locale,`/csa/purchase/${ui.locale}`):undefined} onChange={voucher.change} onClear={voucher.clear} onApply={()=>void voucher.apply()}/>}
+    onContinue={()=>{if(voucher.ready&&!voucher.loading)setStep("account");}}
   /></>;
 }
 
@@ -214,7 +225,7 @@ function csaPurchaseErrorKey(code:string):string{
   return "csa.purchaseError";
 }
 
-export function AccountCsaPackageSelectionView({locale,packages,selected,onSelectPackage,onSelectDuration,onSelectPayment,onContinue}:ViewProps){
+export function AccountCsaPackageSelectionView({locale,packages,selected,onSelectPackage,onSelectDuration,onSelectPayment,onContinue,discounts,voucher,canContinue=true}:ViewProps){
   const L=(key:string,vars?:Record<string,string|number>)=>copyText(locale,key,vars);
   const summary=csaSelectionSummary(packages,selected);
   const selectedPackage=packages.find(item=>item.id===selected?.packageId);
@@ -223,7 +234,6 @@ export function AccountCsaPackageSelectionView({locale,packages,selected,onSelec
 
   return <div className="benefits-page csa-account-package-selection">
     <Section title={L("csa.selectionTitle")} className="benefit-section csa-package-selection-section">
-      <p className="v2-purchase-brief">{L("csa.selectionDescription")}</p>
       <div className="v2-package-toolbar"><strong>{L("csa.choosePackage")}</strong><span className="v2-scroll-hint">{L("csa.swipeHint")} →</span></div>
       <div className="v2-plan-cards" aria-label={L("csa.choosePackage")}>
         {packages.map(item=>{
@@ -267,11 +277,16 @@ export function AccountCsaPackageSelectionView({locale,packages,selected,onSelec
         </div>
       </div>}
 
-      {summary&&<div className="v2-checkout-review" data-csa-selection-summary="true">
-        <div className="v2-total-col"><span>{summary.paymentType==="installment"?L("csa.firstPayment"):L("common.total")} · {selectedPackage?.name}</span><strong>{csaMoney(summary.initialPaymentAmount,locale)}</strong></div>
-        <Button data-csa-continue="true" disabled={!onContinue} onClick={onContinue}><span>{L("csa.continue")}</span><Icon name="arrow" size={17}/></Button>
+      {summary&&<div className="csa-selection-review" data-csa-selection-summary="true">
+        <div className="csa-selection-review-details">
+          {discounts}
+          {voucher&&<div className="csa-selection-review-discount"><MoneyLine label={`${locale==="vi"?"Giảm giá":"Discount"} · ${voucher.coupon.code}`} value={`−${csaMoney(voucher.coupon.discountAmount,locale)}`}/></div>}
+          <div className="csa-selection-review-total" aria-live="polite" aria-atomic="true">
+            <MoneyLine label={locale==="vi"?"Tổng chuyển khoản":"Transfer total"} value={canContinue?csaMoney(voucher?.summary.initialPaymentAmount??summary.initialPaymentAmount,locale):"—"} large/>
+          </div>
+          <Button data-csa-continue="true" disabled={!onContinue||!canContinue} onClick={onContinue}><span>{L("csa.continue")}</span><Icon name="arrow" size={17}/></Button>
+        </div>
       </div>}
-      <p className="v2-legal-demo">{L("csa.backendPricingNote")}</p>
     </Section>
   </div>;
 }
@@ -295,7 +310,7 @@ export function AccountCsaPaymentStep({locale,quote,busy,error,onBack,onConfirm}
   const qrUrl=csaVietQrImageUrl(quote),expired=csaQuoteExpired(quote.expiresAt,now);
   const transferReady=Boolean(quote.payment.bankName&&quote.payment.accountNumber&&quote.payment.accountName&&quote.payment.transferContent&&quote.payment.amount===quote.summary.initialPaymentAmount);
   useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer);},[]);
-  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="payment"/><Section title={L("csa.paymentTitle")} className="benefit-section csa-purchase-step">{quote.summary.paymentType==="installment"&&<div className="csa-bank-details"><div><span>{L("csa.installmentSchedule")}</span><strong>{quote.summary.installments.map(item=>L("csa.installmentRow",{sequence:item.sequence,amount:csaMoney(item.amount,locale),cycles:item.cycleCount})).join(" · ")}</strong></div></div>}<BankTransferPanel qrUrl={qrUrl} bankName={quote.payment.bankName} accountNumber={quote.payment.accountNumber} accountName={quote.payment.accountName} transferContent={quote.payment.transferContent} amount={csaMoney(quote.payment.amount,locale)} busy={busy} total={quote.summary.paymentType==="installment"?{label:L("csa.contractTotal"),value:csaMoney(quote.summary.totalAmount,locale)}:undefined} labels={{bank:L("csa.bank"),account:L("csa.accountNumber"),name:L("csa.accountName"),content:L("csa.transferContent"),amount:L(quote.summary.paymentType==="installment"?"csa.firstPayment":"csa.paymentAmount"),copyAccount:L("csa.copyAccountNumber"),copyContent:L("csa.copyTransferContent"),copied:L("csa.copied"),qrAlt:L("csa.qrAlt"),qrFailed:L("csa.qrUnavailable")}}/><p className="csa-quote-expiry">{L("csa.quoteExpires")}: {formatDateTime(quote.expiresAt)}</p>{(expired||error)&&<p className="help-error" role="alert">{L(expired?"csa.quoteExpiredError":csaPurchaseErrorKey(error))}</p>}<div className="csa-purchase-actions"><Button variant="outline" disabled={busy} onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button loading={busy} disabled={busy||expired||!transferReady} onClick={onConfirm}>{L("csa.confirmTransfer")}</Button></div></Section></div>;
+  return <div className="benefits-page csa-account-package-selection"><Steps locale={locale} current="payment"/><Section title={L("csa.paymentTitle")} className="benefit-section csa-purchase-step"><BankTransferPanel qrUrl={qrUrl} bankName={quote.payment.bankName} accountNumber={quote.payment.accountNumber} accountName={quote.payment.accountName} transferContent={quote.payment.transferContent} amount={csaMoney(quote.payment.amount,locale)} busy={busy} total={quote.summary.paymentType==="installment"?{label:quote.coupon?(locale==="vi"?"Tổng cần thanh toán":"Total payable"):L("csa.contractTotal"),value:csaMoney(quote.coupon?.customerPayableTotal??quote.summary.totalAmount,locale)}:undefined} labels={{bank:L("csa.bank"),account:L("csa.accountNumber"),name:L("csa.accountName"),content:L("csa.transferContent"),amount:L(quote.summary.paymentType==="installment"?"csa.firstPayment":"csa.paymentAmount"),copyAccount:L("csa.copyAccountNumber"),copyContent:L("csa.copyTransferContent"),copied:L("csa.copied"),qrAlt:L("csa.qrAlt"),qrFailed:L("csa.qrUnavailable")}}/><p className="csa-quote-expiry">{L("csa.quoteExpires")}: {formatDateTime(quote.expiresAt)}</p>{(expired||error)&&<p className="help-error" role="alert">{expired?L("csa.quoteExpiredError"):error.startsWith("coupon_")?couponErrorMessage(error,locale,"csa"):L(csaPurchaseErrorKey(error))}</p>}<div className="csa-purchase-actions"><Button variant="outline" disabled={busy} onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button><Button loading={busy} disabled={busy||expired||!transferReady} onClick={onConfirm}>{L("csa.confirmTransfer")}</Button></div></Section></div>;
 }
 
 export function AccountCsaPendingStep({locale,confirmation,onTrack,onDismiss,trackerHref,csaHref}:{locale:Locale;confirmation:CsaPurchaseConfirmation|CsaPurchaseStatus;onTrack?:()=>void;onDismiss?:()=>void;trackerHref?:string;csaHref?:string}){

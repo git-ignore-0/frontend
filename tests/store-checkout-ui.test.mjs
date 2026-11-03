@@ -17,7 +17,7 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
  function load(path){
   if(cache.has(path))return cache.get(path);
   const exports={};cache.set(path,exports);
-  vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:name=>{
+  vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,URLSearchParams,require:name=>{
    if(name==="react")return {...React,useState:initial=>{const i=hook++;const value=i<seeds.length?seeds[i]:i===12?`${authenticated?"test-user":"guest"}:vi:0`:i===13?`${authenticated?"test-user":"guest"}:66:1:0`:i===18?(authenticated?"test-user":"guest"):i===26?true:initial;return React.useState(!cart&&path==="src/screens/Checkout.tsx"?value:initial)}};
    if(name==="react/jsx-runtime")return jsx;
    if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
@@ -29,10 +29,13 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
    if(name==="@/components/account/GuestBuyerFields")return load("src/components/account/GuestBuyerFields.tsx");
    if(name==="@/components/account/ShippingAddressFields")return load("src/components/account/ShippingAddressFields.tsx");
    if(name==="@/data/account-copy")return load("src/data/account-copy.ts");
+   if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
+   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
    if(name==="@/components/UI")return load("src/components/UI.tsx");
    if(name==="@/store/store-format")return load("src/store/store-format.ts");
    if(name.endsWith("/csa-units.ts"))return load("src/lib/csa-units.ts");
    if(name==="@/store/store-quote")return load("src/store/store-quote.ts");
+   if(name==="@/auth/site-auth")return load("src/auth/site-auth.ts");
    if(name==="@/lib/format")return {money:value=>`${Number(value).toLocaleString("vi-VN")}đ`};
    if(name==="@/account/shipping-address-model")return load("src/account/shipping-address-model.ts");
    return {};

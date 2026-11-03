@@ -1,5 +1,6 @@
 import {csaHundredths} from "../lib/csa-units.ts";
 import type {StoreLocale,StoreProductCard} from "./store-model";
+import type {StoreVoucherPreview} from "./store-order-service";
 
 export type StoreQuotaAvailability={productId:string;availableUnits:number};
 export type StoreQuoteLine={product:StoreProductCard;quantity:number;useQuota:boolean;quotaQuantity:number;quotaUnits:number;cashQuantity:number;cashSubtotalVnd:number};
@@ -29,7 +30,15 @@ export function buildStoreQuote(input:{products:StoreProductCard[];quantities:Re
 }
 
 type GuestAddress={recipient_name:string;phone_number:string;province_code:string;ward_code:string;address:string};
-export function checkoutPayload(input:{quote:StoreQuote|Pick<StoreQuote,"lines"|"shippingFeeVnd"|"totalVnd">;locale:StoreLocale;idempotencyKey:string;shippingAddressUpdatedAt?:string;guest?:GuestAddress}){
+export function checkoutPayload(input:{quote:StoreQuote|Pick<StoreQuote,"lines"|"shippingFeeVnd"|"totalVnd">;locale:StoreLocale;idempotencyKey:string;shippingAddressUpdatedAt?:string;guest?:GuestAddress;voucher?:StoreVoucherPreview}){
+ if(input.voucher){
+  if(input.guest)throw Error("invalid_checkout_intent");
+  return {idempotency_key:input.idempotencyKey,locale:input.locale,
+   lines:input.voucher.lines.map(line=>({...line})),
+   expected_shipping_fee_vnd:input.voucher.shippingFeeVnd,expected_total_vnd:input.voucher.totalVnd,
+   shipping_address_updated_at:input.voucher.shippingAddressUpdatedAt,
+   coupon_code:input.voucher.coupon.code,expected_voucher_quote:input.voucher.voucherQuote};
+ }
  return {idempotency_key:input.idempotencyKey,locale:input.locale,
   lines:input.quote.lines.map(line=>({product_id:line.product.id,quantity:line.quantity,use_quota:line.useQuota,expected_unit_price_vnd:line.product.retail_price_vnd,expected_available_quantity:line.product.available_quantity,expected_quota_quantity:line.quotaQuantity})),
   expected_shipping_fee_vnd:input.quote.shippingFeeVnd,expected_total_vnd:input.quote.totalVnd,

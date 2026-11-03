@@ -2,6 +2,7 @@ export type StoreOrderQueryPolicy="none"|"orders"|"quota"|"locale";
 export type StoreOrderTarget={path:string;session:"none"|"optional"|"required";query:StoreOrderQueryPolicy;guestOrder?:boolean;lookupCookie?:boolean};
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function storeOrderTarget(path:string[],method:"GET"|"POST"):StoreOrderTarget|null{
+ if(path.length===1&&path[0]==="voucher-preview"&&method==="POST")return {path:"/api/v1/store-voucher-preview",session:"required",query:"none"};
  if(path.length===1&&path[0]==="checkout"&&method==="POST")return {path:"/api/v1/public/store-checkouts",session:"optional",query:"none",guestOrder:true};
  if(path.length===1&&path[0]==="shipping-quote"&&method==="POST")return {path:"/api/v1/public/shipping-quotes",session:"none",query:"none"};
  if(path.length===1&&path[0]==="quota"&&method==="GET")return {path:"/api/v1/memberships/quota",session:"required",query:"quota"};

@@ -17,15 +17,11 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
   const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   vm.runInNewContext(compiled,{exports,URL,Headers,Response,AbortSignal,DOMException,process:{env:{NODE_ENV:"test"}},fetch:async(url,init)=>{calls.push({url:String(url),init});return upstream?upstream(url,init):new Response(JSON.stringify({data:{id:UUID}}),{status:200,headers:{"content-type":"application/json"}})},require:name=>{
     if(name==="next/server")return {NextResponse:TestNextResponse};
-    if(name==="@/store/order-bff")return {
-      storeOrderQueryAllowed:()=>true,
-      storeOrderTarget:(path,method)=>{
-        if(path[0]==="checkout"&&method==="POST")return {path:"/api/v1/public/store-checkouts",session:"optional",query:"none",guestOrder:true};
-        if(path[0]==="orders")return {path:`/api/v1/public/store-orders/${path[1]}${path[2]?`/${path[2]}`:""}`,session:"optional",query:"none",guestOrder:true};
-        if(path[0]==="lookup")return {path:"/api/v1/public/store-order-lookups",session:"none",query:"none",lookupCookie:true};
-        return null;
-      },
-    };
+    if(name==="@/store/order-bff"){
+      const helpers={};
+      vm.runInNewContext(ts.transpileModule(readFileSync("src/store/order-bff.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:helpers});
+      return helpers;
+    }
     if(name==="@/store/store-proxy-identity")return {storeLookupIdentityHeaders:()=>clientIdentity};
     if(name==="@/auth/server/config")return {authOrigin:()=>"https://auth.test",publicSiteOrigin:()=>"https://site.test"};
     if(name==="@/auth/server/oauth"){
@@ -41,10 +37,10 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
     }
     return {};
   }});
-  const request=(path,{method="GET",body,origin=true,cookie=JSON.stringify({orders:guestOrders})}={})=>({
-    url:`https://site.test/api/store-orders/${path.join("/")}`,
+  const request=(path,{method="GET",body,origin=true,marker=true,query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
+    url:`https://site.test/api/store-orders/${path.join("/")}${query}`,
     method,
-    headers:new Headers(origin&&method==="POST"?{origin:"https://site.test","x-nfv-public-request":"1"}:{}),
+    headers:new Headers(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),
     cookies:{get:name=>cookieJar[name]?{value:cookieJar[name]}:name==="nfv_store_guest_orders"&&cookie?{value:cookie}:undefined},
     json:async()=>body??{},
   });
@@ -161,4 +157,23 @@ test("a dedicated order cookie never grants access to another order",async()=>{
   assert.equal(init.headers["X-Store-Access-Token"],undefined);return new Response("{}",{status:404});
  }});
  assert.equal((await harness.call(["orders",other])).status,404);
+});
+
+
+test("voucher preview enforces exact route, query, Origin marker and Core session before fetching",async()=>{
+ for(const [options,status] of [[{method:"GET"},404],[{method:"POST",query:"?locale=vi"},404],[{method:"POST",origin:false},403],[{method:"POST",marker:false},403],[{method:"POST"},401]]){
+  const harness=routeHarness({guestOrders:{[UUID]:"guest-secret"}});
+  assert.equal((await harness.call(["voucher-preview"],options)).status,status);
+  assert.equal(harness.calls.length,0);
+ }
+ const harness=routeHarness({storedSession:{accessToken:"owner-token"}}),body={locale:"vi",coupon_code:"STORE30",lines:[]};
+ const result=await harness.call(["voucher-preview"],{method:"POST",body});
+ assert.equal(result.status,200);assert.equal(harness.calls[0].url,"https://auth.test/api/v1/store-voucher-preview");assert.equal(harness.calls[0].init.headers.Authorization,"Bearer owner-token");assert.deepEqual(JSON.parse(harness.calls[0].init.body),body);assert.equal(result.headers.get("Cache-Control"),"private, no-store");
+});
+test("voucher BFF preserves backend errors and maps transport failure without inventing business rejection",async()=>{
+ const body={errors:[{code:"coupon_expired"}]};
+ const rejected=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>Response.json(body,{status:400})});const result=await rejected.call(["voucher-preview"],{method:"POST"});assert.equal(result.status,400);assert.deepEqual(await result.json(),body);
+ for(const [reason,status,code] of [[Error("offline"),502,"upstream_unavailable"],[new DOMException("timeout","TimeoutError"),504,"upstream_timeout"]]){
+  const failed=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>{throw reason;}});const response=await failed.call(["voucher-preview"],{method:"POST"});assert.equal(response.status,status);assert.equal((await response.json()).error,code);
+ }
 });

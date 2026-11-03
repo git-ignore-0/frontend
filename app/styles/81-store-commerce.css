@@ -172,9 +172,6 @@
 .store-summary>.store-checkout-actions p{margin:0;font-size:var(--store-meta-size)}
 @media(max-width:980px){.store-checkout{grid-template-areas:"details" "totals"}}
 
-.store-discount-label{display:block;margin-bottom:8px;font-size:var(--store-body-size);font-weight:400;color:var(--ink2)}
-.store-discount-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0}
-.store-discount-controls .nfv-control{min-width:0}
 
 .store-summary-lines{display:grid;gap:var(--store-content-gap)}
 .store-commerce .store-summary-lines .money-line{margin:0}

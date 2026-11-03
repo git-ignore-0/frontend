@@ -127,4 +127,30 @@
   .nfv-mobile-nav-panel { animation: nfv-nav-slide-in .2s ease-out both; }
   @keyframes nfv-nav-slide-in { from { transform: translateX(18px); opacity: .8; } to { transform: translateX(0); opacity: 1; } }
 }
-.header-cart-button{position:relative}.header-cart-badge{position:absolute;inset-block-start:-4px;inset-inline-end:-5px;display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--deep-green);color:#fff;font-size:10px;font-weight:700;line-height:1}
+.header-cart-button {
+  position: relative;
+}
+
+.header-cart-badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  transform: translate(35%, -35%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}

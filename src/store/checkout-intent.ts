@@ -17,7 +17,9 @@ const exactKeys=(value:RecordValue,keys:string[])=>Object.keys(value).every(key=
 
 /** Validate the full strict Backend request contract before replaying any stored request. */
 export function isCheckoutPayload(value:unknown,guest:boolean):value is StoreCheckoutPayload{
- if(!record(value)||!exactKeys(value,["idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at"]))return false;
+ if(!record(value)||!exactKeys(value,["idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at","coupon_code","expected_voucher_quote"]))return false;
+ const hasVoucher=Object.hasOwn(value,"coupon_code")||Object.hasOwn(value,"expected_voucher_quote");
+ if(hasVoucher&&(guest||typeof value.coupon_code!=="string"||!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(value.coupon_code)||typeof value.expected_voucher_quote!=="string"||!/^[a-f0-9]{40}$/.test(value.expected_voucher_quote)))return false;
  if(!uuid(value.idempotency_key)||(value.locale!=="vi"&&value.locale!=="en")||!integer(value.expected_shipping_fee_vnd)||!integer(value.expected_total_vnd))return false;
  if(!Array.isArray(value.lines)||!value.lines.length||value.lines.length>STORE_MAX_ORDER_LINES)return false;
  const products=new Set<string>();
@@ -97,11 +99,13 @@ export function clearCheckoutIntent(storage:IntentStorage,owner:string){
  if(storage.getItem(pendingOwnerKey)===owner)storage.removeItem(pendingOwnerKey);
 }
 
+const checkoutCouponErrors=["coupon_invalid","coupon_invalid_value","coupon_scope_mismatch","coupon_inactive","coupon_not_started","coupon_expired","coupon_usage_exhausted","coupon_authentication_required","coupon_already_used","coupon_minimum_amount_not_met"];
+
 /** Only service errors raised after the Backend's idempotency lookup prove rejection. */
 export function checkoutDefinitelyRejected(error:{status?:number;code?:string}):boolean{
  const conflicts=["store_requote_required","store_stock_changed","store_quota_changed"];
  const rejected=["store_duplicate_product","store_product_changed","store_quota_unavailable","store_shipping_address_invalid","store_shipping_address_required","store_guest_address_required","store_shipping_area_unsupported","store_phone_invalid"];
- return error.status===409&&conflicts.includes(error.code??"")||error.status===400&&rejected.includes(error.code??"")||error.status===503&&error.code==="store_payment_unavailable";
+ return error.status===409&&conflicts.includes(error.code??"")||error.status===400&&(rejected.includes(error.code??"")||checkoutCouponErrors.includes(error.code??""))||error.status===503&&error.code==="store_payment_unavailable";
 }
 
 /** Select the resource recovery path only after a checkout is definitively rejected. */
@@ -116,6 +120,7 @@ export function checkoutRequoteReason(error:{status?:number;code?:string;context
   store_quota_changed:"quota_changed",
  };
  if(error.status===409&&checkoutDefinitelyRejected(error))return typeof error.context?.reason==="string"?error.context.reason:reasons[error.code??""]??"changed";
+ if(error.status===400&&checkoutCouponErrors.includes(error.code??""))return "voucher_changed";
  return error.status===400?reasons[error.code??""]??null:null;
 }
 

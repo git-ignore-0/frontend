@@ -24,13 +24,15 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  const react={
   useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],v=>states[i]=typeof v==="function"?v(states[i]):v]},
   useRef(initial){const i=cursor++;return states[i]??={current:initial}},
-  useMemo(fn){cursor++;return fn()},useCallback(fn,next){const i=cursor++;const saved=states[i];if(!saved||next.some((v,j)=>v!==saved.deps[j]))states[i]={fn,deps:next};return states[i].fn},
+  useMemo(fn,next){const i=cursor++,saved=states[i];if(!saved||next.some((v,j)=>v!==saved.deps[j]))states[i]={value:fn(),deps:next};return states[i].value},useCallback(fn,next){const i=cursor++;const saved=states[i];if(!saved||next.some((v,j)=>v!==saved.deps[j]))states[i]={fn,deps:next};return states[i].fn},
   useEffect(fn,next){const i=cursor++;if(!deps[i]||next.some((v,j)=>v!==deps[i][j])){deps[i]=next;effects.push({i,fn})}},
  };
  react.useLayoutEffect=react.useEffect;
  context.ui??={locale:"vi"};
  const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
+  if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
+  if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
   if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
   if(name==="@/store/buy-again-session"||name==="./buy-again-session")return load("src/store/buy-again-session.ts");
@@ -799,3 +801,170 @@ test("successful buy again recovery cannot submit a new order before navigation"
  assert.equal(confirm(next).props.disabled,true);await replay();
  assert.equal(payloads.length,2);assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));next.dispose();
 });
+
+function voucherCheckout(options={}){
+ const auth=options.auth??{status:"authenticated",session:{subject:"A"}};
+ return checkout({...options,auth,context:{accountSessionKey:auth.session?.subject??"guest",ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}},...options.context}});
+}
+const voucherResponse=(code="SAVE",overrides={})=>({subtotalVnd:42000,eligibleSubtotalVnd:42000,discountAmountVnd:12000,shippingFeeVnd:30000,totalVnd:60000,voucherQuote:"a".repeat(40),shippingAddressUpdatedAt:"2026-11-01T00:00:00Z",coupon:{id:SOURCE_ORDER,code},lines:[{product_id:PRODUCT_ID,quantity:1,use_quota:false,expected_unit_price_vnd:42000,expected_available_quantity:8,expected_quota_quantity:0}],...overrides});
+const voucherInput=r=>nodes(r.tree).find(n=>n.type==="FormInput"&&n.props.id==="storeDiscountCode");
+const applyVoucher=r=>nodes(r.tree).find(n=>n.type==="Button"&&/^(Áp dụng|Apply)$/.test(text(n).trim()));
+async function applyCode(r,code="SAVE"){
+ voucherInput(r).props.onChange({target:{value:code}});r.render();r.flush();await applyVoucher(r).props.onClick();await tick();r.render();
+}
+test("voucher apply uses backend price, stock, totals and exact payload; remove restores ordinary quote",async()=>{
+ const sent=[],previews=[];const r=voucherCheckout({services:{previewStoreVoucher:async input=>{previews.push(input);return voucherResponse()},createStoreCheckout:async input=>{sent.push(input);return order()},storeOrderHref:()=>"/done"}});
+ r.render("Checkout");await r.settle();await applyCode(r);
+ assert.equal(previews.length,1);assert.equal(previews[0].coupon_code,"SAVE");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"60000");
+ assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · SAVE"));
+ await confirm(r).props.onClick();
+ assert.equal(sent[0].coupon_code,"SAVE");assert.equal(sent[0].expected_voucher_quote,"a".repeat(40));assert.equal(sent[0].expected_total_vnd,60000);
+ assert.equal(sent[0].lines[0].expected_unit_price_vnd,42000);assert.equal(sent[0].lines[0].expected_available_quantity,8);
+ r.render();assert.equal(confirm(r).props.disabled,true);r.dispose();
+ const remove=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});remove.render("Checkout");await remove.settle();await applyCode(remove);
+ nodes(remove.tree).find(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã").props.onClick();remove.render();
+ assert.equal(voucherInput(remove).props.value,"");assert.ok(!nodes(remove.tree).some(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã"));assert.ok(!text(remove.tree).includes("Thông tin đã thay đổi"));assert.equal(nodes(remove.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"70000");remove.dispose();
+});
+test("guest voucher controls never invoke authenticated preview",async()=>{
+ let called=0;const r=checkout({services:{previewStoreVoucher:async()=>{called++;return voucherResponse()}}});r.render("Checkout");await r.settle();
+ assert.equal(voucherInput(r).props.disabled,true);assert.equal(applyVoucher(r).props.disabled,true);assert.match(text(r.tree),/Đăng nhập/);assert.equal(called,0);r.dispose();
+});
+test("changing code invalidates totals immediately and a late response cannot apply it",async()=>{
+ let called=0;const late=deferred();const r=voucherCheckout({services:{previewStoreVoucher:()=>{called++;return late.promise}}});r.render("Checkout");await r.settle();
+ voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();applyVoucher(r).props.onClick();
+ assert.equal(called,1);voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();late.resolve(voucherResponse("OLD"));await tick();r.render();
+ assert.equal(confirm(r).props.disabled,true);assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");assert.equal(voucherInput(r).props.value,"NEW");r.dispose();
+});
+for(const change of ["quantity","quota","address","locale","account"]){
+ test(`voucher context ${change} invalidates the old result before effects`,async()=>{
+  const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});r.render("Checkout");await r.settle();await applyCode(r);
+  assert.equal(confirm(r).props.disabled,false);
+  if(change==="quantity")r.context.ui.cart[PRODUCT_ID]=2;
+  if(change==="quota")r.context.ui.applyCSA[PRODUCT_ID]=true;
+  if(change==="address")r.context.data.shippingAddress={...r.context.data.shippingAddress,updatedAt:"2026-11-02T00:00:00Z"};
+  if(change==="locale")r.context.ui.locale="en";
+  if(change==="account"){r.auth.session={subject:"B"};r.context.accountSessionKey="B";}
+  r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&/Tổng chuyển khoản|Transfer total/.test(n.props.label))?.props.value??"—","—");
+  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&/Tiếp tục|Continue/.test(text(n)))?.props.disabled??true,true);r.dispose();
+ });
+}
+
+for(const code of ["coupon_invalid","coupon_expired","coupon_usage_exhausted","coupon_scope_mismatch","coupon_minimum_amount_not_met"]){
+ test(`voucher ${code} is shown without a checkout or silent fallback`,async()=>{
+  let submitted=0;const failure=new ApiError(400);failure.code=code;
+  const r=voucherCheckout({services:{previewStoreVoucher:async()=>{throw failure},createStoreCheckout:async()=>{submitted++;return order()}}});
+  r.render("Checkout");await r.settle();await applyCode(r);
+  assert.ok(nodes(r.tree).some(n=>n.props?.role==="alert"));assert.equal(confirm(r).props.disabled,true);assert.equal(submitted,0);assert.ok(!text(r.tree).includes(code));r.dispose();
+ });
+}
+test("definite voucher rejection clears intent and requires a fresh apply, with a new key only afterwards",async()=>{
+ const payloads=[],failure=new ApiError(400);failure.code="coupon_usage_exhausted";
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse(),createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/done"}});
+ r.render("Checkout");await r.settle();await applyCode(r);await confirm(r).props.onClick();await tick();r.render();
+ assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/hết lượt/);
+ await applyCode(r);assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();await tick();r.render();
+ assert.equal(payloads.length,2);assert.notEqual(payloads[0].idempotency_key,payloads[1].idempotency_key);assert.equal(payloads[1].coupon_code,"SAVE");r.dispose();
+});
+test("voucher_changed requote invalidates applied amounts and waits for explicit reapply",async()=>{
+ const failure=new ApiError(409,{reason:"voucher_changed"});const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse(),createStoreCheckout:async()=>{throw failure}}});
+ r.render("Checkout");await r.settle();await applyCode(r);await confirm(r).props.onClick();await tick();r.render();
+ assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/áp dụng lại/);assert.equal(voucherInput(r).props.value,"SAVE");r.dispose();
+});
+test("unknown voucher checkout survives reload and locale/live changes with identical payload and key",async()=>{
+ const storage=new Map(),payloads=[];
+ const first=voucherCheckout({storage,services:{previewStoreVoucher:async()=>voucherResponse(),createStoreCheckout:async payload=>{payloads.push(payload);throw Error("timeout")}}});
+ first.render("Checkout");await first.settle();await applyCode(first);await confirm(first).props.onClick();await tick();first.render();assert.match(text(first.tree),/Chưa xác định/);first.dispose();
+ const next=voucherCheckout({storage,services:{previewStoreVoucher:async()=>{throw Error("must not preview pending")},createStoreCheckout:async payload=>{payloads.push(payload);return order()},storeOrderHref:()=>"/done"}});
+ next.context.ui.locale="en";next.context.ui.cart[PRODUCT_ID]=4;next.context.data.shippingAddress.updatedAt="2026-11-02T00:00:00Z";
+ next.render("Checkout");await next.settle();
+ const retry=nodes(next.tree).find(n=>n.type==="Button"&&text(n).includes("Check previous order"));await retry.props.onClick();
+ assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));assert.equal(payloads[1].expected_total_vnd,60000);next.dispose();
+});
+test("buy-again applies its own voucher and never changes the regular cart on remove or success",async()=>{
+ let sent;const result=voucherResponse("SAVE",{subtotalVnd:100000,discountAmountVnd:30000,totalVnd:100000,lines:[{product_id:PRODUCT_ID,quantity:2,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:10,expected_quota_quantity:0}]});
+ const r=buyAgainCheckout({services:{previewStoreVoucher:async()=>result,createStoreCheckout:async payload=>{sent=payload;return order()},storeOrderHref:()=>"/done"}});
+ r.render("Checkout");await r.settle();assert.equal(voucherInput(r).props.value,"");await applyCode(r);
+ nodes(r.tree).find(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã").props.onClick();r.render();r.flush();assert.equal(r.context.ui.cart[PRODUCT_ID],7);await applyCode(r);
+ await confirm(r).props.onClick();assert.equal(sent.coupon_code,"SAVE");assert.equal(sent.lines[0].quantity,2);assert.equal(r.context.ui.cart[PRODUCT_ID],7);assert.equal(r.context.ui.applyCSA[PRODUCT_ID],true);r.dispose();
+});
+test("a replacement session for the same UUID cannot reuse an earlier applied quote",async()=>{
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});r.render("Checkout");await r.settle();await applyCode(r);assert.equal(confirm(r).props.disabled,false);
+ r.auth.session={subject:"A"};r.render();assert.equal(confirm(r).props.disabled,true);r.dispose();
+});
+
+test("voucher checkout mixed quota uses BE quantities once and allows a zero total",async()=>{
+ const p={...product,csa_quota_group:{id:"g",cost:.75}},preview=voucherResponse("SAVE",{subtotalVnd:84000,eligibleSubtotalVnd:84000,discountAmountVnd:84000,shippingFeeVnd:0,totalVnd:0,lines:[{product_id:PRODUCT_ID,quantity:3,use_quota:true,expected_unit_price_vnd:42000,expected_available_quantity:8,expected_quota_quantity:1}]});
+ const r=voucherCheckout({services:{getStoreQuota:async()=>({active:true,products:[{productId:"g",availableUnits:2}]}),previewStoreVoucher:async()=>preview},context:{accountSessionKey:"A",data:{storeProducts:{[PRODUCT_ID]:p},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z"}},ui:{locale:"vi",cart:{[PRODUCT_ID]:3},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}}}});
+ r.render("Checkout");await r.settle();await applyCode(r);
+ const values=nodes(r.tree).filter(n=>n.type==="MoneyLine");
+ assert.equal(values.find(n=>n.props.label==="Tiền hàng").props.value,"126000");
+ assert.equal(values.find(n=>n.props.label==="CSA thanh toán").props.value,"−42000");
+ assert.equal(values.find(n=>n.props.label.includes("SAVE")).props.value,"−84000");
+ assert.equal(values.find(n=>n.props.label==="Tổng chuyển khoản").props.value,"0");
+ assert.equal(confirm(r).props.disabled,false);r.dispose();
+});
+test("preview double clicks are locked and a newer code wins over a delayed previous response",async()=>{
+ const old=deferred();let calls=0;
+ const r=voucherCheckout({services:{previewStoreVoucher:input=>{calls++;return input.coupon_code==="OLD"?old.promise:Promise.resolve(voucherResponse("NEW"))}}});
+ r.render("Checkout");await r.settle();voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();const button=applyVoucher(r);button.props.onClick();button.props.onClick();assert.equal(calls,1);r.render();assert.equal(applyVoucher(r).props.disabled,true);assert.equal(applyVoucher(r).props.loading,true);
+ voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();r.flush();await applyVoucher(r).props.onClick();await tick();r.render();assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · NEW"));
+ old.resolve(voucherResponse("OLD"));await tick();r.render();assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · NEW"));assert.equal(calls,2);assert.equal(applyVoucher(r).props.loading,false);assert.equal(applyVoucher(r).props.disabled,false);r.dispose();
+});
+test("logout while previewing prevents the old member quote from appearing for a guest",async()=>{
+ const late=deferred();const r=voucherCheckout({services:{previewStoreVoucher:()=>late.promise}});r.render("Checkout");await r.settle();
+ voucherInput(r).props.onChange({target:{value:"SAVE"}});r.render();r.flush();applyVoucher(r).props.onClick();r.auth.status="guest";r.auth.session=null;r.context.accountSessionKey="guest";r.render();r.flush();late.resolve(voucherResponse());await r.settle();
+ assert.equal(voucherInput(r).props.value,"");assert.equal(voucherInput(r).props.disabled,true);assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label?.startsWith("Voucher ·")));r.dispose();
+});
+
+test("preview cannot silently submit to a newer server address than the recipient being displayed",async()=>{
+ let sent=0,refreshed=0;const r=voucherCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:"2026-11-02T00:00:00Z"}),createStoreCheckout:async()=>{sent++;return order()}}});
+ r.context.refreshResource=async resource=>{if(resource==="address"){refreshed++;r.context.data.shippingAddress={...r.context.data.shippingAddress,name:"New recipient",updatedAt:"2026-11-02T00:00:00Z"}}};
+ r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
+ assert.equal(refreshed,1);assert.equal(sent,0);assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label?.startsWith("Voucher ·")));assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/địa chỉ|Địa chỉ/);r.dispose();
+});
+
+test("rechecking an applied code invalidates the old discount if the server now rejects it",async()=>{
+ let calls=0;const expired=new ApiError(400);expired.code="coupon_expired";
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>{if(++calls===1)return voucherResponse();throw expired}}});
+ r.render("Checkout");await r.settle();await applyCode(r);assert.equal(confirm(r).props.disabled,false);
+ await applyVoucher(r).props.onClick();await tick();r.render();
+ assert.match(text(r.tree),/hết hạn/);assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label?.startsWith("Voucher ·")));assert.equal(confirm(r).props.disabled,true);r.dispose();
+});
+
+for(const [timestamp,mismatch] of [["2026-11-01T00:00:00+00:00",false],["2026-11-01T00:00:00.000001Z",true]]){
+ test(`preview address compares normalized instants while preserving microseconds: ${timestamp}`,async()=>{
+  let refreshed=0;const r=voucherCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:timestamp})}});
+  r.context.refreshResource=async()=>{refreshed++};r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
+  assert.equal(refreshed,mismatch?1:0);assert.equal(confirm(r).props.disabled,mismatch);r.dispose();
+ });
+}
+
+for(const code of ["store_stock_changed","store_product_changed","store_quota_unavailable"]){
+ test(`voucher preview ${code} refreshes checkout data and retains the typed code`,async()=>{
+  let reads=0,previews=0,submits=0;const failure=new ApiError(400);failure.code=code;
+  const r=voucherCheckout({fetcher:async()=>{reads++;return {ok:true,json:async()=>product};},services:{previewStoreVoucher:async()=>{if(++previews===1)throw failure;return voucherResponse();},createStoreCheckout:async()=>{submits++;return order();}}});
+  r.render("Checkout");await r.settle();const before=reads;await applyCode(r);await r.settle();
+  assert.ok(reads>before);assert.equal(voucherInput(r).props.value,"SAVE");assert.equal(confirm(r).props.disabled,true);assert.equal(submits,0);
+  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.ok(accept);assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();r.flush();
+  await applyVoucher(r).props.onClick();await r.settle();assert.equal(previews,2);assert.equal(confirm(r).props.disabled,false);assert.equal(submits,0);r.dispose();
+ });
+}
+
+test("failed voucher preview recovery offers a retry without losing the code",async()=>{
+ let failRefresh=true;const failure=new ApiError(400);failure.code="store_stock_changed";
+ const r=voucherCheckout({fetcher:async()=>{if(failRefresh)throw Error("offline");return {ok:true,json:async()=>product};},services:{previewStoreVoucher:async()=>{throw failure;}}});
+ r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
+ const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props?.action?.label==="Thử lại");assert.ok(retry);assert.equal(voucherInput(r).props.value,"SAVE");assert.equal(confirm(r).props.disabled,true);
+ failRefresh=false;retry.props.action.onClick();await r.settle();assert.equal(voucherInput(r).props.value,"SAVE");assert.ok(nodes(r.tree).some(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")));r.dispose();
+});
+
+
+for(const field of ["quantity","quota"]){
+ test(`Store voucher never returns automatically after restoring ${field}`,async()=>{
+  let calls=0;const r=voucherCheckout({services:{previewStoreVoucher:async()=>{calls++;return voucherResponse();}}});r.render("Checkout");await r.settle();await applyCode(r);assert.equal(confirm(r).props.disabled,false);
+  if(field==="quantity")r.context.ui.cart[PRODUCT_ID]=2;else r.context.ui.applyCSA[PRODUCT_ID]=true;r.render();r.flush();assert.equal(confirm(r).props.disabled,true);
+  if(field==="quantity")r.context.ui.cart[PRODUCT_ID]=1;else delete r.context.ui.applyCSA[PRODUCT_ID];r.render();r.flush();assert.equal(confirm(r).props.disabled,true);assert.equal(calls,1);
+  await applyVoucher(r).props.onClick();await r.settle();assert.equal(calls,2);assert.equal(confirm(r).props.disabled,false);r.dispose();
+ });
+}

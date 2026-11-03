@@ -49,6 +49,7 @@ let termsHookState={status:"loading",document:null,retry:()=>{}};
 let hookCalls=[];
 let renderedButtons=[];
 const UI={
+ MoneyLine:realUI.MoneyLine,
  ActionLink:({children,variant,small,...props})=>{void variant;void small;return React.createElement("a",props,children);},
  Button:({children,loading,variant,small,...props})=>{void loading;void variant;void small;renderedButtons.push({children,props});return React.createElement("button",props,children);},
  DataState:({kind="empty",title,description,action})=>React.createElement("div",{"data-kind":kind},title,description,action&&React.createElement("button",{onClick:action.onClick},action.label)),
@@ -80,8 +81,13 @@ const guestFields=runModule("src/components/account/GuestBuyerFields.tsx",id=>{
  if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
  throw Error(`Unexpected guest fields import ${id}`);
 });
+const voucherCopy=runModule("src/lib/voucher-copy.ts",()=>{throw Error("Unexpected voucher import");});
+const discountField=runModule("src/components/DiscountCodeField.tsx",id=>id==="react/jsx-runtime"?jsxRuntime:id==="@/components/UI"?UI:voucherCopy);
 function loadComponent(){
  return runModule("src/screens/account-csa/AccountCsaPackageSelection.tsx",id=>{
+  if(id==="./useCsaVoucher")return {useCsaVoucher:()=>({code:"",ready:true,loading:false,change:()=>{},clear:()=>{},apply:async()=>{}})};
+  if(id==="@/components/DiscountCodeField")return discountField;
+  if(id==="@/lib/voucher-copy")return voucherCopy;
   if(id==="@/components/account/GuestBuyerFields")return guestFields;
   if(id==="@/components/BankTransferPanel")return transferPanel;
   if(id==="react")return React;
@@ -176,13 +182,13 @@ test("Account CSA package view renders API cards, duration, payment choices and 
  assert.equal((html.match(/data-csa-package-card=/g)||[]).length,2);
  assert.equal((html.match(/data-csa-selection-summary=/g)||[]).length,1);
  assert.equal((html.match(/data-csa-continue=/g)||[]).length,1);
- assert.match(html,/class="v2-purchase-brief"/);
+ assert.doesNotMatch(html,/v2-purchase-brief|csa-selection-review-plan/);
  assert.match(html,/class="v2-plan-cards"/);
  assert.match(html,/class="v2-plan-card selected"/);
  assert.match(html,/class="v2-package-payment"/);
  assert.match(html,/class="payment-plan-choice-v2 selected"/);
- assert.match(html,/class="v2-checkout-review"/);
- assert.match(html,/class="v2-legal-demo"/);
+ assert.match(html,/class="csa-selection-review"/);
+ assert.doesNotMatch(html,/v2-legal-demo/);
  assert.doesNotMatch(html,/Gói CSA A|Gói CSA B|Gói CSA C|QR MẪU|Tình huống demo/);
 });
 
@@ -318,7 +324,7 @@ test("payment step keeps Backend totals, installments and transfer fallback when
  const html=renderToStaticMarkup(React.createElement(component.AccountCsaPaymentStep,{locale:"vi",quote,busy:false,error:"",onBack:()=>{},onConfirm:()=>{}}));
  assert.match(html,/csa\.contractTotal/);
  assert.match(html,/csa\.firstPayment/);
- assert.match(html,/csa\.installmentSchedule/);
+ assert.doesNotMatch(html,/csa-bank-details|csa\.installmentSchedule/);
  assert.match(html,/csa\.copyAccountNumber/);
  assert.match(html,/csa\.copyTransferContent/);
  assert.match(html,/csa\.qrUnavailable/);
@@ -393,4 +399,9 @@ test("points history opens the linked Store order and omits details for unlinked
  assert.equal(buttons[0].props.children[0],"Chi tiết");
  buttons[0].props.onClick();
  assert.equal(navigation.length,1);assert.equal(navigation[0][0],"order-detail");assert.equal(navigation[0][1].productId,id);assert.equal(navigation[0][1].tab,"csa");
+});
+
+test("empty CSA usage history has an English label",()=>{
+ const {copyText}=runModule("src/data/account-copy.ts",()=>{throw Error("Unexpected copy import");});
+ assert.equal(copyText("en","csa.noUsage"),"No quota used yet");
 });

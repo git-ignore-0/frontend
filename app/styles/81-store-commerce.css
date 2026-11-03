@@ -56,24 +56,33 @@
 }
 .store-orders .selection-chips{margin:var(--store-content-gap) 0}
 .store-order-list{display:grid;gap:var(--store-content-gap);margin-top:var(--store-content-gap)}
-.store-order-card{border:1px solid var(--line);background:var(--paper);padding:var(--store-panel-padding);min-width:0}
-.store-order-top{display:flex;justify-content:space-between;align-items:start;gap:var(--store-content-gap)}
-.store-order-identity{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;min-width:0}
-.store-order-id{color:var(--green);font-size:var(--store-body-size);font-weight:650;overflow-wrap:anywhere}
-.store-order-identity time{font-size:var(--store-meta-size);color:var(--muted);font-variant-numeric:tabular-nums}
+.store-order-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);min-width:0;overflow:hidden}
+.store-order-card:hover,.store-order-card:focus-within{border-color:var(--green2)}
+.store-order-card-link{display:grid;gap:12px;padding:14px;color:inherit;text-decoration:none}
+.store-order-card-link:focus-visible{outline:2px solid var(--green);outline-offset:-3px}
+.store-order-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px 12px;min-width:0}
+.store-order-identity{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 10px;min-width:0}
+.store-order-id{margin:0;color:var(--ink);font-size:14px;line-height:1.4;font-weight:650;overflow-wrap:anywhere}
+.store-order-date{font-size:var(--store-meta-size);line-height:1.4;color:var(--ink2)}
+.store-order-date time{font-variant-numeric:tabular-nums}
 .store-order-top>.status{margin:0;flex:none}
-.store-order-body{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 4px}
-.store-order-preview{list-style:none;padding:0;margin:0;display:grid;gap:8px;min-width:0}
+.store-order-body{min-width:0}
+.store-order-preview{list-style:none;padding:0;margin:0;display:grid;gap:10px;min-width:0}
 .store-order-preview li{display:flex;align-items:center;gap:10px;min-width:0}
-.store-order-preview .store-product-image{flex:none;width:40px;height:40px}
+.store-order-preview .store-product-image{flex:none;width:44px;height:44px;border-radius:var(--radius)}
 .store-order-preview li>div{display:grid;gap:2px;min-width:0;overflow-wrap:anywhere}
-.store-order-preview li strong{font-size:var(--store-body-size);font-weight:650}
-.store-order-preview li>div>span{font-size:var(--store-meta-size);color:var(--muted)}
-.store-order-footer{display:flex;align-items:center;justify-content:flex-end;gap:var(--store-content-gap);flex-wrap:wrap}
-.store-order-total{flex:none;text-align:right;font-size:18px;line-height:1.35;font-weight:650;font-variant-numeric:tabular-nums}
-.store-order-footer>.btn{flex:none;color:var(--green);padding-inline:0;gap:6px}
+.store-order-preview li strong{font-size:var(--store-body-size);line-height:1.5;font-weight:650;color:var(--ink)}
+.store-order-preview li>div>span{font-size:var(--store-meta-size);line-height:1.5;color:var(--ink2)}
+.store-order-footer{padding-top:10px;border-top:1px solid var(--line)}
+.store-order-total-group{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;min-width:0}
+.store-order-total-group>span{font-size:var(--store-meta-size);line-height:1.5;color:var(--ink2)}
+.store-order-total{font-size:18px;line-height:1.3;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.store-buy-again{min-height:40px;white-space:nowrap}
+.store-buy-again .nfv-button-content{display:inline-flex;align-items:center;gap:6px}
+.store-order-buy-again>.store-buy-again{width:100%;min-height:44px;margin-top:var(--store-content-gap)}
 .store-order-products{min-width:0;overflow-wrap:anywhere;color:var(--ink2)}
-@media(max-width:420px){.store-order-top{flex-wrap:wrap}.store-order-footer>.btn{margin-left:auto}}
+@media(max-width:560px){.store-order-card-link{padding:12px;gap:10px}.store-order-identity{display:grid;gap:3px}.store-order-top{align-items:start}}
+@media(max-width:360px){.store-order-top{flex-wrap:wrap}}
 
 .store-panel-title+.store-product-row{padding-top:0}
 .store-panel-title+.money-line{margin-top:0}

@@ -19,7 +19,7 @@ const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
 const product={id:PRODUCT_ID,slug:"rau",name:"Rau",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,csa_quota_group:null};
 const order=(id="A",overrides={})=>({id,referenceCode:id,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
 
-function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},fetcher=async()=>{throw Error("offline")}}={}){
+function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")}}={}){
  let cursor=0,states=[],deps=[],effects=[],cleanups=[],tree;const timers=new Map(),listeners=new Map(),document={visibilityState:"visible"};let timerId=0;
  const react={
   useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],v=>states[i]=typeof v==="function"?v(states[i]):v]},
@@ -28,14 +28,20 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   useEffect(fn,next){const i=cursor++;if(!deps[i]||next.some((v,j)=>v!==deps[i][j])){deps[i]=next;effects.push({i,fn})}},
  };
  react.useLayoutEffect=react.useEffect;
- const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
+ context.ui??={locale:"vi"};
+ const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
+  if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
+  if(name==="@/store/buy-again-session"||name==="./buy-again-session")return load("src/store/buy-again-session.ts");
+  if(name==="./checkout-intent")return load("src/store/checkout-intent.ts");
+  if(name==="./store-order-service")return services;
+  if(name==="./use-store-session")return load("src/store/use-store-session.ts");
   if(name==="@/store/cart-checkout")return load("src/store/cart-checkout.ts");
   if(name==="react")return react;if(name==="react/jsx-runtime")return jsx;
   if(name==="@/auth/AuthProvider")return {useAuth:()=>auth};
   if(name==="@/state/NFVContext")return {useNFV:()=>context};
-  if(name==="next/navigation")return {useRouter:()=>({push:onNavigate})};
+  if(name==="next/navigation")return {useRouter:()=>({push:onNavigate,replace:onReplace}),useSearchParams:()=>new URLSearchParams(searchState.value)};
   if(name==="@/components/UI")return Object.fromEntries(uiNames.map(k=>[k,k]));
   if(name==="@/components/account/ListPaginationFooter")return load("src/components/account/ListPaginationFooter.tsx");
   if(name==="@/components/store/StorePrimitives")return {...load("src/components/store/StorePrimitives.tsx"),...primitives};
@@ -602,4 +608,194 @@ test("legacy unresolved member attempt is discovered after reload under another 
  storage.delete("nfv_store_checkout_pending_owner_v1");
  const next=checkout({storage,auth:{status:"authenticated",session:{subject:"B"}},context:{accountSessionKey:"B"}});next.render("Checkout");await next.settle();
  assert.equal(confirm(next),undefined);assert.equal(payloads.length,1);next.dispose();
+});
+
+
+const SOURCE_ORDER="22222222-2222-4222-8222-222222222222",SOURCE_SESSION="33333333-3333-4333-8333-333333333333";
+function buyAgainCheckout(options={}){
+ const storage=options.storage??new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]);
+ return checkout({...options,storage,search:"?source=buy-again",auth:options.auth??{status:"authenticated",session:{subject:"A"}},context:{accountSessionKey:"A",data:{shippingAddress:{...guest,detail:guest.address,updatedAt:"2026-11-01T00:00:00Z"},storeProducts:{[PRODUCT_ID]:product}},ui:{locale:"vi",cart:{[PRODUCT_ID]:7},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},...options.context},services:{prepareBuyAgain:async()=>[{productId:PRODUCT_ID,quantity:2,name:"Old name",reason:null,product:{...product,name:"Fresh name",retail_price_vnd:50000}}],...options.services}});
+}
+
+test("buy again reload prepares current data; completion leaves cart and CSA choices untouched",async()=>{
+ let sent;const storage=new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]);
+ const r=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{sent=payload;return order("new")},storeOrderHref:()=>"/new"}});
+ r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,false);
+ assert.ok(nodes(r.tree).some(n=>n.type==="StoreProductRow"&&n.props.name==="Fresh name"));
+ await confirm(r).props.onClick();await tick();
+ assert.equal(sent.lines[0].quantity,2);assert.equal(sent.lines[0].expected_unit_price_vnd,50000);assert.equal(sent.lines[0].use_quota,false);
+ assert.equal(r.context.ui.cart[PRODUCT_ID],7);assert.equal(r.context.ui.applyCSA[PRODUCT_ID],true);
+ assert.equal(storage.has("nfv_store_buy_again_v1"),false);r.dispose();
+});
+
+test("buy again unknown result survives reload and replays same key without clearing cart",async()=>{
+ const storage=new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]),payloads=[];
+ const first=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);throw Error("offline")}}});
+ first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();
+ const next=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);return order("new")},storeOrderHref:()=>"/new"}});
+ next.render("Checkout");await next.settle();assert.match(text(next.tree),/Chưa xác định/);
+ await confirm(next).props.onClick();await tick();assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));assert.equal(next.context.ui.cart[PRODUCT_ID],7);next.dispose();
+});
+
+test("buy again unavailable and technical errors block checkout without reducing quantities",async()=>{
+ for(const technical of [false,true]){
+  const r=buyAgainCheckout({services:{prepareBuyAgain:async()=>{if(technical)throw Error("offline");return [{productId:PRODUCT_ID,quantity:10,name:"Rau",reason:"insufficient_stock",product:{...product,available_quantity:6}}]}}});
+  r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,true);
+  assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&(technical?/Chưa thể kiểm tra sản phẩm/:/chỉ còn 6, đơn cũ cần 10/).test(n.props.title)));
+  assert.equal(r.context.ui.cart[PRODUCT_ID],7);r.dispose();
+ }
+});
+
+test("buy again owner switch hides the previous source immediately and ignores late prepare",async()=>{
+ const late=deferred(),auth={status:"authenticated",session:{subject:"A"}},r=buyAgainCheckout({auth,services:{prepareBuyAgain:()=>late.promise}});
+ r.render("Checkout");r.flush();auth.session={subject:"B"};r.context.accountSessionKey="B";r.render();r.flush();
+ late.resolve([{productId:PRODUCT_ID,quantity:2,name:"Private old",reason:null,product:{...product,name:"Private old"}}]);await r.settle();
+ assert.doesNotMatch(text(r.tree),/Private old/);assert.equal(confirm(r),undefined);r.dispose();
+});
+
+test("shared buy again prepare keeps a valid source on all-line failures and distinguishes network errors",async()=>{
+ for(const technical of [false,true]){
+  const raw=JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION}),storage=new Map([["nfv_store_buy_again_v1",raw]]),nav=[];
+  const r=runtime("src/store/use-buy-again.ts",{storage,auth:{status:"authenticated",session:{subject:"A"}},context:{ui:{locale:"vi",page:"account"}},onNavigate:href=>nav.push(href),services:{prepareBuyAgain:async()=>{if(technical)throw Error("offline");return [{productId:PRODUCT_ID,quantity:10,name:"Rau",reason:"insufficient_stock",product:{...product,available_quantity:6}},{productId:"other",quantity:1,name:"Chuối",reason:"unavailable",product:null}]}}});
+  r.render("useBuyAgain","vi");r.flush();await r.tree.start(SOURCE_ORDER);r.render();
+  assert.match(r.tree.error,technical?/Chưa thể kiểm tra/:/chỉ còn 6, đơn cũ cần 10.*Chuối không còn được bán/);
+  assert.equal(storage.get("nfv_store_buy_again_v1"),raw);assert.equal(nav.length,0);r.dispose();
+ }
+});
+
+test("shared buy again rejects duplicate clicks and late results after unmount",async()=>{
+ const wait=deferred(),storage=new Map(),nav=[];let calls=0;
+ const r=runtime("src/store/use-buy-again.ts",{storage,auth:{status:"authenticated",session:{subject:"A"}},context:{ui:{locale:"vi"}},onNavigate:href=>nav.push(href),services:{prepareBuyAgain:()=>{calls++;return wait.promise}}});
+ r.render("useBuyAgain","vi");r.flush();const first=r.tree.start(SOURCE_ORDER);void r.tree.start(SOURCE_ORDER);assert.equal(calls,1);r.dispose();
+ wait.resolve([{productId:PRODUCT_ID,quantity:2,name:"Rau",reason:null,product}]);await first;
+ assert.equal(storage.size,0);assert.equal(nav.length,0);
+});
+
+test("shared buy again refuses a new prepare when a checkout result is unresolved",async()=>{
+ const storage=new Map();const first=checkout({storage,services:{createStoreCheckout:async()=>{throw Error("offline")}}});
+ first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();let calls=0;
+ const r=runtime("src/store/use-buy-again.ts",{storage,auth:{status:"authenticated",session:{subject:"A"}},context:{ui:{locale:"vi"}},services:{prepareBuyAgain:async()=>{calls++;return []}}});
+ r.render("useBuyAgain","vi");r.flush();await r.tree.start(SOURCE_ORDER);r.render();assert.equal(calls,0);assert.match(r.tree.error,/chưa rõ kết quả/);assert.equal(storage.has("nfv_store_buy_again_v1"),false);r.dispose();
+});
+
+
+test("clicking an order card opens detail without preparing buy again and preserves modified link clicks",async()=>{
+ const nav=[],context={ui:{locale:"vi",accountTab:"orders",accountHubOpen:false},navigate:(...args)=>nav.push(args)};
+ const r=runtime("src/screens/AccountOrders.tsx",{context,auth:{status:"authenticated",session:{subject:"A"}},services:{getStoreOrders:async()=>({items:[order(SOURCE_ORDER,{status:"delivered"})],meta:{total:1}}),prepareBuyAgain:async()=>{throw Error("must_not_prepare")}}});
+ r.render("OrdersView");await r.settle();const link=nodes(r.tree).find(n=>n.type==="a"&&n.props.className==="store-order-card-link");
+ assert.equal(link.props.href,`/store/orders/${SOURCE_ORDER}/vi`);assert.ok(!nodes(r.tree).some(n=>n.type==="Button"&&/Mua lại|Xem chi tiết/.test(text(n))));
+ let prevented=false;link.props.onClick({button:0,ctrlKey:true,preventDefault(){prevented=true}});assert.equal(nav.length,0);assert.equal(prevented,false);
+ link.props.onClick({button:0,preventDefault(){prevented=true}});assert.equal(prevented,true);assert.equal(nav[0][0],"order-detail");assert.equal(nav[0][1].productId,SOURCE_ORDER);r.dispose();
+});
+
+test("changing checkout source marker returns to the untouched regular cart",async()=>{
+ const searchState={value:"?source=buy-again"},r=buyAgainCheckout({searchState});
+ r.render("Checkout");await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="StoreProductRow").props.name,"Fresh name");
+ searchState.value="";r.render();await r.settle();
+ assert.equal(nodes(r.tree).find(n=>n.type==="StoreProductRow").props.name,"Rau");
+ assert.equal(r.context.ui.cart[PRODUCT_ID],7);assert.equal(r.context.ui.applyCSA[PRODUCT_ID],true);r.dispose();
+});
+
+
+test("an unresolved cart intent owns recovery source even with a buy again query marker",async()=>{
+ const storage=new Map();
+ const first=buyAgainCheckout({storage,searchState:{value:""},services:{createStoreCheckout:async()=>{throw Error("offline")}}});
+ first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();
+ let prepares=0;
+ const r=buyAgainCheckout({storage,fetcher:async()=>({ok:true,json:async()=>({...product,retail_price_vnd:50000})}),services:{prepareBuyAgain:async()=>{prepares++;throw Error("wrong_source")},createStoreCheckout:async()=>{throw new ApiError(409,{reason:"price_changed"})}}});
+ r.render("Checkout");await r.settle();assert.match(text(r.tree),/Chưa xác định/);
+ await confirm(r).props.onClick();await r.settle();assert.equal(prepares,0);
+ assert.equal(nodes(r.tree).find(n=>n.type==="StoreProductRow").props.name,"Rau");
+ assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")).props.disabled,false);
+ assert.equal(r.context.ui.cart[PRODUCT_ID],7);r.dispose();
+});
+
+test("detail buy again button requires backend ownership eligibility and an authenticated viewer",async()=>{
+ for(const [authenticated,eligible,status,expected] of [[true,true,"delivered",true],[true,true,"cancelled",true],[true,true,"pending_delivery",true],[true,true,"payment_pending",true],[true,false,"delivered",false],[false,true,"delivered",false]]){
+  const snapshot=order(SOURCE_ORDER,{status,canBuyAgain:eligible});
+  const r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth:authenticated?{status:"authenticated",session:{subject:"A"}}:{status:"guest",session:null},services:{getStoreOrder:async()=>snapshot}});
+  r.render("StoreOrderDetail",{id:SOURCE_ORDER,locale:"vi",initialOrder:snapshot});await r.settle();
+  assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Mua lại"),expected);r.dispose();
+ }
+});
+
+
+test("successful buy again replaces checkout history entry so Back returns to the source page",async()=>{
+ const pushed=[],replaced=[],r=buyAgainCheckout({onNavigate:href=>pushed.push(href),onReplace:href=>replaced.push(href),services:{createStoreCheckout:async()=>order("new"),storeOrderHref:()=>"/store/orders/new/vi"}});
+ r.render("Checkout");await r.settle();await confirm(r).props.onClick();await tick();
+ assert.deepEqual(replaced,["/store/orders/new/vi"]);assert.deepEqual(pushed,[]);
+ assert.equal(r.context.ui.cart[PRODUCT_ID],7);r.dispose();
+});
+
+test("returning to an already completed buy again URL shows an ended session without retries or cart checkout",async()=>{
+ const storage=new Map();let prepares=0,creates=0;
+ const r=buyAgainCheckout({storage,services:{prepareBuyAgain:async()=>{prepares++;throw Error("must_not_prepare")},createStoreCheckout:async()=>{creates++;return order("duplicate")}}});
+ r.render("Checkout");await r.settle();
+ const state=nodes(r.tree).find(n=>n.type==="DataState"&&/Phiên mua lại/.test(n.props.title));
+ assert.ok(state);assert.equal(state.props.kind,"empty");
+ assert.equal(state.props.action.label,"Đơn hàng của tôi");assert.equal(confirm(r),undefined);
+ assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&/Chưa thể kiểm tra sản phẩm/.test(n.props.title)));
+ assert.equal(prepares,0);assert.equal(creates,0);assert.equal(r.context.ui.cart[PRODUCT_ID],7);r.dispose();
+});
+
+test("buy again unknown intent still recovers when its prepared session was removed",async()=>{
+ const storage=new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]),payloads=[];
+ const first=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);throw Error("offline")}}});
+ first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();storage.delete("nfv_store_buy_again_v1");
+ const next=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);return order("new")},storeOrderHref:()=>"/new"}});
+ next.render("Checkout");await next.settle();assert.match(text(next.tree),/Chưa xác định/);
+ await confirm(next).props.onClick();await tick();assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));assert.equal(next.context.ui.cart[PRODUCT_ID],7);next.dispose();
+});
+
+
+test("same-owner profile refresh does not strand buy again preparation",async()=>{
+ const wait=deferred(),nav=[],auth={status:"authenticated",session:{subject:"A",profile:{name:"Old"}}};
+ const r=runtime("src/store/use-buy-again.ts",{auth,context:{ui:{locale:"vi"}},onNavigate:href=>nav.push(href),services:{prepareBuyAgain:()=>wait.promise}});
+ r.render("useBuyAgain","vi");r.flush();const pending=r.tree.start(SOURCE_ORDER);r.render();
+ assert.equal(r.tree.busy,SOURCE_ORDER);
+ auth.session={subject:"A",profile:{name:"Updated"}};r.render();r.flush();
+ wait.resolve([{productId:PRODUCT_ID,quantity:2,name:"Rau",reason:null,product}]);await pending;r.render();
+ assert.equal(r.tree.busy,null);assert.deepEqual(nav,["/store/checkout/vi?source=buy-again"]);r.dispose();
+});
+
+test("buy again sign-in preserves checkout source before any order was submitted",async()=>{
+ const storage=new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]);
+ const expired=buyAgainCheckout({storage,auth:{status:"expired",session:null},context:{accountSessionKey:"guest"}});
+ expired.render("Checkout");await expired.settle();
+ const login=nodes(expired.tree).find(n=>n.type==="a"&&n.props.href?.startsWith("/api/auth/login"));
+ assert.ok(login);
+ const returnTo=new URL(login.props.href,"https://example.test").searchParams.get("returnTo");
+ assert.equal(returnTo,"/store/checkout/vi?source=buy-again");expired.dispose();
+ const resumed=buyAgainCheckout({storage,searchState:{value:new URL(returnTo,"https://example.test").search},services:{createStoreCheckout:async()=>order("new")}});
+ resumed.render("Checkout");await resumed.settle();
+ assert.ok(nodes(resumed.tree).some(n=>n.type==="StoreProductRow"&&n.props.name==="Fresh name"));
+ assert.equal(resumed.context.ui.cart[PRODUCT_ID],7);resumed.dispose();
+});
+
+
+test("successful buy again stays locked while order navigation is pending",async()=>{
+ const payloads=[],navigated=[];
+ const r=buyAgainCheckout({onReplace:href=>navigated.push(href),services:{createStoreCheckout:async payload=>{payloads.push(payload);return order("new")},storeOrderHref:()=>"/new"}});
+ r.render("Checkout");await r.settle();
+ const originalSubmit=confirm(r).props.onClick;
+ await originalSubmit();await r.settle();
+ // Next navigation may not unmount checkout immediately after the API succeeds.
+ assert.equal(confirm(r).props.disabled,true);
+ await originalSubmit();await r.settle();
+ assert.equal(payloads.length,1);assert.deepEqual(navigated,["/new"]);
+ assert.equal(r.context.ui.cart[PRODUCT_ID],7);
+ r.context.ui.locale="en";r.render();await r.settle();
+ if(confirm(r))assert.equal(confirm(r).props.disabled,true);
+ await originalSubmit();assert.equal(payloads.length,1);r.dispose();
+});
+
+test("successful buy again recovery cannot submit a new order before navigation",async()=>{
+ const storage=new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]),payloads=[];
+ const first=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);throw Error("offline")}}});
+ first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();
+ const next=buyAgainCheckout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);return order("new")},storeOrderHref:()=>"/new"}});
+ next.render("Checkout");await next.settle();
+ const replay=confirm(next).props.onClick;await replay();await next.settle();
+ assert.equal(confirm(next).props.disabled,true);await replay();
+ assert.equal(payloads.length,2);assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));next.dispose();
 });

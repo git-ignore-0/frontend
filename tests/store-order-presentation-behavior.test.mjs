@@ -61,6 +61,7 @@ function detailModule(settings=null){
     if(name==="@/components/store/StorePrimitives")return primitives;
     if(name==="@/components/BankTransferPanel")return shared;
     if(name==="@/store/store-format")return format;
+    if(name==="@/store/use-buy-again")return {useBuyAgain:()=>({start(){},busy:null,error:""})};
     if(name==="react")return h.react;
     if(name==="react/jsx-runtime")return jsx;
     if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};

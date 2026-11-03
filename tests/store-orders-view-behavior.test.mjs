@@ -26,6 +26,7 @@ function hookHarness(){
 function viewHarness(getStoreOrders){
   const hooks=hookHarness(),exports={};
   vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,console,Date,require:name=>{
+    if(name==="@/store/use-buy-again")return {useBuyAgain:()=>({start(){},busy:null,error:""})};
     if(name==="react")return hooks.react;
     if(name==="react/jsx-runtime")return jsx;
     if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
@@ -114,16 +115,18 @@ test("an older page response cannot overwrite the newer filter response",async()
 });
 
 
-test("order cards separate identity, product preview, payment and the detail action",async()=>{
+test("order cards link to detail with identity, product preview and payment, without action buttons",async()=>{
  const h=viewHarness(async()=>({items:[order("SO-1","pending_review")],meta:{total:1}}));
  h.render();await h.settle();
  const card=all(h.tree).find(n=>n.type==="article");
- const sections=card.props.children;
+ const link=all(card).find(n=>n.type==="a");
+ assert.equal(link.props.href,"/store/orders/SO-1/vi");
+ const sections=link.props.children;
  assert.deepEqual(Array.from(sections,n=>n.props.className),["store-order-top","store-order-body","store-order-footer"]);
  assert.equal(all(card).find(n=>n.type==="Photo").props.src,"https://example.com/produce.webp");
  assert.ok(all(card).some(n=>n.type==="span"&&[n.props.children].flat().join("")==="1 × 1 kg"));
- assert.equal(all(card).filter(n=>n.type==="Button").length,1);
- assert.ok(h.button("Xem chi tiết"));
+ assert.equal(all(card).filter(n=>n.type==="Button").length,0);
+ assert.equal(link.props["aria-label"],"Xem chi tiết SO-1");
  h.dispose();
 });
 

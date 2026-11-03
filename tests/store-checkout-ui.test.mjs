@@ -18,11 +18,11 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
   if(cache.has(path))return cache.get(path);
   const exports={};cache.set(path,exports);
   vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:name=>{
-   if(name==="react")return {...React,useState:initial=>{const i=hook++;const value=i<seeds.length?seeds[i]:i===12?`${authenticated?"test-user":"guest"}:vi:0`:i===13?`${authenticated?"test-user":"guest"}:66:1:0`:i===18?(authenticated?"test-user":"guest"):initial;return React.useState(!cart&&path==="src/screens/Checkout.tsx"?value:initial)}};
+   if(name==="react")return {...React,useState:initial=>{const i=hook++;const value=i<seeds.length?seeds[i]:i===12?`${authenticated?"test-user":"guest"}:vi:0`:i===13?`${authenticated?"test-user":"guest"}:66:1:0`:i===18?(authenticated?"test-user":"guest"):i===26?true:initial;return React.useState(!cart&&path==="src/screens/Checkout.tsx"?value:initial)}};
    if(name==="react/jsx-runtime")return jsx;
    if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
     if(name==="@/auth/AuthProvider")return {useAuth:()=>({status:authenticated?"authenticated":"guest",session:authenticated?{subject:"test-user"}:null})};
-   if(name==="next/navigation")return {useRouter:()=>({push(){}})};
+   if(name==="next/navigation")return {useRouter:()=>({push(){}}),useSearchParams:()=>({get:()=>null})};
    if(name==="@/state/NFVContext")return {useNFV:()=>({data,ui,cartHydrated:true,accountSessionKey:authenticated?"test-user":"guest",patch(){},updateCart(){},acknowledgeCartProduct(){},retryCartProduct(){},beginCheckout(){}})};
    if(name==="@/components/overlays/OverlayPrimitives")return {SideDrawer:({title,children})=>React.createElement("div",{className:"side-drawer"},React.createElement("h2",{},title),children)};
    if(name==="@/components/store/StorePrimitives")return load("src/components/store/StorePrimitives.tsx");

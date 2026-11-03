@@ -2,7 +2,7 @@ import type {checkoutPayload} from "./store-quote";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "./store-limits";
 
 export type StoreCheckoutPayload=ReturnType<typeof checkoutPayload>;
-export type StoreCheckoutIntent={owner:string;payload:StoreCheckoutPayload};
+export type StoreCheckoutIntent={owner:string;payload:StoreCheckoutPayload;buyAgain?:{orderId:string;sessionId:string}};
 type IntentStorage=Pick<Storage,"getItem"|"setItem"|"removeItem">&Partial<Pick<Storage,"length"|"key">>;
 type RecordValue=Record<string,unknown>;
 const intentPrefix="nfv_store_checkout_intent_v1:";
@@ -42,9 +42,10 @@ export function readCheckoutIntent(storage:IntentStorage,owner:string):StoreChec
   if(raw===null)continue;
   const value:unknown=JSON.parse(raw);
   if(!record(value)||value.owner!==storedOwner||!isCheckoutPayload(value.payload,owner==="guest"))throw Error("invalid_checkout_intent");
-  const next={owner,payload:value.payload};
+  if(value.buyAgain!==undefined&&(owner==="guest"||!record(value.buyAgain)||!uuid(value.buyAgain.orderId)||!uuid(value.buyAgain.sessionId)))throw Error("invalid_checkout_intent");
+  const next:StoreCheckoutIntent={owner,payload:value.payload,...(value.buyAgain?{buyAgain:value.buyAgain as StoreCheckoutIntent["buyAgain"]}:{})};
   // Never pick between different outstanding requests or different payloads sharing one key.
-  if(intent&&JSON.stringify(intent.payload)!==JSON.stringify(next.payload))throw Error("conflicting_checkout_intents");
+  if(intent&&JSON.stringify(intent)!==JSON.stringify(next))throw Error("conflicting_checkout_intents");
   intent=next;
  }
  return intent;
@@ -81,11 +82,12 @@ export function pendingCheckoutOwner(storage:IntentStorage,currentOwner:string):
 }
 
 export function saveCheckoutIntent(storage:IntentStorage,intent:StoreCheckoutIntent){
+ if(intent.buyAgain&&(intent.owner==="guest"||!uuid(intent.buyAgain.orderId)||!uuid(intent.buyAgain.sessionId)))throw Error("invalid_checkout_intent");
  if(!intent.owner||!isCheckoutPayload(intent.payload,intent.owner==="guest"))throw Error("invalid_checkout_intent");
  const pending=pendingCheckoutOwner(storage,intent.owner);
  if(pending!==null&&pending!==intent.owner)throw Error("conflicting_checkout_intents");
  const existing=readCheckoutIntent(storage,intent.owner);
- if(existing&&JSON.stringify(existing.payload)!==JSON.stringify(intent.payload))throw Error("conflicting_checkout_intents");
+ if(existing&&JSON.stringify(existing)!==JSON.stringify(intent))throw Error("conflicting_checkout_intents");
  storage.setItem(storageKey(intent.owner),JSON.stringify(intent));
  storage.setItem(pendingOwnerKey,intent.owner);
 }

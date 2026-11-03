@@ -3,6 +3,7 @@
 import {createContext,useCallback,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import * as service from "./auth-service";
 import type {AuthSnapshot} from "./auth-types";
+import {retainBuyAgainOwner} from "@/store/buy-again-session";
 import {sameAuthSession} from "./session-equality";
 
 const initial:AuthSnapshot={status:"checking",session:null,error:""};
@@ -59,6 +60,10 @@ export function AuthProvider({children}:{children:ReactNode}){
     setSnapshot(previous=>previous.status==="authenticated"?
       {status:"expired",session:null,error:"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."}:previous);
   },[]);
+  useEffect(()=>{
+    if(snapshot.status!=="authenticated"&&snapshot.status!=="guest")return;
+    try{retainBuyAgainOwner(window.sessionStorage,snapshot.status==="authenticated"?snapshot.session?.subject??null:null)}catch{}
+  },[snapshot.status,snapshot.session?.subject]);
   const value=useMemo(()=>({...snapshot,refresh,expire}),[snapshot,refresh,expire]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,6 +1,6 @@
 /* v51 / category navigation only — v50 typography, colors and other pages unchanged. */
 .catalog-layout{display:grid;grid-template-columns:206px minmax(0,1fr);gap:22px;align-items:start}
-.catalog-main{min-width:0}
+.catalog-main{min-width:0;scroll-margin-top:90px}
 .category-sidebar{min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--paper);padding:12px 7px 13px;position:sticky;top:90px}
 .category-tree-head{padding:0 10px 9px;border-bottom:1px solid var(--line);margin-bottom:7px}
 .category-tree-head strong{display:block;font-size:13px;font-weight:700}
@@ -116,10 +116,24 @@
 }
 
 /* Store cards keep the same vertical layout and 5:4 image at every viewport. */
+.catalog .products-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.catalog .corner-tag{max-width:calc(100% - 12px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .catalog .product-card{display:flex;flex-direction:column;min-width:0;min-height:0}
 .catalog .product-img{width:100%;aspect-ratio:5/4;height:auto;min-height:0;flex:none}
 .catalog .card-copy{min-width:0}
-@media(max-width:360px){
- .catalog .products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
- .catalog .card-copy{padding:9px 7px}
-}
+@media(max-width:1150px){.catalog .products-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.catalog .products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:360px){.catalog .card-copy{padding:9px 7px}}
+
+/* Store loading occupies its own space below the existing product grid. */
+.catalog-load-more{min-height:64px;margin-top:24px;display:flex;align-items:center;justify-content:center}
+.catalog-load-status{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:13px;text-align:center}
+.catalog-load-spinner{width:18px;height:18px;flex:none;border:2px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:nfv-button-spin .8s linear infinite}
+.catalog-skeleton .product-img,.catalog-skeleton-title,.catalog-skeleton-price{background:var(--line)}
+.catalog-skeleton-title,.catalog-skeleton-price{display:block;border-radius:3px;height:16px}
+.catalog-skeleton-title{width:85%;margin-bottom:10px}
+.catalog-skeleton-price{width:55%}
+@media(max-width:560px){.catalog-load-more{margin-top:16px}}
+@media(prefers-reduced-motion:reduce){.catalog-load-spinner{animation:none}}
+
+.catalog-sort-error{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;color:var(--error);font-size:13px}

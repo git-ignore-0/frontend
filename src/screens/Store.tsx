@@ -1,6 +1,6 @@
 "use client";
 
-import {useCallback,useEffect,useMemo,useRef,useState,type CSSProperties,type ReactNode} from "react";
+import {memo,useCallback,useEffect,useMemo,useRef,useState,type CSSProperties,type ReactNode} from "react";
 import {Button,DataState,FormSelect,Icon,Photo,SearchField} from "@/components/UI";
 import {IconButton,ResponsiveDialog} from "@/components/overlays/OverlayPrimitives";
 import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
@@ -9,7 +9,7 @@ import {money} from "@/lib/format";
 import {useNFV} from "@/state/NFVContext";
 import {formatCsaQuotaBadge,formatUnitSize} from "@/store/store-format";
 import type {StoreCategory,StoreProductCard} from "@/store/store-model";
-import type {StorePriceBand,StoreSort} from "@/store/store-request";
+import {DEFAULT_STORE_PAGE_SIZE,type StorePriceBand,type StoreSort} from "@/store/store-request";
 import {useStoreCatalog} from "@/store/useStoreCatalog";
 
 type CategoryNode=StoreCategory&{depth:number;children:CategoryNode[]};
@@ -26,7 +26,7 @@ function categoryTree(categories:StoreCategory[]):CategoryNode[]{
  sort(roots);return roots;
 }
 
-export function ProductCard({product,locale}:{product:StoreProductCard;locale:"vi"|"en"}){
+export const ProductCard=memo(function ProductCard({product,locale}:{product:StoreProductCard;locale:"vi"|"en"}){
  const image=product.primary_image?.variants.find(variant=>variant.width>=400)?.url??product.primary_image?.url;
  return <article className="product-card">
   <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${STORE_COPY[locale].view} ${product.name}`}>{product.csa_quota_group&&<span className="corner-tag">{formatCsaQuotaBadge(product.csa_quota_group,locale)}</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>
@@ -34,6 +34,10 @@ export function ProductCard({product,locale}:{product:StoreProductCard;locale:"v
    <div className="card-bottom"><div className="card-price-line"><div className="price">{money(product.retail_price_vnd)}</div><div className="unit">/ {formatUnitSize(product.unit_size)} {product.unit_label}</div></div></div>
   </div>
  </article>;
+});
+
+function CatalogSkeleton({label}:{label:string}){
+ return <div role="status" aria-label={label} aria-busy="true"><div className="products-grid" aria-hidden="true">{Array.from({length:DEFAULT_STORE_PAGE_SIZE},(_,index)=><div className="product-card catalog-skeleton" key={index}><div className="product-img"/><div className="card-copy"><span className="catalog-skeleton-title"/><span className="catalog-skeleton-price"/></div></div>)}</div></div>;
 }
 
 function CategoryTree({tree,selectedId,expanded,allLabel,onSelect,onToggle}:{tree:CategoryNode[];selectedId?:string;expanded:string[];allLabel:string;onSelect:(id?:string)=>void;onToggle:(id:string)=>void}){
@@ -77,15 +81,25 @@ export function Store(){
  const tree=useMemo(()=>categoryTree(catalog.categories),[catalog.categories]);
  const selectedCategory=catalog.categories.find(category=>category.id===catalog.query.categoryId);
  const active=Number(!!catalog.query.csaEligible)+Number(catalog.priceBand!=="all");
+ const productList=useRef<HTMLDivElement|null>(null);
+ const previousCategory=useRef(catalog.query.categoryId);
+ useEffect(()=>{
+  if(previousCategory.current===catalog.query.categoryId)return;
+  previousCategory.current=catalog.query.categoryId;
+  // Wait for the category sheet to release its scroll lock and restore focus.
+  const frame=window.requestAnimationFrame(()=>productList.current?.scrollIntoView({block:"start",behavior:"instant"}));
+  return()=>window.cancelAnimationFrame(frame);
+ },[catalog.query.categoryId]);
  const loadMoreTarget=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{
   const target=loadMoreTarget.current;
   if(!target||!hasMore||loadingMore||moreError)return;
-  const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))void loadMore()},{rootMargin:"400px"});
+  const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))void loadMore()},{rootMargin:`0px 0px ${window.innerHeight}px 0px`});
   observer.observe(target);
   return()=>observer.disconnect();
  },[hasMore,loadingMore,moreError,loadMore]);
- useEffect(()=>{if(catalog.state==="ready")cacheStoreProducts(catalog.products)},[cacheStoreProducts,catalog.products,catalog.state]);
+ const cachedBatch=useRef<StoreProductCard[]|null>(null);
+ useEffect(()=>{if(catalog.state==="ready"&&cachedBatch.current!==catalog.batch){cachedBatch.current=catalog.batch;if(catalog.batch.length)cacheStoreProducts(catalog.batch)}},[cacheStoreProducts,catalog.batch,catalog.state]);
  const currentSearch=catalog.query.search??"";
  const commitSearch=useCallback((value:string)=>{if(value!==currentSearch)setQuery({search:value||undefined,page:1})},[currentSearch,setQuery]);
  const selectCategory=(id?:string)=>{setQuery({categoryId:id,page:1});setCategoryOpen(false)};
@@ -102,12 +116,12 @@ export function Store(){
   </div></div>
   <section className="catalog" id="catalog" aria-label={copy.results}><div className="catalog-layout"><div className="catalog-rail"><aside className="category-sidebar" aria-label={copy.categories}><div className="category-tree-head"><strong>{copy.categories}</strong><span className="category-tree-subtitle">{copy.categoryHint}</span></div>{categoryContent}</aside>
    <section className="editorial catalog-csa-editorial" aria-label="CSA"><div><span className="eyebrow">CSA</span><h3>{copy.csaTitle}</h3><p>{copy.csaBody}</p></div><Button small variant="outline" onClick={()=>navigate("csa")}>{copy.csaLink} <Icon name="arrow" size={15}/></Button></section></div>
-   <div className="catalog-main"><div className="catalog-meta"><div className="catalog-breadcrumb" aria-label={copy.categories}><span>{copy.all}</span>{selectedCategory&&<span> / {selectedCategory.name}</span>}</div><span className="catalog-results-count" aria-live="polite">{catalog.meta.total} {copy.results}</span></div>
+   <div ref={productList} className="catalog-main"><div className="catalog-meta"><div className="catalog-breadcrumb" aria-label={copy.categories}><span>{copy.all}</span>{selectedCategory&&<span> / {selectedCategory.name}</span>}</div><span className="catalog-results-count" aria-live="polite">{catalog.state==="ready"?`${catalog.meta.total} ${copy.results}`:null}</span></div>
     {active>0&&<div className="facet-chips">{catalog.query.csaEligible&&<button className="facet-chip" onClick={()=>setQuery({csaEligible:undefined,page:1})}>{copy.csa} ×</button>}{catalog.priceBand!=="all"&&<button className="facet-chip" onClick={()=>setQuery({priceBand:"all",page:1})}>{({low:copy.priceLow,mid:copy.priceMid,high:copy.priceHigh} as Record<string,string>)[catalog.priceBand]} ×</button>}<button className="facet-clear" onClick={clearFilters}>{copy.clear}</button></div>}
-    {catalog.state==="loading"?<DataState kind="loading" title={copy.loading}/>:catalog.state==="error"?<DataState kind="error" title={copy.error} action={{label:copy.retry,onClick:catalog.retryProducts}}/>:catalog.products.length?<><div className="products-grid">{catalog.products.map(product=><ProductCard product={product} locale={locale} key={product.id}/>)}</div><div ref={loadMoreTarget}>{catalog.loadingMore&&<DataState kind="loading" compact title={copy.loading}/>}{catalog.moreError&&<DataState kind="error" compact title={copy.error} action={{label:copy.retry,onClick:()=>void catalog.loadMore()}}/>}</div></>:<DataState icon="search" title={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.empty:copy.noResult} description={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.emptyBody:copy.noResultBody} action={catalog.query.search||catalog.query.categoryId||active?{label:copy.clear,onClick:clearFilters}:undefined}/>}
+    {catalog.state==="loading"&&!catalog.keepProducts?<CatalogSkeleton label={copy.loading}/>:catalog.state==="error"&&!catalog.keepProducts?<DataState kind="error" title={copy.error} action={{label:copy.retry,onClick:catalog.retryProducts}}/>:catalog.products.length?<>{catalog.keepProducts&&catalog.state==="error"&&<div className="catalog-sort-error"><span role="alert">{copy.error}</span><Button small variant="outline" onClick={catalog.retryProducts}>{copy.retry}</Button></div>}<div className="products-grid" aria-busy={catalog.keepProducts&&catalog.state==="loading"}>{catalog.products.map(product=><ProductCard product={product} locale={locale} key={product.id}/>)}</div><div ref={loadMoreTarget} className="catalog-load-more">{catalog.loadingMore&&<div className="catalog-load-status" role="status"><span className="catalog-load-spinner" aria-hidden="true"/><span>{copy.loadingMore}</span></div>}{catalog.moreError&&<div className="catalog-load-status"><span role="alert">{copy.error}</span><Button small variant="outline" onClick={()=>void catalog.loadMore()}>{copy.retry}</Button></div>}</div></>:<DataState icon="search" title={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.empty:copy.noResult} description={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.emptyBody:copy.noResultBody} action={catalog.query.search||catalog.query.categoryId||active?{label:copy.clear,onClick:clearFilters}:undefined}/>}
    </div>
   </div></section>
   {categoryOpen&&<CategorySheet title={copy.categories} closeLabel={copy.closeCategories} onClose={()=>setCategoryOpen(false)}>{categoryContent}</CategorySheet>}
-  {filterOpen&&<ResponsiveDialog title={copy.filterTitle} closeLabel={copy.closeFilter} onClose={()=>setFilterOpen(false)} className="filter-products-dialog">{filterPanel}<div className="facet-dialog-actions"><Button variant="outline" onClick={clearFilters}>{copy.clear}</Button><Button onClick={()=>setFilterOpen(false)}>{copy.view} {catalog.meta.total} {copy.results}</Button></div></ResponsiveDialog>}
+  {filterOpen&&<ResponsiveDialog title={copy.filterTitle} closeLabel={copy.closeFilter} onClose={()=>setFilterOpen(false)} className="filter-products-dialog">{filterPanel}<div className="facet-dialog-actions"><Button variant="outline" onClick={clearFilters}>{copy.clear}</Button><Button onClick={()=>setFilterOpen(false)}>{copy.view}{catalog.state==="ready"?` ${catalog.meta.total} ${copy.results}`:""}</Button></div></ResponsiveDialog>}
  </div></main>;
 }

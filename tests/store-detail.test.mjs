@@ -128,7 +128,8 @@ test("Photo retries when its source changes after an image error",()=>{
 test("Store detail description uses the full-width one-column panel and shared heading typography",()=>{
  const detail=read("src/screens/store/ProductDetail.tsx");
  const css=read("app/styles/00-foundation-and-store.css");
- assert.match(detail,/className="detail-tabs"[\s\S]*<h2>/);
+ assert.match(detail,/StoreProductDescription/);
+ assert.match(read("src/components/store/StoreProductDescription.tsx"),/className="detail-tabs store-product-information"[\s\S]*<h2>/);
  assert.match(css,/\.detail-tabs\{[^}]*grid-template-columns:1fr;/);
  assert.match(css,/\.detail-tabs h2,/);
 });

@@ -7,7 +7,7 @@ export type StoreCategory={id:string;parent_id:string|null;slug:string;sort_orde
 export type StoreSupplier={id:string;name:string;location?:string};
 export type StoreCsaQuotaGroup={id:string;name:string;cost:number};
 export type StoreProductCard={id:string;slug:string;sku:string;name:string;alternate_name:string|null;short_description:string;retail_price_vnd:number;available_quantity:number;unit_size:string;unit_label:string;category:{id:string;slug:string;name:string};primary_image:StoreImage|null;csa_quota_group:StoreCsaQuotaGroup|null;suppliers:StoreSupplier[];requested_locale:StoreLocale;content_locale:StoreLocale;available_locales:StoreLocale[];is_fallback:boolean};
-export type StoreProductDetail=StoreProductCard&{description:string;suppliers:Array<StoreSupplier&{location:string}>};
+export type StoreProductDetail=StoreProductCard&{description:string;description_document?:Record<string,unknown>|null;suppliers:Array<StoreSupplier&{location:string}>};
 export type StorePage={data:StoreProductCard[];meta:{page:number;page_size:number;total:number}};
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,6 +48,32 @@ function parseCsaQuotaGroup(value:unknown):StoreCsaQuotaGroup|null{
  if(!record(value)||!uuid(value.id)||!nonEmpty(value.name,200)||!validQuotaCost(value.cost))return null;
  return {id:value.id,name:value.name,cost:Number(value.cost)};
 }
+function productDescriptionDocument(value:unknown):Record<string,unknown>|null{
+ if(value===undefined||value===null)return null;
+ if(!record(value)||value.type!=="doc"||value.content!==undefined&&!Array.isArray(value.content))throw Error("Invalid product description");
+ const stack:{node:unknown;depth:number}[]=[{node:value,depth:0}];let count=0,characters=0;
+ while(stack.length){
+  const {node,depth}=stack.pop()!;
+  if(++count>2000||depth>30||!record(node)||typeof node.type!=="string"||!["doc","paragraph","heading","bulletList","orderedList","listItem","text","hardBreak"].includes(node.type))throw Error("Invalid product description");
+  if(node.attrs!==undefined&&!record(node.attrs))throw Error("Invalid product description");
+  if(node.type==="text"){
+   if(typeof node.text!=="string")throw Error("Invalid product description");
+   characters+=node.text.length;
+  }
+  if(node.marks!==undefined){
+   if(!Array.isArray(node.marks)||node.marks.some(mark=>!record(mark)||!["bold","italic","link"].includes(String(mark.type))||mark.attrs!==undefined&&!record(mark.attrs)))throw Error("Invalid product description");
+  }
+  if(node.content!==undefined){
+   if(!Array.isArray(node.content))throw Error("Invalid product description");
+   if(node.type==="doc"||node.type==="listItem"||node.type==="bulletList"||node.type==="orderedList")characters+=Math.max(0,node.content.length-1);
+   node.content.forEach(child=>stack.push({node:child,depth:depth+1}));
+  }
+  if(node.type==="hardBreak")characters++;
+  if(characters>10000)throw Error("Invalid product description");
+ }
+ return value;
+}
+
 function parseProduct(value:unknown,detail:boolean):StoreProductCard|StoreProductDetail|null{
  if(!record(value)||!uuid(value.id)||!slug(value.slug)||!nonEmpty(value.sku,80)||!nonEmpty(value.name,200)||!(value.alternate_name===null||nonEmpty(value.alternate_name,200))||typeof value.short_description!=="string"||value.short_description.length>800||!Number.isSafeInteger(value.retail_price_vnd)||Number(value.retail_price_vnd)<=0||!Number.isSafeInteger(value.available_quantity)||Number(value.available_quantity)<0||typeof value.unit_size!=="string"||!/^\d{1,7}\.\d{3}$/.test(value.unit_size)||!nonEmpty(value.unit_label,40)||!(value.csa_quota_group===null||record(value.csa_quota_group))||!Array.isArray(value.suppliers)||!Array.isArray(value.available_locales)||value.available_locales.some(item=>!locale(item))||detail&&typeof value.description!=="string")return null;
  const localized=localeFields(value);if(!localized||!record(value.category)||!uuid(value.category.id)||!slug(value.category.slug)||!nonEmpty(value.category.name,200))return null;
@@ -55,7 +81,7 @@ function parseProduct(value:unknown,detail:boolean):StoreProductCard|StoreProduc
  const csaQuotaGroup=value.csa_quota_group===null?null:parseCsaQuotaGroup(value.csa_quota_group);if(value.csa_quota_group!==null&&!csaQuotaGroup)return null;
  const suppliers=value.suppliers.map(item=>parseSupplier(item,detail));if(suppliers.some(item=>item===null))return null;
  const base:StoreProductCard={id:value.id,slug:value.slug,sku:value.sku,name:value.name,alternate_name:value.alternate_name as string|null,short_description:value.short_description,retail_price_vnd:Number(value.retail_price_vnd),available_quantity:Number(value.available_quantity),unit_size:value.unit_size,unit_label:value.unit_label,category:{id:value.category.id,slug:value.category.slug,name:value.category.name},primary_image:primary,csa_quota_group:csaQuotaGroup,suppliers:suppliers as StoreSupplier[],available_locales:[...new Set(value.available_locales as StoreLocale[])],...localized};
- return detail?{...base,description:value.description as string,suppliers:suppliers as Array<StoreSupplier&{location:string}>}:base;
+ return detail?{...base,description:value.description as string,description_document:productDescriptionDocument(value.description_document),suppliers:suppliers as Array<StoreSupplier&{location:string}>}:base;
 }
 
 export function parseStoreCategories(payload:unknown):StoreCategory[]{

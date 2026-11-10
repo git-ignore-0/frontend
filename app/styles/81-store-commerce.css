@@ -181,3 +181,20 @@
 .store-commerce .store-order-contact a:hover{text-decoration-thickness:2px}
 
 .store-order-payment-state{border-top:1px solid var(--line);margin-top:16px;padding-top:4px}
+
+/* Product information follows the Store Tiptap structure without Workshop layout rules. */
+.store-product-information{min-width:0}
+.store-product-information .store-product-prose{min-width:0;max-width:100%;color:var(--ink2);font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.store-product-information .store-product-prose h2,.store-product-information .store-product-prose h3,.store-product-information .store-product-prose h4{margin:1.4em 0 .6em;color:var(--ink);line-height:1.35;white-space:pre-wrap}
+.store-product-information .store-product-prose h2{font-size:20px}
+.store-product-information .store-product-prose h3{font-size:17px}
+.store-product-information .store-product-prose h4{font-size:15px}
+.store-product-information .store-product-prose p{margin:0 0 1em;font-size:inherit;color:inherit;line-height:inherit;white-space:pre-wrap}
+.store-product-information .store-product-prose p:empty::after{content:"\00a0"}
+.store-product-prose ul,.store-product-prose ol{margin:0 0 1em;padding-inline-start:1.4em}
+.store-product-prose li+li{margin-top:.35em}
+.store-product-information .store-product-prose li>p{margin-bottom:.35em}
+.store-product-prose a{color:var(--green);text-decoration:underline;text-underline-offset:3px}
+.store-product-information .store-product-prose>:first-child{margin-top:0}
+.store-product-information .store-product-prose>:last-child{margin-bottom:0}
+@media(max-width:560px){.store-product-information .store-product-prose h2{font-size:18px}.store-product-information .store-product-prose h3{font-size:16px}}

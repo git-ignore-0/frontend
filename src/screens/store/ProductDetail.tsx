@@ -1,5 +1,6 @@
 "use client";
 
+import {StoreProductDescription} from "@/components/store/StoreProductDescription";
 import {useState} from "react";
 import {Button,Icon,Photo,Quantity} from "@/components/UI";
 import {money} from "@/lib/format";
@@ -28,6 +29,6 @@ export function ProductDetail({product,locale}:{product:StoreProductDetail;local
     <div className="detail-select"><div className="buy-row"><Quantity count={quantity} max={Math.min(STORE_MAX_LINE_QUANTITY,product.available_quantity)} onMinus={()=>setQuantity(value=>Math.max(1,value-1))} onPlus={()=>setQuantity(value=>Math.min(STORE_MAX_LINE_QUANTITY,product.available_quantity,value+1))} id={product.name} locale={locale}/><Button disabled={product.available_quantity<=0} onClick={()=>addCart(product,quantity)}><Icon name="bag" size={17}/> {product.available_quantity>0?copy.addCart:copy.out}</Button></div></div>
    </article>
   </div>
-  {product.description&&<section className="detail-tabs"><div><h2>{copy.info}</h2><p>{product.description}</p></div></section>}
+  <StoreProductDescription description={product.description} document={product.description_document} heading={copy.info}/>
  </div></main>;
 }

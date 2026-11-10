@@ -3,7 +3,7 @@ import type {StoreLocale} from "./store-model";
 export type StoreSort="default"|"price_asc"|"price_desc"|"name";
 export type StorePriceBand="all"|"low"|"mid"|"high";
 export type StoreQuery={locale:StoreLocale;search?:string;categoryId?:string;csaEligible?:boolean;priceMin?:number;priceMax?:number;sort:StoreSort;page:number;pageSize:number};
-export const DEFAULT_STORE_PAGE_SIZE=12;
+export const DEFAULT_STORE_PAGE_SIZE=24;
 export function storePriceBounds(band:StorePriceBand):Pick<StoreQuery,"priceMin"|"priceMax">{
  return band==="low"?{priceMax:24999}:band==="mid"?{priceMin:25000,priceMax:35000}:band==="high"?{priceMin:35001}:{};
 }

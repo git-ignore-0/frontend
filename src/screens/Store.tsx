@@ -72,13 +72,19 @@ function DebouncedStoreSearch({initialValue,placeholder,onCommit}:{initialValue:
 
 export function Store(){
  const {ui,navigate,cacheStoreProducts}=useNFV(),locale=ui.locale,copy=STORE_COPY[locale];
- const catalog=useStoreCatalog(locale),{setQuery}=catalog;
+ const catalog=useStoreCatalog(locale),{setQuery,hasMore,loadingMore,moreError,loadMore}=catalog;
  const [categoryOpen,setCategoryOpen]=useState(false),[filterOpen,setFilterOpen]=useState(false),[expanded,setExpanded]=useState<string[]>([]);
  const tree=useMemo(()=>categoryTree(catalog.categories),[catalog.categories]);
  const selectedCategory=catalog.categories.find(category=>category.id===catalog.query.categoryId);
  const active=Number(!!catalog.query.csaEligible)+Number(catalog.priceBand!=="all");
- const totalPages=Math.max(1,Math.ceil(catalog.meta.total/catalog.meta.page_size));
- useEffect(()=>{if(catalog.state==="ready"&&catalog.products.length===0&&catalog.query.page>1)setQuery({page:totalPages},{replace:true})},[catalog.products.length,catalog.query.page,catalog.state,setQuery,totalPages]);
+ const loadMoreTarget=useRef<HTMLDivElement|null>(null);
+ useEffect(()=>{
+  const target=loadMoreTarget.current;
+  if(!target||!hasMore||loadingMore||moreError)return;
+  const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))void loadMore()},{rootMargin:"400px"});
+  observer.observe(target);
+  return()=>observer.disconnect();
+ },[hasMore,loadingMore,moreError,loadMore]);
  useEffect(()=>{if(catalog.state==="ready")cacheStoreProducts(catalog.products)},[cacheStoreProducts,catalog.products,catalog.state]);
  const currentSearch=catalog.query.search??"";
  const commitSearch=useCallback((value:string)=>{if(value!==currentSearch)setQuery({search:value||undefined,page:1})},[currentSearch,setQuery]);
@@ -98,7 +104,7 @@ export function Store(){
    <section className="editorial catalog-csa-editorial" aria-label="CSA"><div><span className="eyebrow">CSA</span><h3>{copy.csaTitle}</h3><p>{copy.csaBody}</p></div><Button small variant="outline" onClick={()=>navigate("csa")}>{copy.csaLink} <Icon name="arrow" size={15}/></Button></section></div>
    <div className="catalog-main"><div className="catalog-meta"><div className="catalog-breadcrumb" aria-label={copy.categories}><span>{copy.all}</span>{selectedCategory&&<span> / {selectedCategory.name}</span>}</div><span className="catalog-results-count" aria-live="polite">{catalog.meta.total} {copy.results}</span></div>
     {active>0&&<div className="facet-chips">{catalog.query.csaEligible&&<button className="facet-chip" onClick={()=>setQuery({csaEligible:undefined,page:1})}>{copy.csa} ×</button>}{catalog.priceBand!=="all"&&<button className="facet-chip" onClick={()=>setQuery({priceBand:"all",page:1})}>{({low:copy.priceLow,mid:copy.priceMid,high:copy.priceHigh} as Record<string,string>)[catalog.priceBand]} ×</button>}<button className="facet-clear" onClick={clearFilters}>{copy.clear}</button></div>}
-    {catalog.state==="loading"?<DataState kind="loading" title={copy.loading}/>:catalog.state==="error"?<DataState kind="error" title={copy.error} action={{label:copy.retry,onClick:catalog.retryProducts}}/>:catalog.products.length?<><div className="products-grid">{catalog.products.map(product=><ProductCard product={product} locale={locale} key={product.id}/>)}</div>{totalPages>1&&<nav className="catalog-pagination" aria-label={`${copy.page} ${catalog.meta.page}`}><Button small variant="outline" disabled={catalog.meta.page<=1} onClick={()=>setQuery({page:catalog.meta.page-1})}>{copy.previous}</Button><span>{copy.page} {catalog.meta.page} / {totalPages}</span><Button small variant="outline" disabled={catalog.meta.page>=totalPages} onClick={()=>setQuery({page:catalog.meta.page+1})}>{copy.next}</Button></nav>}</>:<DataState icon="search" title={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.empty:copy.noResult} description={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.emptyBody:copy.noResultBody} action={catalog.query.search||catalog.query.categoryId||active?{label:copy.clear,onClick:clearFilters}:undefined}/>}
+    {catalog.state==="loading"?<DataState kind="loading" title={copy.loading}/>:catalog.state==="error"?<DataState kind="error" title={copy.error} action={{label:copy.retry,onClick:catalog.retryProducts}}/>:catalog.products.length?<><div className="products-grid">{catalog.products.map(product=><ProductCard product={product} locale={locale} key={product.id}/>)}</div><div ref={loadMoreTarget}>{catalog.loadingMore&&<DataState kind="loading" compact title={copy.loading}/>}{catalog.moreError&&<DataState kind="error" compact title={copy.error} action={{label:copy.retry,onClick:()=>void catalog.loadMore()}}/>}</div></>:<DataState icon="search" title={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.empty:copy.noResult} description={catalog.meta.total===0&&!catalog.query.search&&!catalog.query.categoryId&&!active?copy.emptyBody:copy.noResultBody} action={catalog.query.search||catalog.query.categoryId||active?{label:copy.clear,onClick:clearFilters}:undefined}/>}
    </div>
   </div></section>
   {categoryOpen&&<CategorySheet title={copy.categories} closeLabel={copy.closeCategories} onClose={()=>setCategoryOpen(false)}>{categoryContent}</CategorySheet>}

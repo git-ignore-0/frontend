@@ -14,27 +14,28 @@ function moduleFrom(path){const exp={};const code=ts.transpileModule(source(path
 test("Store URL state round-trips search, facets, sort and page with exact defaults",()=>{
  const request=moduleFrom("src/store/store-request.ts");
  const parsed=request.parseStoreUrlState(new URLSearchParams("search=tomato&category_id=e55e4778-0528-4594-a4bf-cab97007c50f&csa_eligible=true&price=mid&sort=price_desc&page=3"),"en");
- assert.deepEqual(JSON.parse(JSON.stringify(parsed.query)),{locale:"en",search:"tomato",categoryId:"e55e4778-0528-4594-a4bf-cab97007c50f",csaEligible:true,priceMin:25000,priceMax:35000,sort:"price_desc",page:3,pageSize:12});
+ assert.deepEqual(JSON.parse(JSON.stringify(parsed.query)),{locale:"en",search:"tomato",categoryId:"e55e4778-0528-4594-a4bf-cab97007c50f",csaEligible:true,priceMin:25000,priceMax:35000,sort:"price_desc",page:3,pageSize:24});
  assert.equal(parsed.priceBand,"mid");
  assert.equal(request.storePublicSearchParams(parsed.query,parsed.priceBand).toString(),"search=tomato&category_id=e55e4778-0528-4594-a4bf-cab97007c50f&csa_eligible=true&price=mid&sort=price_desc&page=3");
- assert.deepEqual(JSON.parse(JSON.stringify(request.parseStoreUrlState(new URLSearchParams(),"vi").query)),{locale:"vi",sort:"default",page:1,pageSize:12});
+ assert.deepEqual(JSON.parse(JSON.stringify(request.parseStoreUrlState(new URLSearchParams(),"vi").query)),{locale:"vi",sort:"default",page:1,pageSize:24});
 });
 
 test("Store URL parser canonicalizes malformed public query values to safe defaults",()=>{
  const request=moduleFrom("src/store/store-request.ts");
  const parsed=request.parseStoreUrlState(new URLSearchParams("search="+"x".repeat(101)+"&category_id=bad&csa_eligible=yes&price=unknown&sort=featured&page=0&junk=1"),"vi");
- assert.deepEqual(JSON.parse(JSON.stringify(parsed.query)),{locale:"vi",sort:"default",page:1,pageSize:12});
+ assert.deepEqual(JSON.parse(JSON.stringify(parsed.query)),{locale:"vi",sort:"default",page:1,pageSize:24});
  assert.equal(parsed.priceBand,"all");
  assert.equal(parsed.canonical.toString(),"");
 });
 
-test("Store recovers empty out-of-range pages with a replace navigation",()=>{
+test("Store replaces page navigation with automatic incremental loading",()=>{
  const store=source("src/screens/Store.tsx");
- assert.match(store,/catalog\.state==="ready"&&catalog\.products\.length===0&&catalog\.query\.page>1/);
- assert.match(store,/setQuery\(\{page:totalPages\},\{replace:true\}\)/);
+ assert.match(store,/IntersectionObserver/);
+ assert.match(store,/catalog\.loadMore/);
+ assert.doesNotMatch(store,/catalog-pagination|copy\.previous|copy\.next/);
  const hook=source("src/store/useStoreCatalog.ts");
- assert.match(hook,/options\?:\{replace\?:boolean\}/);
- assert.match(hook,/options\?\.replace\?router\.replace:router\.push/);
+ assert.match(hook,/params\.delete\("page"\)/);
+ assert.match(hook,/controller\.signal\.aborted/);
 });
 
 test("Store search input enforces the public API maximum length",()=>{
@@ -66,8 +67,8 @@ test("Store UI uses localized API states, native detail links and server paginat
  assert.match(store,/kind="loading"/);
  assert.match(store,/kind="error"/);
  assert.match(store,/meta\.total/);
- assert.match(store,/copy\.previous/);
- assert.match(store,/copy\.next/);
+ assert.match(store,/catalog\.loadingMore/);
+ assert.match(store,/catalog\.moreError/);
  assert.doesNotMatch(store,/addCart|className="add-mini"/);
 });
 

@@ -16,6 +16,7 @@
 
 # TypeScript
 *.tsbuildinfo
+__pycache__/
 
 # Local environment files
 .env*

@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -35,6 +35,10 @@ jobs:
           bash tests/prepare-cpanel-deploy.test.sh
           bash tests/deploy-test-ftps.test.sh
           python3 tests/test_deploy_worker.py
+      - name: Use hosting Node version for build
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
       - name: Build Passenger bundle from commit
         env:
           DEPLOY_SITE_ORIGIN: https://test.naturalfarmingvietnam.com

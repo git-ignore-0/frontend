@@ -36,7 +36,7 @@ function Body({children,initialPage}:{children?:ReactNode;initialPage:Screen}){
    const close=(e:KeyboardEvent)=>{if(e.key==="Escape"&&ui.orderDateOpen)patch({orderDateOpen:false});};
    window.addEventListener("keydown",close);return ()=>window.removeEventListener("keydown",close);
  },[patch,ui.orderDateOpen]);
- return <div className={`nfv-app${ui.page==="account"||ui.page==="order-detail"||ui.page==="checkout"?" nfv-app--full-height":""}`}><Header/>
+ return <div className={`nfv-app${ui.page==="account"||ui.page==="order-detail"||ui.page==="checkout"||ui.page==="csa-round-selection"?" nfv-app--full-height":""}`}><Header/>
    <CartDrawer/>
    {children&&ui.page===initialPage?children:(ui.page==="home"?<HomePage/>:ui.page==="about"?<AboutPage/>:ui.page==="workshops"?<WorkshopsPage/>:ui.page==="plants"?<PlantsPage/>:ui.page==="animals"?<AnimalsPage/>:ui.page==="tracker"?<TrackerPage/>:ui.page==="testimonials"?<TestimonialsPage key={ui.locale}/>:ui.page==="store"?<Store/>:ui.page==="checkout"?<Checkout/>:ui.page==="account"?<Account/>:ui.page==="csa"?<CSAProgram/>:ui.page==="order-detail"?<AuthGate><OrderDetail/></AuthGate>:<Store/>)}
    <SiteFooter/>

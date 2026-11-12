@@ -12,6 +12,7 @@ import {StoreOrderDetail,STORE_STATUS} from "@/screens/store/StoreOrderDetail";
 import {money} from "@/lib/format";
 import {formatUnitSize} from "@/store/store-format";
 import {sanitizeVietnamPhoneInput} from "@/account/shipping-address-model";
+import {readOrdersView,saveOrdersView} from "@/account/orders-view-state";
 import {AccountApiError} from "@/account/account-api";
 
 const C={vi:{title:"Đơn hàng nông sản",loading:"Đang tải đơn hàng…",failed:"Không thể tải đơn hàng",empty:"Chưa có đơn hàng",retry:"Thử lại",all:"Tất cả",previous:"Trước",next:"Sau",view:"Xem chi tiết",placed:"Đặt ngày",total:"Tổng thanh toán",lookup:"Kiểm tra đơn hàng",lookupIntro:"Nhập mã đơn và số điện thoại đã dùng khi đặt. Không cần đăng nhập.",reference:"Mã đơn",phone:"Số điện thoại",find:"Tra cứu",notFound:"Không tìm thấy đơn hàng với thông tin này.",limited:"Bạn đã thử quá nhiều lần. Vui lòng chờ rồi thử lại.",stale:"Chưa cập nhật được đơn hàng. Đang hiển thị dữ liệu lần tải trước.",session:"Phiên tra cứu đã hết hạn. Hãy nhập lại mã đơn và số điện thoại."},en:{title:"Produce orders",loading:"Loading orders…",failed:"Orders could not be loaded",empty:"No orders yet",retry:"Try again",all:"All",previous:"Previous",next:"Next",view:"View details",placed:"Placed on",total:"Total payment",lookup:"Check an order",lookupIntro:"Enter the order code and phone number used at checkout. No sign-in is required.",reference:"Order code",phone:"Phone number",find:"Look up",notFound:"No order was found with this information.",limited:"Too many attempts. Wait before trying again.",stale:"Orders could not be refreshed. Showing the previously loaded data.",session:"The lookup session expired. Enter the order code and phone number again."}};
@@ -27,6 +28,7 @@ export function OrdersView({active=true}:{active?:boolean}={}){
  const [items,setItems]=useState<StoreOrder[]>([]),[page,setPage]=useState(1),[total,setTotal]=useState(0),[status,setStatus]=useState<StoreOrderStatus|undefined>(),[state,setState]=useState("loading");
  const seq=useRef(0),queryOwner=useRef(owner),request=useRef<number|null>(null);
  const previousActive=useRef({owner,active});
+ const restoredOwner=useRef<string|null>(null),restorePages=useRef(1);
  const [refreshError,setRefreshError]=useState(false);
  const cache=useRef(new Map<string,{items:StoreOrder[];total:number;page:number;receivedAt:number}>());
  const cacheKey=(filter:StoreOrderStatus|undefined)=>JSON.stringify([owner,filter??"all"]);
@@ -41,9 +43,17 @@ export function OrdersView({active=true}:{active?:boolean}={}){
    const result=await storeRequest(()=>getStoreOrders({page,status}));
    if(current!==seq.current)return;
    const previous=cache.current.get(cacheKey(status))?.items??[];
-   const next=page===1?result.items:[...previous,...result.items.filter(item=>!previous.some(existing=>existing.id===item.id))];
-   cache.current.set(cacheKey(status),{items:next,total:result.meta.total,page,receivedAt:Date.now()});
-   setItems(next);setTotal(result.meta.total);setResultOwner(owner);setState("ready");setRefreshError(false);
+   const next=page===1?[...result.items]:[...previous,...result.items.filter(item=>!previous.some(existing=>existing.id===item.id))];
+   const lastPage=page===1?Math.min(restorePages.current,Math.max(1,Math.ceil(result.meta.total/20))):page;
+   const known=new Set(next.map(item=>item.id));
+   for(let index=2;page===1&&index<=lastPage;index++){
+    const following=await storeRequest(()=>getStoreOrders({page:index,status}));
+    if(current!==seq.current)return;
+    for(const item of following.items)if(!known.has(item.id)){next.push(item);known.add(item.id)}
+   }
+   restorePages.current=1;
+   cache.current.set(cacheKey(status),{items:next,total:result.meta.total,page:lastPage,receivedAt:Date.now()});
+   setItems(next);setTotal(result.meta.total);setPage(lastPage);setResultOwner(owner);setState("ready");setRefreshError(false);
   }catch{if(current===seq.current){setResultOwner(owner);setState(page===1?"error":"more_error")}}
   finally{if(request.current===current)request.current=null}
  };
@@ -68,10 +78,28 @@ export function OrdersView({active=true}:{active?:boolean}={}){
   }catch{if(current===seq.current)setRefreshError(true)}
   finally{if(request.current===current)request.current=null}
  };
- const selectStatus=(next:StoreOrderStatus|undefined)=>{if(next===status)return;seq.current+=1;request.current=null;const saved=cachedFor(next);if(saved)cache.current.set(cacheKey(next),saved);setStatus(next);setPage(saved?.page??1);setItems(saved?.items??[]);setTotal(saved?.total??0);setResultOwner(owner);setState(saved?"ready":"loading");setRefreshError(false)};
+ const selectStatus=(next:StoreOrderStatus|undefined)=>{if(next===status)return;restorePages.current=1;seq.current+=1;request.current=null;const saved=cachedFor(next);if(saved)cache.current.set(cacheKey(next),saved);setStatus(next);setPage(saved?.page??1);setItems(saved?.items??[]);setTotal(saved?.total??0);setResultOwner(owner);setState(saved?"ready":"loading");setRefreshError(false)};
  // Each filter owns its request; complete All results can answer a filter locally.
- // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
- useEffect(()=>{if(queryOwner.current!==owner){queryOwner.current=owner;cache.current.clear();setItems([]);setRefreshError(false);if(page!==1){setPage(1);return}}if(auth.status==="authenticated"){const saved=cachedFor(status);if(saved&&saved.page===page){cache.current.set(cacheKey(status),saved);setItems(saved.items);setTotal(saved.total);setResultOwner(owner);setState("ready")}else{setState(page===1?"loading":"loading_more");void load()}}return()=>{seq.current+=1;request.current=null}},[page,status,owner]);
+ /* eslint-disable react-hooks/set-state-in-effect -- Reconcile persisted preferences and the current filter cache before loading. */
+ useEffect(()=>{
+  if(queryOwner.current!==owner){queryOwner.current=owner;cache.current.clear();setItems([]);setRefreshError(false);}
+  if(auth.status!=="authenticated")return;
+  if(restoredOwner.current!==owner){
+   restoredOwner.current=owner;
+   const saved=readOrdersView(owner);
+   restorePages.current=saved?.page??1;
+   if(status!==saved?.status||page!==1){setStatus(saved?.status);setPage(1);return;}
+  }
+  const saved=cachedFor(status);
+  if(saved&&saved.page===page){cache.current.set(cacheKey(status),saved);setItems(saved.items);setTotal(saved.total);setResultOwner(owner);setState("ready");}
+  else{setState(page===1?"loading":"loading_more");void load();}
+  return()=>{seq.current+=1;request.current=null;};
+ // eslint-disable-next-line react-hooks/exhaustive-deps -- The owner/filter/page identify this request; snapshot helpers must not restart it.
+ },[page,status,owner]);
+ /* eslint-enable react-hooks/set-state-in-effect */
+ useEffect(()=>{
+  if(auth.status==="authenticated"&&resultOwner===owner&&state==="ready")saveOrdersView(owner,{status,page});
+ },[auth.status,resultOwner,owner,state,status,page]);
  useEffect(()=>{
   const visible=ordersVisible(active,ui.accountHubOpen);
   const previous=previousActive.current;previousActive.current={owner,active:visible};

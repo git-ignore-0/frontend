@@ -7,9 +7,15 @@ import {dateLabel} from "@/lib/format";
 import {csaMoney} from "@/screens/csa/csa-packages-model";
 import type {CSAUpcoming,Locale} from "@/types";
 
-type PlanSummaryProps={planName:string;statusLabel:string;statusTone:"completed"|"processing";locale:Locale;durationMonths?:number;amount?:string;requestCode?:string;startDate?:string;endDate?:string};
+type PlanSummaryProps={planName:string;statusLabel:string;statusTone:"completed"|"processing";locale:Locale;durationMonths?:number;amount?:string;requestCode?:string;startDate?:string;endDate?:string;extensionEndDate?:string};
 
-export function AccountCsaPlanSummary({planName,statusLabel,statusTone,locale,durationMonths,amount,requestCode,startDate,endDate}:PlanSummaryProps){
+export function exclusiveMembershipLastDay(value:string){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return value;
+  const time=Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(time)?new Date(time-86400000).toISOString().slice(0,10):value;
+}
+
+export function AccountCsaPlanSummary({planName,statusLabel,statusTone,locale,durationMonths,amount,requestCode,startDate,endDate,extensionEndDate}:PlanSummaryProps){
   const L=(key:string,vars?:Record<string,string|number>)=>copyText(locale,key,vars);
   return <div className="csa-plan-summary">
     <div className="benefit-plan-title"><strong>{planName}</strong><span className={`acc-status ${statusTone}`}>{statusLabel}</span></div>
@@ -18,7 +24,8 @@ export function AccountCsaPlanSummary({planName,statusLabel,statusTone,locale,du
       {amount&&<span><span className="csa-meta-key">{L("csa.packageTotal")}</span><strong>{csaMoney(amount,locale)}</strong></span>}
       {requestCode&&<span><span className="csa-meta-key">{L("csa.requestCode")}</span><strong>{requestCode}</strong></span>}
       {startDate&&<span><span className="csa-meta-key">{L("csa.start")}</span><strong>{dateLabel(startDate)}</strong></span>}
-      {endDate&&<span><span className="csa-meta-key">{L("csa.end")}</span><strong>{dateLabel(endDate)}</strong></span>}
+      {endDate&&<span><span className="csa-meta-key">{L("csa.end")}</span><strong>{dateLabel(exclusiveMembershipLastDay(endDate))}</strong></span>}
+      {extensionEndDate&&<span><span className="csa-meta-key">{locale==="vi"?"Gia hạn giao đến":"Delivery extended through"}</span><strong>{dateLabel(extensionEndDate)}</strong></span>}
     </div>
   </div>;
 }

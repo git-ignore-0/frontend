@@ -292,3 +292,9 @@
  .account-tab-csa .csa-selection-review .money-line.big>strong{margin-inline-start:auto}
  .account-tab-csa .csa-selection-review .discount-code-controls>.btn{padding-inline:10px}
 }
+
+/* The mobile Account header already shows the CSA title and description. */
+@media(max-width:1023px){
+ .account-tab-csa .csa-account-heading>div{display:none}
+ .account-tab-csa .csa-account-heading{justify-content:flex-end}
+}

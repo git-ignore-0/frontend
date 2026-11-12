@@ -101,3 +101,28 @@ test("CSA voucher quote preserves discounted totals, installment amounts and sig
  response={...base,payment:{...base.payment,amount:'900000'},qr_payload:{...base.qr_payload,amount:'900000'},payment_summary:{...base.payment_summary,payment_type:'full',total_amount:'1000000',initial_payment_amount:'900000',installment_count:1,installments:[{sequence:1,amount:'900000',cycle_count:1}],contract_total_before_discount:'1000000',payment_plan_total_before_discount:'1000000',initial_payment_before_discount:'1000000',customer_payable_total:'900000'}};
  const full=await service.createCsaPaymentQuote(input);assert.equal(full.coupon.customerPayableTotal,'900000');assert.equal(full.summary.initialPaymentAmount,'900000');
 `));
+
+test("frozen membership retains its contract and history without requesting active quota",()=>run(`
+ import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)}),calls=[];
+ const membership={id:'old',package_name:'Old plan',status:'frozen',start_date:'2026-01-01',end_date:'2026-11-01',extension_end_date:'2026-11-20',duration_months:10,monthly_price_vnd:'500000',total_price_vnd:'5000000'};
+ globalThis.fetch=async path=>{calls.push(path);const data=path.includes('csa-overview')?{active_membership:null,frozen_membership:membership,upcoming:[]}:path.includes('csa-usage')?[]:{reference_code:'OLD',status:'active',available_locales:['en']};return new Response(JSON.stringify({data,meta:{page:1,page_size:30,total:0}}),{status:200})};
+ const result=await service.getCSA('en');assert.equal(result.active,null);assert.equal(result.frozen.status,'frozen');assert.equal(result.frozen.extensionEndDate,'2026-11-20');assert.equal(result.frozen.contract.number,'OLD');assert.deepEqual(result.frozen.quotas,[]);assert.deepEqual(result.frozen.usage,[]);assert.equal(calls.some(path=>path.includes('csa-quota')),false);
+`));
+
+test("new active membership does not replace the frozen membership snapshot",()=>run(`
+ import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});
+ const base={package_name:'Plan',status:'active',start_date:'2026-01-01',end_date:'2026-11-01',duration_months:10,monthly_price_vnd:'500000',total_price_vnd:'5000000'};
+ globalThis.fetch=async path=>{const data=path.includes('csa-overview')?{active_membership:{...base,id:'new'},frozen_membership:{...base,id:'old',status:'frozen'},upcoming:[]}:path.includes('csa-quota')?{products:[]}:path.includes('csa-usage')?[]:{reference_code:path.includes('/old/')?'OLD':'NEW',status:'active',available_locales:[]};return new Response(JSON.stringify({data,meta:{page:1,page_size:30,total:0}}),{status:200})};
+ const result=await service.getCSA('vi');assert.equal(result.active.id,'new');assert.equal(result.frozen.id,'old');assert.equal(result.frozen.contract.number,'OLD');
+`));
+
+test("My CSA preserves fractional points granted per cycle",()=>run(`
+ import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});
+ globalThis.fetch=async path=>{
+  const payload=path.includes('csa-overview')?{data:{active_membership:{id:'member',package_name:'Vegetables',status:'active',start_date:'2026-11-01',end_date:'2026-12-01',duration_months:1,monthly_price_vnd:'500000',total_price_vnd:'500000'},upcoming:[]}}:
+   path.includes('csa-quota')?{data:{products:[{product_name:'Vegetables',quota_units_per_cycle:4.25,available_units:3.75,reserved_units:.25,used_units:.25}]}}:
+   path.includes('csa-usage')?{data:[],meta:{page:1,page_size:30,total:0}}:null;
+  return new Response(JSON.stringify(payload),{status:payload?200:404,headers:{'Content-Type':'application/json'}});
+ };
+ const result=await service.getCSA('en');assert.equal(result.active.quotas[0].total,4.25);assert.equal(result.active.quotas[0].remaining,3.75);
+`));

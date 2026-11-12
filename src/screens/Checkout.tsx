@@ -56,6 +56,7 @@ export function CartDrawer(){
 type Guest=ShippingAddressDraft;
 const EMPTY=EMPTY_SHIPPING_ADDRESS;
 const GUEST_DRAFT="nfv_store_checkout_guest_v1";
+function storeMembershipFrozenMessage(locale:"vi"|"en"){return locale==="vi"?"Gói CSA đã đóng băng. Bạn vẫn có thể xem và xử lý các đợt CSA cũ trong My CSA; hãy đăng ký gói mới để tiếp tục dùng quyền lợi khi mua hàng.":"Your CSA membership is frozen. You can still view and manage previous CSA rounds in My CSA; register a new membership to use benefits for store purchases.";}
 function voucherMessage(error:unknown,locale:"vi"|"en"){
  const c=VOUCHER_COPY[locale],code=error instanceof AccountApiError?error.code:"";
  if(code.startsWith("coupon_"))return couponErrorMessage(code,locale);
@@ -239,7 +240,7 @@ export function Checkout(){
     const refreshReason=checkoutRequoteReason(reason);
     setVoucherVersion(value=>value+1);
     if(refreshReason==="voucher_changed"){setVoucherError(null);setError(reason.code.startsWith("coupon_")?voucherMessage(reason,ui.locale):voucherCopy.changed)}
-    else if(refreshReason){requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(requoteReason.current));await refreshRequote()}else setError(reason.code==="store_payment_unavailable"?copy.paymentUnavailable:copy.failed);
+    else if(refreshReason){requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(requoteReason.current));await refreshRequote()}else setError(reason.code==="store_membership_frozen"?storeMembershipFrozenMessage(ui.locale):reason.code==="store_payment_unavailable"?copy.paymentUnavailable:copy.failed);
    }else{setRecoveryTotal(attempt.payload.expected_total_vnd);setRecovering(true);setError("");}
   }finally{if(request===lifecycle.current&&!checkoutCompleted.current){submitting.current=false;setBusy(false)}}
  };

@@ -31,6 +31,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  context.ui??={locale:"vi"};
  const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
+  if(name==="@/account/orders-view-state")return load("src/account/orders-view-state.ts");
   if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
@@ -968,3 +969,12 @@ for(const field of ["quantity","quota"]){
   await applyVoucher(r).props.onClick();await r.settle();assert.equal(calls,2);assert.equal(confirm(r).props.disabled,false);r.dispose();
  });
 }
+
+test('frozen checkout is a definite rejection and leaves no pending order recovery',async()=>{
+ const storage=new Map();let calls=0;
+ const r=addressCheckout({storage,services:{createStoreCheckout:async()=>{calls++;const error=new ApiError(409);error.code='store_membership_frozen';throw error}}});
+ try{r.render('Checkout');await r.settle();await confirm(r).props.onClick();await tick();r.render();
+  assert.match(text(r.tree),/đóng băng/);assert.doesNotMatch(text(r.tree),/Chưa xác định được kết quả/);
+  assert.equal(storage.has('nfv_store_checkout_intent_v1:A'),false);assert.equal(storage.has('nfv_store_checkout_pending_owner_v1'),false);assert.equal(calls,1);
+ }finally{r.dispose()}
+});

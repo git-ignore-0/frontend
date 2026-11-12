@@ -1,6 +1,6 @@
 import type {Locale,Screen} from "@/types";
 
-const HIDDEN_PAGES:ReadonlySet<Screen>=new Set(["account","checkout","order-detail","success"]);
+const HIDDEN_PAGES:ReadonlySet<Screen>=new Set(["account","checkout","order-detail","csa-round-selection","success"]);
 
 export function referralFloatingActionModel(locale:Locale):{href:string;label:string}{
   return {

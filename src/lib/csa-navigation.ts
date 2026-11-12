@@ -17,3 +17,5 @@ export function csaPurchaseHref(locale:Locale,packageId?:string|null,page?:numbe
 export function csaTrackerHref(locale:Locale):string{
   return `/csa/track/${locale}`;
 }
+
+export function csaRoundHref(id:string,locale:Locale):string{return `/account/csa-rounds/${encodeURIComponent(id)}/${locale}`;}

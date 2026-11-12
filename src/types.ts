@@ -1,5 +1,5 @@
 export type Locale = "vi" | "en";
-export type Screen = "home" | "about" | "workshops" | "plants" | "animals" | "tracker" | "testimonials" | "store" | "product" | "checkout" | "account" | "csa" | "order-detail" | "success";
+export type Screen = "home" | "about" | "workshops" | "plants" | "animals" | "tracker" | "testimonials" | "store" | "product" | "checkout" | "account" | "csa" | "csa-round-selection" | "order-detail" | "success";
 export type AccountTab = "orders" | "address" | "profile" | "csa" | "csa-tracker" | "rewards" | "redeem" | "referrals";
 export type Resource = "address" | "csa" | "rewards" | "referrals";
 export type FetchStatus = "loading" | "ready" | "error";
@@ -21,9 +21,9 @@ export interface Referrals { code?: string; canEnterReferrer?: boolean; referrer
 export interface CSAQuota {productName?: string; productNameEn?: string; name?: string; total: number; remaining: number; reserved?: number; used?: number; unit?: string; unitEn?: string}
 export interface CSAPayment {id: string; date?: string; dueDate?: string; amount: number; status: string; method?: string; methodEn?: string}
 export interface CSAUsage {id?: string; date: string; orderId?: string; productName: string; productNameEn?: string; quantity: number; unit?: string; unitEn?: string; status?: string}
-export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
+export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;extensionEndDate?:string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
 export interface CSAUpcoming {kind:"membership"|"purchase_request";id:string;requestCode?:string;planName:string;status:"scheduled"|"pending"|"payment_confirmed";durationMonths:number;amount:string;currency:string;startDate?:string;endDate?:string;createdAt?:string;expiresAt?:string}
-export interface CSAOverview {active:CSA|null;upcoming:CSAUpcoming[]}
+export interface CSAOverview {active:CSA|null;frozen?:CSA|null;upcoming:CSAUpcoming[]}
 export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
 export interface CatalogData {products: Product[]; storeProducts:Record<string,import("./store/store-model").StoreProductCard>; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {

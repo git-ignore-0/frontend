@@ -220,3 +220,34 @@ test("legacy and current no-coupon orders show no artificial voucher or cash sub
   assert.equal(lines.find(node=>node.props.label==="Tổng chuyển khoản")?.props.value,"150000đ");
  }
 });
+
+test("CSA round orders show delivery and reselection link without retail countdown or buy again",()=>{
+ for(const locale of ['vi','en']){
+  const value=order({canBuyAgain:true,status:'pending_review',totalVnd:0,payment:null,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
+  assert.match(text(tree),/Harvest round/);assert.ok(all(tree).some(node=>node.type==='a'&&node.props.href===`/account/csa-rounds/22222222-2222-4222-8222-222222222222/${locale}`));
+  assert.doesNotMatch(text(tree),/Thời gian còn lại|Time remaining|Mua lại|Buy again|998877/);
+  assert.match(text(tree),locale==='vi'?/Chọn lại/:/Choose again/);
+ }
+});
+
+test("CSA order QR presentation stays absent even with inconsistent payment metadata",()=>{
+ assert.equal(presentation().storePaymentQrUrl(order({csa:{round:{},selection:{}}})),"");
+});
+
+test("expired or terminal CSA orders link to round history without inviting reselection",()=>{
+ for(const change of [{serverTime:'2026-11-20T00:00:00Z'},{status:'cancelled'},{status:'delivered'}]){
+  const value=order({...change,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',status:'closed',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:'en',initialOrder:value});
+  assert.ok(all(tree).some(node=>node.type==='a'&&node.props.children==='View CSA round'));assert.equal(all(tree).some(node=>node.type==='a'&&node.props.children==='Choose again'),false);
+ }
+});
+
+
+test('automatic CSA cancellation explains the reselection deadline in both locales',()=>{
+ for(const [locale,reason] of [['vi','Đã hết hạn chọn lại sản phẩm'],['en','Reselection deadline expired']]){
+  const value=order({status:'cancelled',paymentStatus:'not_required',payment:null,totalVnd:0,cancellationReason:'reselection_expired',csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest',status:'closed',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'cancelled',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const {h,exports}=detailModule();const tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
+  assert.ok(text(tree).includes(reason));assert.equal(text(tree).includes('reselection_expired'),false);
+ }
+});

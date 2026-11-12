@@ -12,6 +12,20 @@ export function accountUpstreamTarget(
   method: "GET" | "POST" | "PUT",
 ): AccountUpstreamTarget | null {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (path.length === 1 && path[0] === "csa-rounds" && method === "GET") {
+    return {path:"/api/v1/csa-rounds",session:"required",query:"page"};
+  }
+  if (path.length === 3 && path[0] === "csa-rounds" && uuid.test(path[1])) {
+    if (path[2] === "selection" && (method === "GET" || method === "PUT")) {
+      return {path:`/api/v1/csa-rounds/${path[1]}/selection`,session:"required",query:"none"};
+    }
+    if (path[2] === "products" && method === "GET") {
+      return {path:`/api/v1/csa-rounds/${path[1]}/products`,session:"required",query:"localized"};
+    }
+  }
+  if (path.length === 3 && path[0] === "csa-selections" && uuid.test(path[1]) && path[2] === "confirm" && method === "POST") {
+    return {path:`/api/v1/csa-selections/${path[1]}/confirm`,session:"required",query:"none"};
+  }
   if (path.length === 3 && path[0] === "memberships" && uuid.test(path[1]) && path[2] === "contract" && method === "GET") {
     return {path:`/api/v1/memberships/${path[1]}/contract`,session:"required",query:"none"};
   }

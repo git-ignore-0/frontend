@@ -90,31 +90,23 @@ function upcomingItems(value:unknown):CSAUpcoming[]{
 export async function getCSA(locale:Locale):Promise<CSAOverview>{
   const overviewPayload=await accountApi(`csa-overview?locale=${locale}`),overview=record(overviewPayload.data);
   const upcoming=upcomingItems(overview.upcoming);
-  if(overview.active_membership===null)return {active:null,upcoming};
-  const current=record(overview.active_membership),membershipId=string(current.id);
-  const [quotaPayload,usage,contract]=await Promise.all([
-    accountApi(`csa-quota?locale=${locale}`),
-    getCsaUsagePage({locale,cursor:"1"}),
-    optionalContract(membershipId,locale),
-  ]);
-  const quotaData=record(quotaPayload.data);
-  if(!Array.isArray(quotaData.products))throw new AccountApiError("invalid_response",502);
-  const active:CSA={
-    id:membershipId,
-    planName:string(current.package_name),
-    description:optionalString(current.package_description),
-    status:string(current.status),
-    startDate:string(current.start_date),
-    endDate:string(current.end_date),
-    durationMonths:integer(current.duration_months,1),
-    monthlyPriceVnd:decimal(current.monthly_price_vnd),
-    totalPriceVnd:decimal(current.total_price_vnd),
-    contract,
-    quotas:quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:integer(item.quota_units_per_cycle),remaining:quotaUnits(item.available_units),reserved:quotaUnits(item.reserved_units),used:quotaUnits(item.used_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};}),
-    usage:usage.items,
-    pagination:{usage:{nextCursor:usage.nextCursor,total:usage.total}},
+  const activeValue=overview.active_membership===null?null:record(overview.active_membership);
+  const frozenValue=overview.frozen_membership==null?null:record(overview.frozen_membership);
+  if(!activeValue&&!frozenValue)return {active:null,upcoming};
+  const usagePromise=getCsaUsagePage({locale,cursor:"1"});
+  const membership=async(current:JsonRecord,isActive:boolean):Promise<CSA>=>{
+    const membershipId=string(current.id);
+    const [usage,contract,quotaPayload]=await Promise.all([usagePromise,optionalContract(membershipId,locale),isActive?accountApi(`csa-quota?locale=${locale}`):null]);
+    let quotas:NonNullable<CSA["quotas"]>=[];
+    if(quotaPayload){
+      const quotaData=record(quotaPayload.data);
+      if(!Array.isArray(quotaData.products))throw new AccountApiError("invalid_response",502);
+      quotas=quotaData.products.map(value=>{const item=record(value);return {productName:string(item.product_name),total:quotaUnits(item.quota_units_per_cycle),remaining:quotaUnits(item.available_units),reserved:quotaUnits(item.reserved_units),used:quotaUnits(item.used_units),unit:optionalString(item.unit_label_vi),unitEn:optionalString(item.unit_label_en)};});
+    }
+    return {id:membershipId,planName:string(current.package_name),description:optionalString(current.package_description),status:string(current.status),startDate:string(current.start_date),endDate:string(current.end_date),extensionEndDate:optionalString(current.extension_end_date),durationMonths:integer(current.duration_months,1),monthlyPriceVnd:decimal(current.monthly_price_vnd),totalPriceVnd:decimal(current.total_price_vnd),contract,quotas,usage:usage.items,pagination:{usage:{nextCursor:usage.nextCursor,total:usage.total}}};
   };
-  return {active,upcoming};
+  const [active,frozen]=await Promise.all([activeValue?membership(activeValue,true):null,frozenValue?membership(frozenValue,false):null]);
+  return {active,upcoming,...(frozen?{frozen}:{})};
 }
 
 export type CsaQuote={

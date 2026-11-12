@@ -34,6 +34,7 @@ function renderAccount(auth){
       Section:({title,children})=>React.createElement("section",null,React.createElement("h2",null,title),children),
     };
     if(id==="@/data/account-navigation")return loadNavigation();
+    if(id==="@/lib/account-navigation")return {};
     if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
     if(id==="@/state/NFVContext")return {useNFV:()=>({accountSessionKey:auth.status==="authenticated"?auth.session?.subject:"guest",ui:{locale:"vi",accountTab:"csa",accountHubOpen:true},patch:()=>{}})};
     if(id==="@/auth/AuthProvider")return {useAuth:()=>auth};

@@ -4,6 +4,7 @@ import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
 import {localeFromPath,localScreenFromPath,navigationHrefForPage} from "@/data/main-navigation";
+import {accountRouteState} from "@/lib/account-navigation";
 import {syncBrowserRoute} from "@/lib/browser-navigation";
 import * as rewardsService from "@/account/rewards-service";
 import * as referralsService from "@/account/referrals-service";
@@ -161,7 +162,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     const handlePopState=()=>{
       const page=localScreenFromPath(window.location.pathname);
       if(page)setUI(s=>({...s,page,locale:localeFromPath(window.location.pathname),
-        accountHubOpen:page==="account",cartOpen:false,filterOpen:false,categoryOpen:false}));
+        accountHubOpen:page==="account",...accountRouteState(window.location),cartOpen:false,filterOpen:false,categoryOpen:false}));
     };
     window.addEventListener("popstate",handlePopState);
     return ()=>window.removeEventListener("popstate",handlePopState);

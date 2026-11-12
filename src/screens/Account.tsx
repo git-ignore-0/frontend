@@ -6,6 +6,7 @@ import {ACCOUNT_GROUPS,accountNavigationFor,accountPersistentTabs,accountTabForA
 import {copyText} from "@/data/account-copy";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
+import {syncAccountRoute} from "@/lib/account-navigation";
 import type {AccountTab} from "@/types";
 import {GuestOrderLookup,OrdersView} from "@/screens/AccountOrders";
 import {AddressView, ProfileView} from "@/screens/AccountProfile";
@@ -59,6 +60,7 @@ export function Account() {
   const selectTab = (tab: AccountTab) => {
     nextFocus.current="detail";
     setPersistentTabs(current=>accountPersistentTabs(accountPersistentTabs(current,activeTab),tab));
+    syncAccountRoute(window,ui.locale,tab);
     patch({accountTab: tab, accountHubOpen: false, error: ""});
   };
 
@@ -95,7 +97,7 @@ export function Account() {
           </div>
         ) : (
           <div className="account-mobile-head">
-            <button className="account-mobile-back" onClick={() => {nextFocus.current="hub";patch({accountHubOpen: true});}}>
+            <button className="account-mobile-back" onClick={() => {nextFocus.current="hub";syncAccountRoute(window,ui.locale,null);patch({accountHubOpen: true});}}>
               <Icon name="back" size={16}/> {translate(authenticated?"account.titleMobile":"guestAccount.titleMobile")}
             </button>
             <h1 ref={headingRef} tabIndex={-1}>{translate(navigation.find(entry=>entry.id===activeTab)?.labelKey||`nav.${activeTab}`)}</h1>

@@ -23,10 +23,13 @@ function hookHarness(){
   return {react,render(component){cursor=0;return component()},flush(){const pending=effects;effects=[];for(const {index,effect} of pending){cleanups[index]?.();cleanups[index]=effect()}},dispose(){cleanups.forEach(cleanup=>cleanup?.())}};
 }
 
-function viewHarness(getStoreOrders){
+function viewHarness(getStoreOrders,storage){
   const hooks=hookHarness(),exports={};
-  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,console,Date,require:name=>{
+  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,console,Date,...(storage?{window:{sessionStorage:storage,addEventListener(){},removeEventListener(){},matchMedia:()=>({matches:false})},document:{visibilityState:"visible"}}:{}),require:name=>{
     if(name==="@/store/use-buy-again")return {useBuyAgain:()=>({start(){},busy:null,error:""})};
+    if(name==="@/account/orders-view-state"){
+      const view={};vm.runInNewContext(ts.transpileModule(readFileSync(new URL("../src/account/orders-view-state.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:view,window:storage?{sessionStorage:storage}:undefined});return view;
+    }
     if(name==="react")return hooks.react;
     if(name==="react/jsx-runtime")return jsx;
     if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
@@ -167,4 +170,14 @@ test("partial All data fetches a new filter once and reuses both cached lists",a
  h.button("pending_review").props.onClick();h.render();assert.equal(h.dataState(),undefined);await h.settle();
  assert.equal(calls.length,2);
  h.dispose();
+});
+
+test('returning from detail restores the selected filter and reloads every previously loaded page',async()=>{
+ const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+ const calls=[],get=async input=>{calls.push({...input});return {items:[order(`page-${input.page}`,input.status??'payment_pending')],meta:{total:60}}};
+ let h=viewHarness(get,storage);h.render();await h.settle();h.button('pending_review').props.onClick();h.render();await h.settle();
+ h.button('Xem thêm 20 mục').props.onClick();h.render();await h.settle();await h.settle();h.dispose();calls.length=0;
+ h=viewHarness(get,storage);h.render();for(let i=0;i<5;i++)await h.settle();
+ assert.deepEqual(calls,[{page:1,status:'pending_review'},{page:2,status:'pending_review'}]);
+ assert.deepEqual(all(h.tree).filter(n=>n.props?.className==='store-order-id').map(label),['page-1','page-2']);h.dispose();
 });

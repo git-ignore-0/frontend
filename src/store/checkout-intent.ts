@@ -103,7 +103,7 @@ const checkoutCouponErrors=["coupon_invalid","coupon_invalid_value","coupon_scop
 
 /** Only service errors raised after the Backend's idempotency lookup prove rejection. */
 export function checkoutDefinitelyRejected(error:{status?:number;code?:string}):boolean{
- const conflicts=["store_requote_required","store_stock_changed","store_quota_changed"];
+ const conflicts=["store_requote_required","store_stock_changed","store_quota_changed","store_membership_frozen"];
  const rejected=["store_duplicate_product","store_product_changed","store_quota_unavailable","store_shipping_address_invalid","store_shipping_address_required","store_guest_address_required","store_shipping_area_unsupported","store_phone_invalid"];
  return error.status===409&&conflicts.includes(error.code??"")||error.status===400&&(rejected.includes(error.code??"")||checkoutCouponErrors.includes(error.code??""))||error.status===503&&error.code==="store_payment_unavailable";
 }
@@ -119,7 +119,7 @@ export function checkoutRequoteReason(error:{status?:number;code?:string;context
   store_stock_changed:"stock_changed",
   store_quota_changed:"quota_changed",
  };
- if(error.status===409&&checkoutDefinitelyRejected(error))return typeof error.context?.reason==="string"?error.context.reason:reasons[error.code??""]??"changed";
+ if(error.status===409&&(error.code==="store_requote_required"||error.code==="store_stock_changed"||error.code==="store_quota_changed"))return typeof error.context?.reason==="string"?error.context.reason:reasons[error.code??""]??"changed";
  if(error.status===400&&checkoutCouponErrors.includes(error.code??""))return "voucher_changed";
  return error.status===400?reasons[error.code??""]??null:null;
 }

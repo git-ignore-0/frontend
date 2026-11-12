@@ -16,6 +16,7 @@ export function storeOrderTotals(order:StoreOrder){
 const CANCELLATION_REASONS={
   expired:{vi:"Hết thời hạn thanh toán",en:"Payment deadline expired"},
   buyer_cancelled:{vi:"Khách hàng đã hủy đơn",en:"Cancelled by buyer"},
+  reselection_expired:{vi:"Đã hết hạn chọn lại sản phẩm",en:"Reselection deadline expired"},
 } as const;
 
 export function storeCancellationReason(reason:string,locale:StoreLocale){
@@ -29,6 +30,7 @@ export function storeOrderAddressLine(address:StoreOrder["shippingAddress"],name
 }
 
 export function storePaymentQrUrl(order:StoreOrder){
+  if(order.csa)return "";
   const payment=order.payment,q=payment?.qrPayload;
   if(!payment||!q||order.totalVnd<=0||q.amount!==order.totalVnd
     ||q.acqId!==payment.bankBin||q.accountNo!==payment.accountNumber

@@ -60,6 +60,7 @@ export function navigationItemForPage(page:Screen):MainNavItem|undefined {
 }
 
 export function navigationHrefForPage(page:Screen,locale:Locale,accountTab?:AccountTab,resourceId?:string):string|null {
+  if(page==="csa-round-selection"&&resourceId)return `/account/csa-rounds/${resourceId}/${locale}`;
   if(page==="checkout")return `/store/checkout/${locale}`;
   if(page==="order-detail"&&resourceId)return `/store/orders/${resourceId}/${locale}${accountTab==="csa"?"?from=csa":""}`;
   const item=navigationItemForPage(page);
@@ -75,12 +76,13 @@ export function activeMainNavId(page:Screen):MainNavId|null {
   if(page==="store"||page==="product")return "store";
   if(page==="tracker")return "tracker";
   if(page==="csa")return "csa";
-  if(page==="account"||page==="order-detail")return "account";
+  if(page==="account"||page==="order-detail"||page==="csa-round-selection")return "account";
   return null;
 }
 
 /** Only locally implemented routes participate in the client-side router. */
 export function localScreenFromPath(pathname:string):Screen|null {
+  if(/^\/account\/csa-rounds\/[0-9a-f-]+\/(vi|en)\/?$/i.test(pathname))return "csa-round-selection";
   if(/^\/(vi|en)\/?$/.test(pathname))return "home";
   if(/^\/about\/(vi|en)\/?$/.test(pathname))return "about";
   if(/^\/workshops\/(vi|en)\/?$/.test(pathname))return "workshops";

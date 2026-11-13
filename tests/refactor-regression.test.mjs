@@ -55,8 +55,8 @@ test("Checkout validates a versioned saved address and supported shipping quote 
 });
 
 test("Checkout uses code-based guest addresses and has no unsupported coupon state", () => {
-  assert.match(checkout, /province_code:guestReview\.value!\.provinceCode/);
-  assert.match(checkout, /ward_code:guestReview\.value!\.wardCode/);
+  assert.match(checkout, /province_code:guestReview\.value\.provinceCode/);
+  assert.match(checkout, /ward_code:guestReview\.value\.wardCode/);
   assert.doesNotMatch(checkout, /couponCode|couponAmount|couponDraft/);
 });
 

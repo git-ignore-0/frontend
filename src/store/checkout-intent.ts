@@ -1,3 +1,4 @@
+import {isStoreDeliveryDate} from "./store-delivery.ts";
 import type {checkoutPayload} from "./store-quote";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "./store-limits";
 
@@ -17,9 +18,10 @@ const exactKeys=(value:RecordValue,keys:string[])=>Object.keys(value).every(key=
 
 /** Validate the full strict Backend request contract before replaying any stored request. */
 export function isCheckoutPayload(value:unknown,guest:boolean):value is StoreCheckoutPayload{
- if(!record(value)||!exactKeys(value,["idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at","coupon_code","expected_voucher_quote"]))return false;
+ if(!record(value)||!exactKeys(value,["delivery_date","idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at","coupon_code","expected_voucher_quote"]))return false;
  const hasVoucher=Object.hasOwn(value,"coupon_code")||Object.hasOwn(value,"expected_voucher_quote");
  if(hasVoucher&&(guest||typeof value.coupon_code!=="string"||!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(value.coupon_code)||typeof value.expected_voucher_quote!=="string"||!/^[a-f0-9]{40}$/.test(value.expected_voucher_quote)))return false;
+ if(!isStoreDeliveryDate(value.delivery_date))return false;
  if(!uuid(value.idempotency_key)||(value.locale!=="vi"&&value.locale!=="en")||!integer(value.expected_shipping_fee_vnd)||!integer(value.expected_total_vnd))return false;
  if(!Array.isArray(value.lines)||!value.lines.length||value.lines.length>STORE_MAX_ORDER_LINES)return false;
  const products=new Set<string>();
@@ -43,6 +45,7 @@ export function readCheckoutIntent(storage:IntentStorage,owner:string):StoreChec
   const raw=storage.getItem(storageKey(storedOwner));
   if(raw===null)continue;
   const value:unknown=JSON.parse(raw);
+  if(record(value)&&record(value.payload)&&!Object.hasOwn(value.payload,"delivery_date"))throw Error("legacy_checkout_intent");
   if(!record(value)||value.owner!==storedOwner||!isCheckoutPayload(value.payload,owner==="guest"))throw Error("invalid_checkout_intent");
   if(value.buyAgain!==undefined&&(owner==="guest"||!record(value.buyAgain)||!uuid(value.buyAgain.orderId)||!uuid(value.buyAgain.sessionId)))throw Error("invalid_checkout_intent");
   const next:StoreCheckoutIntent={owner,payload:value.payload,...(value.buyAgain?{buyAgain:value.buyAgain as StoreCheckoutIntent["buyAgain"]}:{})};
@@ -104,13 +107,14 @@ const checkoutCouponErrors=["coupon_invalid","coupon_invalid_value","coupon_scop
 /** Only service errors raised after the Backend's idempotency lookup prove rejection. */
 export function checkoutDefinitelyRejected(error:{status?:number;code?:string}):boolean{
  const conflicts=["store_requote_required","store_stock_changed","store_quota_changed","store_membership_frozen"];
- const rejected=["store_duplicate_product","store_product_changed","store_quota_unavailable","store_shipping_address_invalid","store_shipping_address_required","store_guest_address_required","store_shipping_area_unsupported","store_phone_invalid"];
+ const rejected=["store_duplicate_product","store_product_changed","store_quota_unavailable","store_shipping_address_invalid","store_shipping_address_required","store_guest_address_required","store_shipping_area_unsupported","store_phone_invalid","store_delivery_date_invalid"];
  return error.status===409&&conflicts.includes(error.code??"")||error.status===400&&(rejected.includes(error.code??"")||checkoutCouponErrors.includes(error.code??""))||error.status===503&&error.code==="store_payment_unavailable";
 }
 
 /** Select the resource recovery path only after a checkout is definitively rejected. */
 export function checkoutRequoteReason(error:{status?:number;code?:string;context?:{reason?:unknown}}):string|null{
  const reasons:Record<string,string>={
+  store_delivery_date_invalid:"delivery_date_invalid",
   store_product_changed:"product_changed",
   store_quota_unavailable:"quota_changed",
   store_shipping_area_unsupported:"shipping_area_unsupported",

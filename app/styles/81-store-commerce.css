@@ -198,3 +198,20 @@
 .store-product-information .store-product-prose>:first-child{margin-top:0}
 .store-product-information .store-product-prose>:last-child{margin-bottom:0}
 @media(max-width:560px){.store-product-information .store-product-prose h2{font-size:18px}.store-product-information .store-product-prose h3{font-size:16px}}
+
+/* Compact eight-day selector using the shared Store tokens. */
+.store-delivery-days{border:0;margin:0;padding:0;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;min-width:0}
+.store-delivery-day{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:82px;padding:9px 4px;border:1px solid var(--line);border-radius:var(--nfv-surface-radius);background:var(--paper);cursor:pointer;text-align:center;color:var(--ink)}
+.store-delivery-day[data-selected=true]{border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green);background:var(--soft)}
+.store-delivery-day input{position:absolute;opacity:0;width:1px;height:1px}
+.store-delivery-day:has(input:focus-visible){outline:2px solid var(--green);outline-offset:3px}
+.store-delivery-weekday{font-size:var(--store-meta-size);line-height:1.3;color:var(--muted);white-space:nowrap}
+.store-delivery-date{font-size:20px;font-weight:650;line-height:1.3;font-variant-numeric:tabular-nums;white-space:nowrap}
+.store-delivery-date span{font-size:12px;font-weight:400;color:var(--muted)}
+.store-delivery-benefit{min-height:16px;font-size:11px;line-height:16px;color:var(--green);white-space:nowrap}
+.store-delivery-days:disabled .store-delivery-day{opacity:.6;cursor:default}
+@media(max-width:600px){.store-delivery-days{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.store-delivery-day{min-height:76px;padding:7px 4px}}
+.store-recipient-fields{border:0;margin:0;padding:0;min-width:0}
+.store-delivery-days legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+.store-cart-fields{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;border:0;margin:0;padding:0}

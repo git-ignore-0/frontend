@@ -161,19 +161,31 @@ test("a dedicated order cookie never grants access to another order",async()=>{
 
 
 test("voucher preview enforces exact route, query, Origin marker and Core session before fetching",async()=>{
- for(const [options,status] of [[{method:"GET"},404],[{method:"POST",query:"?locale=vi"},404],[{method:"POST",origin:false},403],[{method:"POST",marker:false},403],[{method:"POST"},401]]){
+ for(const [options,status] of [[{method:"GET"},404],[{method:"POST",query:"?locale=vi"},404],[{method:"POST",origin:false},403],[{method:"POST",marker:false},403]]){
   const harness=routeHarness({guestOrders:{[UUID]:"guest-secret"}});
-  assert.equal((await harness.call(["voucher-preview"],options)).status,status);
+  assert.equal((await harness.call(["quote"],options)).status,status);
   assert.equal(harness.calls.length,0);
  }
  const harness=routeHarness({storedSession:{accessToken:"owner-token"}}),body={locale:"vi",coupon_code:"STORE30",lines:[]};
- const result=await harness.call(["voucher-preview"],{method:"POST",body});
- assert.equal(result.status,200);assert.equal(harness.calls[0].url,"https://auth.test/api/v1/store-voucher-preview");assert.equal(harness.calls[0].init.headers.Authorization,"Bearer owner-token");assert.deepEqual(JSON.parse(harness.calls[0].init.body),body);assert.equal(result.headers.get("Cache-Control"),"private, no-store");
+ const result=await harness.call(["quote"],{method:"POST",body});
+ assert.equal(result.status,200);assert.equal(harness.calls[0].url,"https://auth.test/api/v1/public/store-quotes");assert.equal(harness.calls[0].init.headers.Authorization,"Bearer owner-token");assert.deepEqual(JSON.parse(harness.calls[0].init.body),body);assert.equal(result.headers.get("Cache-Control"),"private, no-store");
 });
 test("voucher BFF preserves backend errors and maps transport failure without inventing business rejection",async()=>{
  const body={errors:[{code:"coupon_expired"}]};
- const rejected=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>Response.json(body,{status:400})});const result=await rejected.call(["voucher-preview"],{method:"POST"});assert.equal(result.status,400);assert.deepEqual(await result.json(),body);
+ const rejected=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>Response.json(body,{status:400})});const result=await rejected.call(["quote"],{method:"POST"});assert.equal(result.status,400);assert.deepEqual(await result.json(),body);
  for(const [reason,status,code] of [[Error("offline"),502,"upstream_unavailable"],[new DOMException("timeout","TimeoutError"),504,"upstream_timeout"]]){
-  const failed=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>{throw reason;}});const response=await failed.call(["voucher-preview"],{method:"POST"});assert.equal(response.status,status);assert.equal((await response.json()).error,code);
+  const failed=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>{throw reason;}});const response=await failed.call(["quote"],{method:"POST"});assert.equal(response.status,status);assert.equal((await response.json()).error,code);
+ }
+});
+
+test('calendar and shared quote forward optional buyer session, stay private and never downgrade expired sessions',async()=>{
+ for(const [path,method,upstreamPath] of [[['delivery-dates'],'GET','store-delivery-dates'],[['quote'],'POST','store-quotes']]){
+  for(const session of [null,{accessToken:'owner-token'}]){
+   const h=routeHarness({storedSession:session});const response=await h.call(path,{method,body:{delivery_date:'2026-11-14',lines:[]}});
+   assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal(h.calls[0].init.cache,'no-store');assert.equal(h.calls[0].url,`https://auth.test/api/v1/public/${upstreamPath}`);assert.equal(h.calls[0].init.headers.Authorization,session?'Bearer owner-token':undefined);
+  }
+  const expired=routeHarness({storedSession:{accessToken:'old'},authError:Error('expired')});assert.equal((await expired.call(path,{method})).status,401);assert.equal(expired.calls.length,0);
+  const query=routeHarness();assert.equal((await query.call(path,{method,query:'?locale=vi'})).status,404);assert.equal(query.calls.length,0);
+  assert.equal((await routeHarness().call([...path,'extra'],{method})).status,404);
  }
 });

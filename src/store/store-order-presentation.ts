@@ -39,3 +39,8 @@ export function storePaymentQrUrl(order:StoreOrder){
     ||!q.accountName.trim()||!q.addInfo.trim())return "";
   return `https://img.vietqr.io/image/${q.acqId}-${q.accountNo}-qr_only.png?${new URLSearchParams({amount:String(q.amount),addInfo:q.addInfo,accountName:q.accountName})}`;
 }
+
+export function storeShippingDiscountReason(reason:string,locale:StoreLocale){
+ const reasons:Record<string,{vi:string;en:string}>={csa_companion_delivery:{vi:"Miễn phí giao kèm CSA",en:"Free delivery with CSA"},csa_round:{vi:"Giao hàng trong gói CSA",en:"Delivery included in CSA"},active_csa_with_csa_product:{vi:"Miễn phí theo quyền lợi CSA đã áp dụng",en:"Free delivery under saved CSA benefits"}};
+ return Object.hasOwn(reasons,reason)?reasons[reason][locale]:'';
+}

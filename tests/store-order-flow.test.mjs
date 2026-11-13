@@ -25,27 +25,27 @@ test("quote allocates reservation-aware quota in checkout order and keeps intege
     {id:"a",quota:2,cash:1,subtotal:45000},
     {id:"b",quota:0,cash:2,subtotal:120000},
   ]);
-  assert.equal(result.shippingFeeVnd,0);
-  assert.equal(result.totalVnd,165000);
+  assert.equal(result.shippingFeeVnd,undefined);
+  assert.equal(result.totalVnd,undefined);
 });
 
-test("free shipping requires both active CSA and at least one CSA product",()=>{
+test("local membership and CSA products never waive delivery fees",()=>{
   const {buildStoreQuote}=load("src/store/store-quote.ts");
   const retail=product("retail",null,0),csa=product("csa","g",1);
-  assert.equal(buildStoreQuote({products:[csa],quantities:{csa:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:true}).shippingFeeVnd,0);
-  assert.equal(buildStoreQuote({products:[csa],quantities:{csa:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:false}).shippingFeeVnd,30000);
-  assert.equal(buildStoreQuote({products:[retail],quantities:{retail:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:true}).shippingFeeVnd,30000);
+  assert.equal(buildStoreQuote({products:[csa],quantities:{csa:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:true}).shippingFeeVnd,undefined);
+  assert.equal(buildStoreQuote({products:[csa],quantities:{csa:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:false}).shippingFeeVnd,undefined);
+  assert.equal(buildStoreQuote({products:[retail],quantities:{retail:1},useQuota:{},quota:[],shippingFeeVnd:30000,hasActiveCsa:true}).shippingFeeVnd,undefined);
 });
 
 test("checkout payload carries exact expected values and user address version only",()=>{
   const {checkoutPayload}=load("src/store/store-quote.ts");
-  const quote={lines:[{product:product("a",null,0,45000,7),quantity:2,useQuota:false,quotaQuantity:0,cashQuantity:2,cashSubtotalVnd:90000}],shippingFeeVnd:30000,totalVnd:120000};
+  const quote={deliveryDate:"2026-11-14",coupon:null,voucherQuote:null,shippingAddressUpdatedAt:"2026-10-31T08:00:00Z",lines:[{product_id:"a",quantity:2,use_quota:false,expected_quota_quantity:0,expected_unit_price_vnd:45000,expected_available_quantity:7}],shippingFeeVnd:30000,totalVnd:120000};
   const common={quote,locale:"vi",idempotencyKey:"22222222-2222-4222-8222-222222222222"};
   const user=checkoutPayload({...common,shippingAddressUpdatedAt:"2026-10-31T08:00:00Z"});
   assert.equal(user.shipping_address_updated_at,"2026-10-31T08:00:00Z");
   assert.equal(user.guest,undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(user.lines[0])),{product_id:"a",quantity:2,use_quota:false,expected_unit_price_vnd:45000,expected_available_quantity:7,expected_quota_quantity:0});
-  const guest=checkoutPayload({...common,guest:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"22015",address:"12 Nguyen Hue"}});
+  const guest=checkoutPayload({...common,quote:{...quote,shippingAddressUpdatedAt:null},guest:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"22015",address:"12 Nguyen Hue"}});
   assert.equal(guest.shipping_address_updated_at,undefined);
   assert.equal(guest.guest.ward_code,"22015");
 });
@@ -139,7 +139,7 @@ test("fractional quota uses exact hundredths across a shared group and mixed cas
  assert.equal(four.lines[0].quotaQuantity,4);assert.equal(four.lines[0].quotaUnits,1);
  const mixed=buildStoreQuote({products:[product("a","g",.25),product("b","g",.5)],quantities:{a:3,b:2},useQuota:{a:true,b:true},quota:[{productId:"g",availableUnits:1.25}],shippingFeeVnd:30000,hasActiveCsa:true});
  assert.equal(mixed.lines[0].quotaUnits,.75);assert.equal(mixed.lines[1].quotaUnits,.5);
- assert.equal(mixed.lines[0].quotaQuantity,3);assert.equal(mixed.lines[1].quotaQuantity,1);assert.equal(mixed.lines[1].cashQuantity,1);assert.equal(mixed.totalVnd,45000);
+ assert.equal(mixed.lines[0].quotaQuantity,3);assert.equal(mixed.lines[1].quotaQuantity,1);assert.equal(mixed.lines[1].cashQuantity,1);assert.equal(mixed.cashSubtotalVnd,45000);
  for(const cost of [.001,NaN,Infinity,"0.25",0,-.25]) assert.throws(()=>buildStoreQuote({products:[product("a","g",cost)],quantities:{a:1},useQuota:{a:true},quota:[{productId:"g",availableUnits:1}],shippingFeeVnd:0,hasActiveCsa:true}));
 });
 

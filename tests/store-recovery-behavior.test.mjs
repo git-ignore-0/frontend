@@ -14,12 +14,13 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve
 const uiNames=["Button","DataState","FormInput","FormSelect","Icon","MoneyLine","Photo","Quantity","Tabs","Status"];
 const primitives=Object.fromEntries(["StoreSection","StorePageHeading","StoreProductRow"].map(k=>[k,k]));
 class ApiError extends Error{constructor(status,context){super("request_failed");this.status=status;this.context=context;this.code=status===409?"store_requote_required":"request_failed"}}
+const DELIVERY_DATE="2026-11-01";
 const guest={name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"};
 const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
 const product={id:PRODUCT_ID,slug:"rau",name:"Rau",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,csa_quota_group:null};
 const order=(id="A",overrides={})=>({id,referenceCode:id,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
 
-function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")}}={}){
+function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")},clock=performance}={}){
  let cursor=0,states=[],deps=[],effects=[],cleanups=[],tree;const timers=new Map(),listeners=new Map(),document={visibilityState:"visible"};let timerId=0;
  const react={
   useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],v=>states[i]=typeof v==="function"?v(states[i]):v]},
@@ -29,8 +30,11 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  };
  react.useLayoutEffect=react.useEffect;
  context.ui??={locale:"vi"};
- const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
+ const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,Intl,performance:clock,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay,once:true,createdAt:clock.now()});return id},clearTimeout:id=>timers.delete(id),location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
+  if(name==="@/store/use-checkout-delivery")return load("src/store/use-checkout-delivery.ts");
+  if(name==="@/components/store/StoreDeliveryDates")return load("src/components/store/StoreDeliveryDates.tsx");
+  if(name==="@/store/store-delivery"||name==="./store-delivery.ts")return load("src/store/store-delivery.ts");
   if(name==="@/account/orders-view-state")return load("src/account/orders-view-state.ts");
   if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
@@ -38,6 +42,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
   if(name==="@/store/buy-again-session"||name==="./buy-again-session")return load("src/store/buy-again-session.ts");
   if(name==="./checkout-intent")return load("src/store/checkout-intent.ts");
+  if(name==="./store-order-model")return load("src/store/store-order-model.ts");
   if(name==="./store-order-service")return services;
   if(name==="./use-store-session")return load("src/store/use-store-session.ts");
   if(name==="@/store/cart-checkout")return load("src/store/cart-checkout.ts");
@@ -73,7 +78,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  let component,props;
  const render=(name=component,next=props)=>{component=name;props=next;cursor=0;return tree=exports[name](next)};
  const flush=()=>{const pending=effects;effects=[];for(const {i,fn}of pending){cleanups[i]?.();cleanups[i]=fn()}};
- return {auth,context,render,flush,document,fireInterval:delay=>{for(const timer of [...timers.values()])if(timer.delay===delay)timer.fn()},focus:()=>{for(const fn of [...(listeners.get("focus")??[])])fn()},async settle(){for(let i=0;i<4;i++){flush();await tick();render()}},get tree(){return tree},dispose(){cleanups.forEach(fn=>fn?.())}};
+ return {auth,context,render,flush,document,fireDueTimers:()=>{for(const [id,timer] of [...timers])if(timer.once&&timer.createdAt+timer.delay<=clock.now()){timers.delete(id);timer.fn()}},fireInterval:delay=>{for(const timer of [...timers.values()])if(timer.delay===delay){if(timer.once)timers.delete([...timers].find(([,v])=>v===timer)?.[0]);timer.fn()}},focus:()=>{for(const fn of [...(listeners.get("focus")??[])])fn()},async settle(){for(let i=0;i<8;i++){flush();await tick();render()}},get tree(){return tree},dispose(){cleanups.forEach(fn=>fn?.())}};
 }
 
 test("changing authenticated owner hides old orders immediately and loads the new owner's list",async()=>{
@@ -96,7 +101,22 @@ test("guest lookup ignores a slow restore after a newer lookup succeeds",async()
 function checkout(options={}){
  const context={data:{authenticated:false,storeProducts:{[PRODUCT_ID]:{...product}}},ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{}},cartHydrated:true,accountSessionKey:"guest",refreshResource:async()=>{},retryCartProduct(){},acknowledgeCartProduct(){},updateCart(){},...options.context};
  context.markCartProductsUnavailable=ids=>{for(const id of ids)if(context.ui.cart[id])context.ui.cartProductState[id]="unavailable"};context.patch=update=>Object.assign(context.ui,update);context.setUI=update=>Object.assign(context.ui,typeof update==="function"?update(context.ui):update);context.cacheStoreProducts=ps=>ps.forEach(p=>context.data.storeProducts[p.id]=p);
- return runtime("src/screens/Checkout.tsx",{...options,context,services:{getShippingQuote:async()=>({supported:true,shippingFeeVnd:30000}),getStoreQuota:async()=>({active:false,products:[]}),...options.services}});
+ let buyAgainProducts=[],serverFee=30000;
+ const defaultQuote=async input=>{
+  if(input.coupon_code&&options.services?.previewStoreVoucher)return {...await options.services.previewStoreVoucher(input),deliveryDate:input.delivery_date,shippingDiscountReason:null};
+  const lines=input.lines.map(line=>{
+   const p=buyAgainProducts.find(p=>p?.id===line.product_id)??context.data.storeProducts[line.product_id]??product;
+   const quotaQuantity=line.use_quota&&p.csa_quota_group?Math.min(line.quantity,2):0;
+   return {product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:p.retail_price_vnd,expected_available_quantity:p.available_quantity,expected_quota_quantity:quotaQuantity};
+  });
+  const subtotal=lines.reduce((sum,line)=>sum+(line.quantity-line.expected_quota_quantity)*line.expected_unit_price_vnd,0);
+  const fee=serverFee;
+  return {deliveryDate:input.delivery_date,shippingDiscountReason:null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:0,shippingFeeVnd:fee,totalVnd:subtotal+fee,coupon:null,voucherQuote:null,shippingAddressUpdatedAt:input.guest?null:context.data.shippingAddress?.updatedAt,lines};
+ };
+ const r=runtime("src/screens/Checkout.tsx",{...options,context,services:{getStoreDeliveryDates:async()=>({serverTime:"2026-11-01T00:00:00Z",dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:false}))}),getStoreQuote:defaultQuote,getShippingQuote:async()=>({supported:true,shippingFeeVnd:30000}),getStoreQuota:async()=>({active:false,products:[]}),...options.services,getShippingQuote:async(...args)=>{const result=await (options.services?.getShippingQuote??(async()=>({supported:true,shippingFeeVnd:30000})))(...args);serverFee=result.shippingFeeVnd;return result},...(options.services?.prepareBuyAgain?{prepareBuyAgain:async(...args)=>{const rows=await options.services.prepareBuyAgain(...args);buyAgainProducts=rows.map(row=>row.product);return rows}}:{})}});
+ const settle=r.settle;
+ r.settle=async()=>{await settle();if(options.autoSelect!==false){const radio=nodes(r.tree).find(n=>n.type==="input"&&n.props.name==="store-delivery-date");if(radio&&!nodes(r.tree).some(n=>n.type==="input"&&n.props.name==="store-delivery-date"&&n.props.checked)){radio.props.onChange();r.render();await settle();}}};
+ return r;
 }
 const confirm=r=>nodes(r.tree).find(n=>n.type==="Button"&&/Tiếp tục|Kiểm tra lại đơn/.test(text(n)));
 
@@ -137,13 +157,14 @@ test("a delayed order-list response from the previous owner cannot replace the n
 
 test("checkout rejects duplicate clicks synchronously and retains its key for a network retry",async()=>{
  const pending=deferred(),payloads=[];const r=checkout({services:{createStoreCheckout:payload=>{payloads.push(payload);return pending.promise}}});
- r.render("Checkout");await r.settle();const button=confirm(r);button.props.onClick();button.props.onClick();assert.equal(payloads.length,1);
+ r.render("Checkout");await r.settle();const button=confirm(r);button.props.onClick();button.props.onClick();await tick();assert.equal(payloads.length,1);
  pending.reject(Error("offline"));await tick();r.render();confirm(r).props.onClick();await tick();assert.equal(payloads.length,2);assert.equal(payloads[1].idempotency_key,payloads[0].idempotency_key);r.dispose();
 });
 
 test("checkout does not publish a previous session's completed order or clear its cart",async()=>{
- const pending=deferred(),auth={status:"guest",session:null};const r=checkout({auth,services:{createStoreCheckout:()=>pending.promise}});
- r.render("Checkout");await r.settle();confirm(r).props.onClick();auth.status="authenticated";auth.session={subject:"B"};r.render();r.flush();
+ const pending=deferred(),auth={status:"guest",session:null};let sent=0;
+ const r=checkout({auth,services:{createStoreCheckout:()=>{sent++;return pending.promise}}});
+ r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();assert.equal(sent,1);auth.status="authenticated";auth.session={subject:"B"};r.render();r.flush();
  pending.resolve(order());await tick();r.render();assert.equal(r.context.ui.cart[PRODUCT_ID],1);r.dispose();
 });
 
@@ -152,7 +173,7 @@ test("changing checkout owner hides the old address and waits for the new owner'
  const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
  const r=checkout({auth,context:{accountSessionKey:"A",data:{authenticated:true,shippingAddress:address,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}}}},services:{getStoreQuota:()=>++requests===1?Promise.resolve({active:true,products:[{productId:"g",availableUnits:1}]}):pending.promise}});
  r.context.ui.accountFetchState.address="ready";r.context.ui.applyCSA={[PRODUCT_ID]:true};r.render("Checkout");await r.settle();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"0");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"30000");
  auth.session={subject:"B"};r.render();assert.ok(!text(r.tree).includes("Owner A"));r.flush();assert.equal(r.context.ui.applyCSA[PRODUCT_ID],undefined);
  r.context.accountSessionKey="B";r.context.data.shippingAddress={...address,name:"Owner B"};r.render();
  assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");
@@ -204,7 +225,7 @@ test("guest Store continue uses the shared validation and reveals missing fields
  let fields=nodes(r.tree).find(n=>n.type==="GuestBuyerFields");
  assert.equal(fields.props.submitted,false);
  fields.props.onChange({...guest,phone:"123",wardCode:"999"});r.render();await r.settle();
- assert.equal(confirm(r).props.disabled,false);
+ assert.equal(confirm(r).props.disabled,true);
  await confirm(r).props.onClick();r.render();
  fields=nodes(r.tree).find(n=>n.type==="GuestBuyerFields");
  assert.equal(fields.props.submitted,true);
@@ -359,7 +380,7 @@ test("a background order read cannot overwrite a transfer mutation and hidden ta
 test("checkout success removes only purchased quantities and preserves later cart additions",async()=>{
  const pending=deferred(),other="22222222-2222-4222-8222-222222222222",payloads=[];
  const r=checkout({services:{createStoreCheckout:payload=>{payloads.push(payload);return pending.promise},storeOrderHref:()=>"/store/orders/A/vi"}});
- r.render("Checkout");await r.settle();confirm(r).props.onClick();assert.equal(payloads[0].lines[0].quantity,1);
+ r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();assert.equal(payloads[0].lines[0].quantity,1);
  r.context.ui.cart={[PRODUCT_ID]:3,[other]:2};r.context.ui.applyCSA={[PRODUCT_ID]:true,[other]:true};r.context.ui.cartProductNotice={[other]:"price_changed"};r.render();
  pending.resolve(order());await tick();r.render();
  assert.deepEqual({...r.context.ui.cart},{[PRODUCT_ID]:2,[other]:2});assert.equal(r.context.ui.applyCSA[other],true);assert.equal(r.context.ui.cartProductNotice[other],"price_changed");r.dispose();
@@ -387,7 +408,7 @@ test("legacy carts over 50 products show a cart limit and can recover by removin
  const products=Array.from({length:51},(_,i)=>({...product,id:`${String(i+1).padStart(8,"0")}-1111-4111-8111-111111111111`,slug:`p-${i}`}));
  r.context.data.storeProducts=Object.fromEntries(products.map(p=>[p.id,p]));r.context.ui.cart=Object.fromEntries(products.map(p=>[p.id,1]));r.context.ui.cartProductState=Object.fromEntries(products.map(p=>[p.id,"ready"]));
  r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/50/);assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&/khôi phục/.test(n.props.title)));assert.equal(calls,0);
- delete r.context.ui.cart[products[50].id];r.render();assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();assert.equal(calls,1);r.dispose();
+ delete r.context.ui.cart[products[50].id];r.render();await r.settle();assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();assert.equal(calls,1);r.dispose();
 });
 
 test("orders revalidate on tab re-entry and focus without hiding the snapshot",async()=>{
@@ -451,7 +472,7 @@ test("product rejection refreshes every line, keeps removed products visible and
  r.context.updateCart=(id,delta)=>{r.context.ui.cart[id]+=delta;if(r.context.ui.cart[id]<=0)delete r.context.ui.cart[id]};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();
  assert.equal(fetched.length,2);assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"unavailable");assert.equal(r.context.ui.cart[PRODUCT_ID],1);assert.equal(r.context.data.storeProducts[other].retail_price_vnd,50000);assert.equal(confirm(r).props.disabled,true);
- nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán").props.action.onClick();r.render();
+ nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán").props.action.onClick();r.render();await r.settle();
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();confirm(r).props.onClick();await tick();
  assert.equal(payloads.length,2);assert.equal(payloads[1].lines.length,1);assert.equal(payloads[1].lines[0].product_id,other);assert.equal(payloads[1].expected_total_vnd,80000);assert.notEqual(payloads[0].idempotency_key,payloads[1].idempotency_key);r.dispose();
 });
@@ -576,7 +597,7 @@ test("payment-disabled rejection returns to editable checkout and creates a fres
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();await r.settle();
  assert.ok(!text(r.tree).includes("Chưa xác định được kết quả"));
  assert.ok(nodes(r.tree).some(n=>n.type==="GuestBuyerFields"));
- r.context.ui.cart[PRODUCT_ID]=2;r.render();confirm(r).props.onClick();await tick();await r.settle();
+ r.context.ui.cart[PRODUCT_ID]=2;r.render();await r.settle();confirm(r).props.onClick();await tick();await r.settle();
  assert.equal(payloads[1].lines[0].quantity,2);
  assert.notEqual(payloads[1].idempotency_key,payloads[0].idempotency_key);
  r.dispose();
@@ -811,7 +832,7 @@ const voucherResponse=(code="SAVE",overrides={})=>({subtotalVnd:42000,eligibleSu
 const voucherInput=r=>nodes(r.tree).find(n=>n.type==="FormInput"&&n.props.id==="storeDiscountCode");
 const applyVoucher=r=>nodes(r.tree).find(n=>n.type==="Button"&&/^(Áp dụng|Apply)$/.test(text(n).trim()));
 async function applyCode(r,code="SAVE"){
- voucherInput(r).props.onChange({target:{value:code}});r.render();r.flush();await applyVoucher(r).props.onClick();await tick();r.render();
+ voucherInput(r).props.onChange({target:{value:code}});r.render();r.flush();await applyVoucher(r).props.onClick();await r.settle();
 }
 test("voucher apply uses backend price, stock, totals and exact payload; remove restores ordinary quote",async()=>{
  const sent=[],previews=[];const r=voucherCheckout({services:{previewStoreVoucher:async input=>{previews.push(input);return voucherResponse()},createStoreCheckout:async input=>{sent.push(input);return order()},storeOrderHref:()=>"/done"}});
@@ -822,9 +843,9 @@ test("voucher apply uses backend price, stock, totals and exact payload; remove 
  await confirm(r).props.onClick();
  assert.equal(sent[0].coupon_code,"SAVE");assert.equal(sent[0].expected_voucher_quote,"a".repeat(40));assert.equal(sent[0].expected_total_vnd,60000);
  assert.equal(sent[0].lines[0].expected_unit_price_vnd,42000);assert.equal(sent[0].lines[0].expected_available_quantity,8);
- r.render();assert.equal(confirm(r).props.disabled,true);r.dispose();
+ r.render();assert.equal(r.context.ui.cart[PRODUCT_ID],undefined);r.dispose();
  const remove=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});remove.render("Checkout");await remove.settle();await applyCode(remove);
- nodes(remove.tree).find(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã").props.onClick();remove.render();
+ nodes(remove.tree).find(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã").props.onClick();remove.render();await remove.settle();
  assert.equal(voucherInput(remove).props.value,"");assert.ok(!nodes(remove.tree).some(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã"));assert.ok(!text(remove.tree).includes("Thông tin đã thay đổi"));assert.equal(nodes(remove.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"70000");remove.dispose();
 });
 test("guest voucher controls never invoke authenticated preview",async()=>{
@@ -833,7 +854,7 @@ test("guest voucher controls never invoke authenticated preview",async()=>{
 });
 test("changing code invalidates totals immediately and a late response cannot apply it",async()=>{
  let called=0;const late=deferred();const r=voucherCheckout({services:{previewStoreVoucher:()=>{called++;return late.promise}}});r.render("Checkout");await r.settle();
- voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();applyVoucher(r).props.onClick();
+ voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();applyVoucher(r).props.onClick();r.render();r.flush();await tick();
  assert.equal(called,1);voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();late.resolve(voucherResponse("OLD"));await tick();r.render();
  assert.equal(confirm(r).props.disabled,true);assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");assert.equal(voucherInput(r).props.value,"NEW");r.dispose();
 });
@@ -864,7 +885,7 @@ test("definite voucher rejection clears intent and requires a fresh apply, with 
  const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse(),createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/done"}});
  r.render("Checkout");await r.settle();await applyCode(r);await confirm(r).props.onClick();await tick();r.render();
  assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/hết lượt/);
- await applyCode(r);assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();await tick();r.render();
+ await applyCode(r);const accepted=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));if(accepted){assert.equal(accepted.props.disabled,false);accepted.props.onClick();r.render();}assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();await tick();r.render();
  assert.equal(payloads.length,2);assert.notEqual(payloads[0].idempotency_key,payloads[1].idempotency_key);assert.equal(payloads[1].coupon_code,"SAVE");r.dispose();
 });
 test("voucher_changed requote invalidates applied amounts and waits for explicit reapply",async()=>{
@@ -908,8 +929,8 @@ test("voucher checkout mixed quota uses BE quantities once and allows a zero tot
 test("preview double clicks are locked and a newer code wins over a delayed previous response",async()=>{
  const old=deferred();let calls=0;
  const r=voucherCheckout({services:{previewStoreVoucher:input=>{calls++;return input.coupon_code==="OLD"?old.promise:Promise.resolve(voucherResponse("NEW"))}}});
- r.render("Checkout");await r.settle();voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();const button=applyVoucher(r);button.props.onClick();button.props.onClick();assert.equal(calls,1);r.render();assert.equal(applyVoucher(r).props.disabled,true);assert.equal(applyVoucher(r).props.loading,true);
- voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();r.flush();await applyVoucher(r).props.onClick();await tick();r.render();assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · NEW"));
+ r.render("Checkout");await r.settle();voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();const button=applyVoucher(r);button.props.onClick();button.props.onClick();r.render();r.flush();await tick();assert.equal(calls,1);r.render();assert.equal(applyVoucher(r).props.disabled,true);assert.equal(applyVoucher(r).props.loading,true);
+ voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();r.flush();await applyVoucher(r).props.onClick();await r.settle();assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · NEW"));
  old.resolve(voucherResponse("OLD"));await tick();r.render();assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · NEW"));assert.equal(calls,2);assert.equal(applyVoucher(r).props.loading,false);assert.equal(applyVoucher(r).props.disabled,false);r.dispose();
 });
 test("logout while previewing prevents the old member quote from appearing for a guest",async()=>{
@@ -929,7 +950,7 @@ test("rechecking an applied code invalidates the old discount if the server now 
  let calls=0;const expired=new ApiError(400);expired.code="coupon_expired";
  const r=voucherCheckout({services:{previewStoreVoucher:async()=>{if(++calls===1)return voucherResponse();throw expired}}});
  r.render("Checkout");await r.settle();await applyCode(r);assert.equal(confirm(r).props.disabled,false);
- await applyVoucher(r).props.onClick();await tick();r.render();
+ await applyVoucher(r).props.onClick();await r.settle();
  assert.match(text(r.tree),/hết hạn/);assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label?.startsWith("Voucher ·")));assert.equal(confirm(r).props.disabled,true);r.dispose();
 });
 
@@ -978,3 +999,235 @@ test('frozen checkout is a definite rejection and leaves no pending order recove
   assert.equal(storage.has('nfv_store_checkout_intent_v1:A'),false);assert.equal(storage.has('nfv_store_checkout_pending_owner_v1'),false);assert.equal(calls,1);
  }finally{r.dispose()}
 });
+
+const dateInputs=r=>nodes(r.tree).filter(n=>n.type==='input'&&n.props.name==='store-delivery-date');
+const chooseDate=async(r,index)=>{dateInputs(r)[index].props.onChange();r.render();await r.settle();};
+const checkoutTotal=r=>nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Tổng chuyển khoản')?.props.value;
+function authoritativeQuote(input,{fee=17000,token=null,code=null,subtotal=40000}={}){
+ return {deliveryDate:input.delivery_date,shippingDiscountReason:fee===0?'csa_companion_delivery':null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:code?1000:0,shippingFeeVnd:fee,totalVnd:subtotal+fee-(code?1000:0),coupon:code?{id:SOURCE_ORDER,code}:null,voucherQuote:token,shippingAddressUpdatedAt:input.guest?null:'2026-11-01T00:00:00Z',lines:input.lines.map(line=>({product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}))};
+}
+test('new checkout selects days locally and only Continue quotes the chosen day',async()=>{
+ const requests=[],sent=[];const r=checkout({autoSelect:false,services:{
+  getStoreDeliveryDates:async()=>({serverTime:'2026-11-01T00:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:i===3}))}),
+  getStoreQuote:async input=>{requests.push(input);return authoritativeQuote(input,{fee:input.delivery_date==='2026-11-04'?0:30000})},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();assert.equal(dateInputs(r).length,8);assert.ok(dateInputs(r).every(n=>!n.props.checked));assert.equal(confirm(r).props.disabled,true);assert.equal(checkoutTotal(r),'—');
+  await chooseDate(r,3);assert.equal(checkoutTotal(r),'40000');assert.equal(nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Phí giao').props.value,'Miễn phí giao kèm CSA');
+  await chooseDate(r,4);assert.equal(checkoutTotal(r),'70000');assert.equal(requests.length,0);assert.equal(confirm(r).props.loading,false);
+  await confirm(r).props.onClick();assert.equal(requests.length,1);assert.equal(sent[0].delivery_date,'2026-11-05');assert.equal(sent[0].expected_shipping_fee_vnd,30000);assert.equal(sent[0].expected_total_vnd,70000);
+ }finally{r.dispose()}
+});
+test('applied voucher changes delivery day locally and receives a fresh token only on Continue',async()=>{
+ const calls=[],sent=[];const r=voucherCheckout({autoSelect:false,services:{getStoreQuote:async input=>{calls.push(input);return authoritativeQuote(input,{fee:30000,code:input.coupon_code??null,token:input.coupon_code?(input.delivery_date==='2026-11-01'?'a':'b').repeat(40):null})},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();await chooseDate(r,0);await applyCode(r);assert.equal(calls.length,1);const total=checkoutTotal(r);
+  await chooseDate(r,1);assert.equal(calls.length,1);assert.equal(checkoutTotal(r),total);assert.equal(confirm(r).props.disabled,false);
+  await confirm(r).props.onClick();assert.equal(calls.length,2);assert.equal(calls[1].delivery_date,'2026-11-02');assert.equal(calls[1].coupon_code,'SAVE');assert.equal(sent[0].expected_voucher_quote,'b'.repeat(40));assert.equal(sent[0].delivery_date,'2026-11-02');
+ }finally{r.dispose()}
+});
+test('date edits recompute shipping while retaining verified voucher and product amounts',async()=>{
+ const pending=deferred(),calls=[],sent=[];
+ const makeQuote=input=>{const q=authoritativeQuote(input,{fee:input.delivery_date==='2026-11-02'?0:30000,code:input.coupon_code,token:'a'.repeat(40),subtotal:42000});q.lines[0].expected_unit_price_vnd=42000;return q};
+ const r=voucherCheckout({autoSelect:false,services:{
+  getStoreDeliveryDates:async()=>({serverTime:'2026-11-01T00:00:00Z',dates:[{date:'2026-11-01',freeShipping:false},{date:'2026-11-02',freeShipping:true}]}),
+  getStoreQuote:input=>{calls.push(input);return input.delivery_date==='2026-11-02'?pending.promise:Promise.resolve(makeQuote(input))},createStoreCheckout:async p=>{sent.push(p);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();await chooseDate(r,0);await applyCode(r);assert.equal(checkoutTotal(r),'71000');
+  await chooseDate(r,1);assert.equal(checkoutTotal(r),'41000');assert.equal(calls.length,1);assert.equal(confirm(r).props.loading,false);
+  const action=confirm(r).props.onClick();r.render();assert.equal(confirm(r).props.disabled,true);assert.equal(confirm(r).props.loading,true);assert.equal(checkoutTotal(r),'41000');
+  assert.equal(nodes(r.tree).find(n=>n.type==='StoreProductRow').props.amount,'42000');assert.equal(nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Voucher · SAVE').props.value,'−1000');
+  assert.doesNotMatch(text(r.tree),/Đang tính phí giao|Calculating delivery/);assert.equal(calls.length,2);
+  pending.resolve(makeQuote(calls[1]));await action;assert.equal(sent.length,1);assert.equal(sent[0].expected_total_vnd,41000);
+ }finally{r.dispose()}
+});
+test('rapid delivery choices remain local including reselecting the current day',async()=>{
+ const calls=[];const r=voucherCheckout({autoSelect:false,services:{getStoreQuote:async input=>{calls.push(input);return authoritativeQuote(input,{fee:30000})}}});
+ try{
+  r.render('Checkout');await r.settle();
+  for(const index of [0,1,2,2])await chooseDate(r,index);
+  assert.equal(dateInputs(r)[2].props.checked,true);assert.equal(calls.length,0);assert.equal(confirm(r).props.disabled,false);assert.equal(confirm(r).props.loading,false);assert.equal(checkoutTotal(r),'70000');
+ }finally{r.dispose()}
+});
+test('quote failure on Continue keeps the local estimate and retries without an uncertain order intent',async()=>{
+ const storage=new Map(),sent=[];let reads=0;
+ const r=checkout({storage,services:{getStoreQuote:async input=>{if(++reads===1)throw Error('offline');return authoritativeQuote(input,{fee:30000})},createStoreCheckout:async p=>{sent.push(p);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();assert.equal(reads,0);assert.equal(checkoutTotal(r),'70000');await confirm(r).props.onClick();r.render();
+  assert.equal(checkoutTotal(r),'70000');assert.equal(sent.length,0);assert.equal(storage.has('nfv_store_checkout_intent_v1:guest'),false);assert.equal(confirm(r).props.disabled,false);assert.ok(nodes(r.tree).some(n=>n.type==='DataState'&&n.props.title.includes('Chưa thể tính đơn hàng')));
+  await confirm(r).props.onClick();assert.equal(sent.length,1);assert.equal(reads,2);
+ }finally{r.dispose()}
+});
+test('midnight calendar refresh preserves invalid selection and requires explicit reselection',async()=>{
+ let reads=0;const r=checkout({clock:{now:()=>0},autoSelect:false,services:{getStoreDeliveryDates:async()=>{const start=++reads===1?1:2;return {serverTime:start===1?'2026-11-01T16:59:59Z':'2026-11-01T17:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-${String(start+i).padStart(2,'0')}`,freeShipping:false}))}}}});
+ r.render('Checkout');await r.settle();await chooseDate(r,0);assert.equal(confirm(r).props.disabled,false);r.fireInterval(1000);await r.settle();assert.equal(reads,2);assert.ok(dateInputs(r).every(n=>!n.props.checked));assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/không còn hợp lệ/);await chooseDate(r,0);assert.equal(confirm(r).props.disabled,false);r.dispose();
+});
+test('legacy missing-date intent is retained and cannot silently create another order',async()=>{
+ const storage=new Map(),sent=[];const first=checkout({storage,services:{createStoreCheckout:async payload=>{sent.push(payload);throw Error('offline')}}});first.render('Checkout');await first.settle();await confirm(first).props.onClick();first.dispose();
+ const key=[...storage.keys()].find(key=>key.startsWith('nfv_store_checkout_intent_v1:')),legacy=JSON.parse(storage.get(key));delete legacy.payload.delivery_date;storage.set(key,JSON.stringify(legacy));const before=storage.get(key);
+ const resumed=checkout({storage,services:{getStoreQuote:async()=>{throw Error('must not quote legacy')},createStoreCheckout:async()=>{throw Error('must not submit legacy')}}});resumed.render('Checkout');await resumed.settle();assert.ok(nodes(resumed.tree).some(n=>n.type==='DataState'&&n.props.title.includes('Không thể khôi phục')));assert.equal(storage.get(key),before);assert.equal(sent.length,1);assert.equal(confirm(resumed).props.disabled,true);resumed.dispose();
+});
+test('stored dated request replays unchanged after its day is outside the current calendar',async()=>{
+ const storage=new Map(),sent=[];const first=checkout({storage,services:{createStoreCheckout:async payload=>{sent.push(payload);throw Error('offline')}}});first.render('Checkout');await first.settle();await confirm(first).props.onClick();first.dispose();
+ let calendarReads=0;const resumed=checkout({storage,services:{getStoreDeliveryDates:async()=>{calendarReads++;throw Error('offline')},getStoreQuote:async()=>{throw Error('must not requote replay')},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});resumed.render('Checkout');await resumed.settle();assert.equal(calendarReads,0);await confirm(resumed).props.onClick();assert.equal(JSON.stringify(sent[0]),JSON.stringify(sent[1]));assert.equal(sent[1].delivery_date,'2026-11-01');resumed.dispose();
+});
+test('a replacement session cannot submit a quote requested by the previous session',async()=>{
+ const old=deferred(),sent=[];let reads=0;
+ const r=voucherCheckout({services:{getStoreQuote:input=>++reads===1?old.promise:Promise.resolve(authoritativeQuote(input,{fee:30000})),createStoreCheckout:async p=>{sent.push(p);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();const action=confirm(r).props.onClick();r.render();r.auth.session={...r.auth.session};r.render();r.flush();
+  old.resolve(authoritativeQuote({delivery_date:DELIVERY_DATE,lines:[{product_id:PRODUCT_ID,quantity:1,use_quota:false}]},{fee:0}));await action;await r.settle();assert.equal(sent.length,0);assert.equal(reads,1);
+  await confirm(r).props.onClick();assert.equal(reads,2);assert.equal(sent.length,1);assert.equal(sent[0].expected_shipping_fee_vnd,30000);
+ }finally{r.dispose()}
+});
+test('invalid delivery day is a definite service rejection but schema validation is still uncertain',async()=>{
+ const exports={};vm.runInNewContext(compile('src/store/checkout-intent.ts'),{exports,Date,require:name=>name==='./store-delivery.ts'?(()=>{const exp={};vm.runInNewContext(compile('src/store/store-delivery.ts'),{exports:exp,Date,Intl});return exp})():{}});
+ assert.equal(exports.checkoutDefinitelyRejected({status:400,code:'store_delivery_date_invalid'}),true);assert.equal(exports.checkoutRequoteReason({status:400,code:'store_delivery_date_invalid'}),'delivery_date_invalid');assert.equal(exports.checkoutDefinitelyRejected({status:400,code:'validation_error'}),false);
+});
+
+test('calendar badges follow BE and missing or failed calendar blocks submission without inventing dates',async()=>{
+ let reads=0;const r=checkout({autoSelect:false,services:{getStoreDeliveryDates:async()=>{if(++reads===1)throw Error('offline');return {serverTime:'2026-11-01T00:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:i===6}))}}}});
+ r.render('Checkout');await r.settle();assert.equal(dateInputs(r).length,0);assert.equal(confirm(r).props.disabled,true);
+ const failed=nodes(r.tree).find(n=>n.type==='DataState'&&n.props.title==='Chưa thể tải ngày giao.');assert.ok(failed);failed.props.action.onClick();await r.settle();assert.equal(dateInputs(r).length,8);assert.equal(nodes(r.tree).filter(n=>n.type==='small'&&text(n)==='Miễn phí').length,1);assert.equal(dateInputs(r)[6].props.checked,false);r.dispose();
+});
+test('guest address edits stay local and unmount discards an in-flight Continue quote',async()=>{
+ let calls=0,submits=0;const late=deferred();const r=checkout({autoSelect:false,services:{getStoreQuote:()=>{calls++;return late.promise},createStoreCheckout:async()=>{submits++;return order()}}});
+ r.render('Checkout');await r.settle();nodes(r.tree).find(n=>n.type==='GuestBuyerFields').props.onChange({...guest,phone:''});r.render();await chooseDate(r,0);assert.equal(calls,0);assert.equal(confirm(r).props.disabled,true);
+ nodes(r.tree).find(n=>n.type==='GuestBuyerFields').props.onChange(guest);r.render();await r.settle();assert.equal(calls,0);
+ const action=confirm(r).props.onClick();assert.equal(calls,1);r.dispose();late.resolve(authoritativeQuote({delivery_date:DELIVERY_DATE,guest:{},lines:[{product_id:PRODUCT_ID,quantity:1,use_quota:false}]}));await action;assert.equal(submits,0);
+});
+test('BE rejects an outdated day on Continue and refreshes the calendar without a retry loop',async()=>{
+ let calendars=0,quotes=0,submits=0;const failure=new ApiError(400);failure.code='store_delivery_date_invalid';
+ const r=checkout({autoSelect:false,services:{getStoreDeliveryDates:async()=>{calendars++;return {serverTime:'2026-11-01T00:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:false}))}},getStoreQuote:async input=>{if(++quotes===1)throw failure;return authoritativeQuote(input,{fee:30000})},createStoreCheckout:async()=>{submits++;return order()},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();await chooseDate(r,0);assert.equal(quotes,0);await confirm(r).props.onClick();await r.settle();assert.equal(calendars,2);assert.equal(quotes,1);assert.match(text(r.tree),/không còn hợp lệ/);assert.equal(confirm(r).props.disabled,true);
+  await chooseDate(r,1);assert.equal(quotes,1);assert.equal(confirm(r).props.disabled,false);await confirm(r).props.onClick();assert.equal(quotes,2);assert.equal(submits,1);
+ }finally{r.dispose()}
+});
+test('date selection, recipient and global cart controls are locked while the checkout is unresolved',async()=>{
+ const late=deferred();const r=checkout({services:{createStoreCheckout:()=>late.promise}});r.render('Checkout');await r.settle();const submit=confirm(r).props.onClick();r.render();r.flush();assert.equal(r.context.ui.checkoutLocked,true);assert.ok(nodes(r.tree).some(n=>n.type==='fieldset'&&n.props.disabled===true));assert.equal(dateInputs(r)[0].props.checked,true);late.reject(Error('offline'));await submit;r.render();await r.settle();assert.equal(r.context.ui.checkoutLocked,true);r.dispose();assert.equal(r.context.ui.checkoutLocked,false);
+});
+
+test('member address editing is disabled during checkout and restored after definite rejection',async()=>{
+ const late=deferred(),failure=new ApiError(503);failure.code='store_payment_unavailable';
+ const r=voucherCheckout({services:{createStoreCheckout:()=>late.promise}});
+ const addressLink=()=>nodes(r.tree).find(n=>n.type==='a'&&n.props.href==='/account/vi?tab=address');
+ let submission;
+ try{
+  r.render('Checkout');await r.settle();assert.ok(addressLink());assert.equal(confirm(r).props.disabled,false);
+  submission=confirm(r).props.onClick();r.render();r.flush();
+  assert.equal(addressLink(),undefined);
+  const edit=nodes(r.tree).find(n=>n.type==='Button'&&text(n).trim()==='Sửa địa chỉ');
+  assert.ok(edit);assert.equal(edit.props.disabled,true);
+  late.reject(failure);await submission;await r.settle();assert.ok(addressLink());
+ }finally{late.reject(failure);await submission;r.dispose()}
+});
+
+test('local date and CSA edits update the estimate without any quote until Continue',async()=>{
+ const quotes=[],sent=[],pending=deferred();
+ const r=voucherCheckout({autoSelect:false,services:{
+  getStoreDeliveryDates:async()=>({serverTime:'2026-11-01T00:00:00Z',dates:[{date:'2026-11-01',freeShipping:false},{date:'2026-11-02',freeShipping:true}]}),
+  getStoreQuota:async()=>({active:true,products:[{productId:'g',availableUnits:1}]}),
+  getStoreQuote:input=>{quotes.push(input);return pending.promise},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done',
+ }});
+ r.context.data.storeProducts[PRODUCT_ID]={...product,csa_quota_group:{id:'g',cost:1}};
+ const checkbox=()=>nodes(nodes(r.tree).find(n=>n.type==='StoreProductRow')?.props.actions).find(n=>n.type==='input');
+ try{
+  r.render('Checkout');await r.settle();await chooseDate(r,0);assert.equal(checkoutTotal(r),'70000');
+  await chooseDate(r,1);assert.equal(checkoutTotal(r),'40000');
+  checkbox().props.onChange({target:{checked:true}});r.render();await r.settle();assert.equal(checkoutTotal(r),'0');
+  assert.equal(quotes.length,0);assert.equal(confirm(r).props.disabled,false);assert.equal(confirm(r).props.loading,false);
+  confirm(r).props.onClick();confirm(r).props.onClick();r.render();assert.equal(quotes.length,1);assert.equal(sent.length,0);assert.equal(confirm(r).props.loading,true);
+  assert.equal(checkbox().props.disabled,true);assert.ok(nodes(r.tree).some(n=>n.type==='fieldset'&&n.props.disabled));
+  const response=authoritativeQuote(quotes[0],{fee:0,subtotal:0});response.lines[0].expected_quota_quantity=1;
+  pending.resolve(response);await r.settle();assert.equal(sent.length,1);assert.equal(sent[0].delivery_date,'2026-11-02');assert.equal(sent[0].lines[0].expected_quota_quantity,1);
+ }finally{r.dispose()}
+});
+
+test('Continue detects changed CSA allocation even when total and shipping stay equal',async()=>{
+ const second='22222222-2222-4222-8222-222222222222',sent=[];let reads=0;
+ const r=voucherCheckout({services:{getStoreQuota:async()=>({active:true,products:[{productId:'g',availableUnits:1}]}),getStoreQuote:async input=>{
+  reads++;const result=authoritativeQuote(input,{fee:30000,subtotal:40000});
+  result.lines=result.lines.map((line,index)=>({...line,expected_quota_quantity:index===1?1:0}));return result;
+ },createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});
+ r.context.data.storeProducts[PRODUCT_ID]={...product,csa_quota_group:{id:'g',cost:1}};
+ r.context.data.storeProducts[second]={...product,id:second,csa_quota_group:{id:'g',cost:1}};
+ Object.assign(r.context.ui.cart,{[second]:1});Object.assign(r.context.ui.applyCSA,{[PRODUCT_ID]:true,[second]:true});r.context.ui.cartProductState[second]='ready';
+ try{
+  r.render('Checkout');await r.settle();assert.equal(checkoutTotal(r),'70000');await confirm(r).props.onClick();await r.settle();
+  assert.equal(reads,1);assert.equal(sent.length,0);assert.equal(checkoutTotal(r),'70000');assert.equal(confirm(r).props.disabled,true);
+  const accept=nodes(r.tree).find(n=>n.type==='Button'&&text(n).includes('Xác nhận thông tin mới'));assert.ok(accept);accept.props.onClick();r.render();
+  await confirm(r).props.onClick();await r.settle();assert.equal(sent.length,1);assert.equal(sent[0].lines[1].expected_quota_quantity,1);
+ }finally{r.dispose()}
+});
+
+test('refreshing the calendar during voucher preview permits an explicit retry after the stale response',async()=>{
+ const old=deferred();let reads=0;
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>++reads===1?old.promise:voucherResponse()}});
+ try{
+  r.render('Checkout');await r.settle();await applyCode(r);assert.equal(reads,1);r.focus();await r.settle();
+  old.resolve(voucherResponse());await r.settle();assert.equal(confirm(r).props.disabled,true);
+  applyVoucher(r).props.onClick();await r.settle();assert.equal(reads,2);assert.equal(confirm(r).props.disabled,false);
+ }finally{r.dispose()}
+});
+
+test('accepted voucher amounts remain visible while the checkout request is pending',async()=>{
+ const pending=deferred();let sent=0;
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse(),createStoreCheckout:()=>{sent++;return pending.promise},storeOrderHref:()=>'/done'}});
+ try{
+  r.render('Checkout');await r.settle();await applyCode(r);const action=confirm(r).props.onClick();await tick();r.render();await r.settle();
+  assert.equal(sent,1);assert.equal(checkoutTotal(r),'60000');assert.equal(nodes(r.tree).find(n=>n.type==='StoreProductRow').props.amount,'42000');assert.ok(nodes(r.tree).some(n=>n.type==='MoneyLine'&&n.props.label==='Voucher · SAVE'));
+  pending.resolve(order());await action;
+ }finally{pending.resolve(order());r.dispose()}
+});
+
+for(const change of ['price','shipping','stock']){
+ test(`Continue shows changed ${change} before allowing a new confirmed checkout`,async()=>{
+  const sent=[];let reads=0;
+  const r=checkout({services:{getStoreDeliveryDates:async()=>({serverTime:'2026-11-01T00:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:change==='shipping'&&i===0}))}),getStoreQuote:async input=>{
+   reads++;const q=authoritativeQuote(input,{fee:30000,subtotal:change==='price'?50000:40000});
+   if(change==='price')q.lines[0].expected_unit_price_vnd=50000;
+   if(change==='stock')q.lines[0].expected_available_quantity=9;
+   return q;
+  },createStoreCheckout:async p=>{sent.push(p);return order()},storeOrderHref:()=>'/done'}});
+  try{
+   r.render('Checkout');await r.settle();assert.equal(reads,0);assert.equal(checkoutTotal(r),change==='shipping'?'40000':'70000');
+   await confirm(r).props.onClick();await r.settle();assert.equal(sent.length,0);assert.equal(reads,1);assert.equal(confirm(r).props.disabled,true);assert.equal(checkoutTotal(r),change==='price'?'80000':'70000');
+   const accept=nodes(r.tree).find(n=>n.type==='Button'&&text(n).includes('Xác nhận thông tin mới'));assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();
+   await confirm(r).props.onClick();assert.equal(reads,2);assert.equal(sent.length,1);assert.equal(sent[0].expected_total_vnd,change==='price'?80000:70000);
+  }finally{r.dispose()}
+ });
+}
+
+
+for(const change of ['stock','price']){
+ test(`voucher must be applied again after restoring changed product ${change}`,async()=>{
+  let reads=0;const r=voucherCheckout({services:{previewStoreVoucher:async()=>{reads++;return voucherResponse()}}});
+  try{
+   r.render('Checkout');await r.settle();await applyCode(r);assert.equal(reads,1);assert.equal(checkoutTotal(r),'60000');
+   const original=r.context.data.storeProducts[PRODUCT_ID];
+   r.context.data.storeProducts[PRODUCT_ID]={...original,...(change==='stock'?{available_quantity:7}:{retail_price_vnd:50000})};r.render();await r.settle();
+   assert.equal(confirm(r).props.disabled,true);assert.equal(checkoutTotal(r),'—');
+   r.context.data.storeProducts[PRODUCT_ID]=original;r.render();await r.settle();
+   assert.equal(reads,1);assert.equal(voucherInput(r).props.value,'SAVE');assert.equal(confirm(r).props.disabled,true);assert.equal(checkoutTotal(r),'—');
+   assert.ok(!nodes(r.tree).some(n=>n.type==='MoneyLine'&&n.props.label==='Voucher · SAVE'));
+   await applyVoucher(r).props.onClick();await r.settle();assert.equal(reads,2);assert.equal(checkoutTotal(r),'60000');assert.equal(confirm(r).props.disabled,false);
+  }finally{r.dispose()}
+ });
+}
+
+for(const unlockAt of [30000,70000]){
+ test(`calendar keeps its midnight deadline when checkout unlocks at ${unlockAt}ms`,async()=>{
+  const pending=deferred();let elapsed=0,reads=0;
+  const r=checkout({autoSelect:false,clock:{now:()=>elapsed},services:{getStoreDeliveryDates:async()=>{
+   reads++;const rolled=elapsed>=60000,start=rolled?2:1;
+   return {serverTime:rolled?'2026-11-01T17:00:10Z':'2026-11-01T16:59:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-${String(start+i).padStart(2,'0')}`,freeShipping:false}))};
+  },getStoreQuote:()=>pending.promise}});
+  try{
+   r.render('Checkout');await r.settle();await chooseDate(r,0);assert.equal(reads,1);assert.equal(dateInputs(r)[0].props.checked,true);
+   elapsed=20000;const action=confirm(r).props.onClick();r.render();r.flush();
+   elapsed=unlockAt;pending.reject(Error('offline'));await action;await r.settle();
+   elapsed=unlockAt<60000?60000:unlockAt+1;r.fireDueTimers();await r.settle();
+   assert.equal(reads,2);assert.ok(dateInputs(r).every(n=>!n.props.checked));assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/không còn hợp lệ/);
+  }finally{pending.reject(Error('offline'));r.dispose()}
+ });
+}

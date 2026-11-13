@@ -6,7 +6,7 @@ import vm from "node:vm";
 const require=createRequire(import.meta.url),ts=require("typescript");
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 const compile=path=>ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-function module(path,stub=()=>({})){const exports={};vm.runInNewContext(compile(path),{exports,require:name=>name==="./store-limits"?module("src/store/store-limits.ts"):stub(name)});return exports}
+function module(path,stub=()=>({})){const exports={};vm.runInNewContext(compile(path),{exports,require:name=>name==="./store-delivery.ts"?module("src/store/store-delivery.ts"):name==="./store-limits"?module("src/store/store-limits.ts"):stub(name)});return exports}
 const jsx={jsx:(type,props,key)=>({type,props,key}),jsxs:(type,props,key)=>({type,props,key})};
 const nodes=tree=>!tree||typeof tree!=="object"?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return {promise,resolve}};
@@ -90,7 +90,7 @@ test("guest validator rejects names beyond the shared CSA-compatible limit",()=>
 test("checkout intent persists exact payload by owner, and only definite rejection can release it",()=>{
  const {readCheckoutIntent,saveCheckoutIntent,clearCheckoutIntent,checkoutDefinitelyRejected}=module("src/store/checkout-intent.ts");
  const map=new Map(),storage={getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value),removeItem:key=>map.delete(key)};
- const attempt={owner:"A",payload:{idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",shipping_address_updated_at:"2026-11-01T00:00:00Z",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:2,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:5,expected_quota_quantity:0}],expected_shipping_fee_vnd:23000,expected_total_vnd:123000}};
+ const attempt={owner:"A",payload:{delivery_date:"2026-11-14",idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",shipping_address_updated_at:"2026-11-01T00:00:00Z",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:2,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:5,expected_quota_quantity:0}],expected_shipping_fee_vnd:23000,expected_total_vnd:123000}};
  saveCheckoutIntent(storage,attempt);
  assert.deepEqual(JSON.parse(JSON.stringify(readCheckoutIntent(storage,"A"))),attempt);
  assert.equal(readCheckoutIntent(storage,"B"),null);
@@ -102,11 +102,11 @@ test("checkout intent persists exact payload by owner, and only definite rejecti
 
 test("stored checkout validation rejects incomplete or malformed strict contract payloads",()=>{
  const {isCheckoutPayload,checkoutDefinitelyRejected}=module("src/store/checkout-intent.ts");
- const payload={idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:1,use_quota:false,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}],expected_shipping_fee_vnd:30000,expected_total_vnd:70000,guest:{recipient_name:"An",phone_number:"+84901234567",province_code:"66",ward_code:"22015",address:"Số 12"}};
+ const payload={delivery_date:"2026-11-14",idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:1,use_quota:false,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}],expected_shipping_fee_vnd:30000,expected_total_vnd:70000,guest:{recipient_name:"An",phone_number:"+84901234567",province_code:"66",ward_code:"22015",address:"Số 12"}};
  assert.equal(isCheckoutPayload(payload,true),true);
  for(const field of ["idempotency_key","locale","lines","expected_shipping_fee_vnd","expected_total_vnd","guest"]){const bad=structuredClone(payload);delete bad[field];assert.equal(isCheckoutPayload(bad,true),false,field)}
  for(const field of Object.keys(payload.lines[0])){const bad=structuredClone(payload);delete bad.lines[0][field];assert.equal(isCheckoutPayload(bad,true),false,field)}
- assert.equal(isCheckoutPayload({...payload,idempotency_key:"same-key"},true),false);
+ assert.equal(isCheckoutPayload({...payload,delivery_date:"2026-11-14",idempotency_key:"same-key"},true),false);
  assert.equal(isCheckoutPayload({...payload,expected_total_vnd:NaN},true),false);
  assert.equal(isCheckoutPayload({...payload,unexpected:"field"},true),false);
  assert.equal(isCheckoutPayload({...payload,lines:[{...payload.lines[0],quantity:1000}]},true),false);
@@ -132,10 +132,10 @@ test("Account recipient controls keep 200 characters while guest controls use 15
 test("pending owner blocks replacing another account's unresolved request without exposing its payload",()=>{
  const {saveCheckoutIntent,readCheckoutIntent,pendingCheckoutOwner,clearCheckoutIntent}=module("src/store/checkout-intent.ts");
  const values=new Map(),storage={get length(){return values.size},key:i=>[...values.keys()][i]??null,getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
- const payload={idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",shipping_address_updated_at:"2026-11-01T00:00:00Z",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:1,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:5,expected_quota_quantity:0}],expected_shipping_fee_vnd:0,expected_total_vnd:50000};
+ const payload={delivery_date:"2026-11-14",idempotency_key:"22222222-2222-4222-8222-222222222222",locale:"vi",shipping_address_updated_at:"2026-11-01T00:00:00Z",lines:[{product_id:"11111111-1111-4111-8111-111111111111",quantity:1,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:5,expected_quota_quantity:0}],expected_shipping_fee_vnd:0,expected_total_vnd:50000};
  saveCheckoutIntent(storage,{owner:"A",payload});
  assert.equal(pendingCheckoutOwner(storage,"B"),"A");assert.equal(readCheckoutIntent(storage,"B"),null);
- assert.throws(()=>saveCheckoutIntent(storage,{owner:"B",payload:{...payload,idempotency_key:"33333333-3333-4333-8333-333333333333"}}),/conflicting_checkout_intents/);
+ assert.throws(()=>saveCheckoutIntent(storage,{owner:"B",payload:{...payload,delivery_date:"2026-11-14",idempotency_key:"33333333-3333-4333-8333-333333333333"}}),/conflicting_checkout_intents/);
  assert.equal(readCheckoutIntent(storage,"A").payload.idempotency_key,payload.idempotency_key);
  clearCheckoutIntent(storage,"A");assert.equal(pendingCheckoutOwner(storage,"B"),null);
 });

@@ -1,12 +1,12 @@
 import {csaHundredths} from "../lib/csa-units.ts";
 import type {StoreLocale,StoreProductCard} from "./store-model";
-import type {StoreVoucherPreview} from "./store-order-service";
+import type {StoreCheckoutQuote} from "./store-order-service";
 
 export type StoreQuotaAvailability={productId:string;availableUnits:number};
 export type StoreQuoteLine={product:StoreProductCard;quantity:number;useQuota:boolean;quotaQuantity:number;quotaUnits:number;cashQuantity:number;cashSubtotalVnd:number};
-export type StoreQuote={lines:StoreQuoteLine[];goodsValueVnd:number;quotaValueVnd:number;cashSubtotalVnd:number;shippingFeeVnd:number;shippingDiscountReason:string|null;totalVnd:number};
+export type StoreQuote={lines:StoreQuoteLine[];goodsValueVnd:number;quotaValueVnd:number;cashSubtotalVnd:number};
 
-export function buildStoreQuote(input:{products:StoreProductCard[];quantities:Record<string,number>;useQuota:Record<string,boolean>;quota:StoreQuotaAvailability[];shippingFeeVnd:number;hasActiveCsa:boolean}):StoreQuote{
+export function buildStoreQuote(input:{products:StoreProductCard[];quantities:Record<string,number>;useQuota:Record<string,boolean>;quota:StoreQuotaAvailability[];hasActiveCsa:boolean}):StoreQuote{
  const balances=new Map(input.quota.map(item=>[item.productId,csaHundredths(item.availableUnits)]));
  let goodsValueVnd=0,quotaValueVnd=0;
  const lines=input.products.flatMap(product=>{
@@ -24,23 +24,23 @@ export function buildStoreQuote(input:{products:StoreProductCard[];quantities:Re
   return [{product,quantity,useQuota,quotaQuantity,quotaUnits:quotaHundredths/100,cashQuantity,cashSubtotalVnd}];
  });
  const cashSubtotalVnd=lines.reduce((sum,line)=>sum+line.cashSubtotalVnd,0);
- const freeShipping=input.hasActiveCsa&&lines.some(line=>line.product.csa_quota_group!==null);
- const shippingFeeVnd=freeShipping?0:input.shippingFeeVnd;
- return {lines,goodsValueVnd,quotaValueVnd,cashSubtotalVnd,shippingFeeVnd,shippingDiscountReason:freeShipping?"active_csa_with_csa_product":null,totalVnd:cashSubtotalVnd+shippingFeeVnd};
+ return {lines,goodsValueVnd,quotaValueVnd,cashSubtotalVnd};
 }
 
 type GuestAddress={recipient_name:string;phone_number:string;province_code:string;ward_code:string;address:string};
-export function checkoutPayload(input:{quote:StoreQuote|Pick<StoreQuote,"lines"|"shippingFeeVnd"|"totalVnd">;locale:StoreLocale;idempotencyKey:string;shippingAddressUpdatedAt?:string;guest?:GuestAddress;voucher?:StoreVoucherPreview}){
- if(input.voucher){
-  if(input.guest)throw Error("invalid_checkout_intent");
-  return {idempotency_key:input.idempotencyKey,locale:input.locale,
-   lines:input.voucher.lines.map(line=>({...line})),
-   expected_shipping_fee_vnd:input.voucher.shippingFeeVnd,expected_total_vnd:input.voucher.totalVnd,
-   shipping_address_updated_at:input.voucher.shippingAddressUpdatedAt,
-   coupon_code:input.voucher.coupon.code,expected_voucher_quote:input.voucher.voucherQuote};
- }
- return {idempotency_key:input.idempotencyKey,locale:input.locale,
-  lines:input.quote.lines.map(line=>({product_id:line.product.id,quantity:line.quantity,use_quota:line.useQuota,expected_unit_price_vnd:line.product.retail_price_vnd,expected_available_quantity:line.product.available_quantity,expected_quota_quantity:line.quotaQuantity})),
-  expected_shipping_fee_vnd:input.quote.shippingFeeVnd,expected_total_vnd:input.quote.totalVnd,
-  ...(input.shippingAddressUpdatedAt?{shipping_address_updated_at:input.shippingAddressUpdatedAt}:{}),...(input.guest?{guest:input.guest}:{})};
+export function checkoutPayload(input:{quote:StoreCheckoutQuote;locale:StoreLocale;idempotencyKey:string;guest?:GuestAddress}){
+ const q=input.quote;
+ if(input.guest&&(q.coupon||q.shippingAddressUpdatedAt)||!input.guest&&!q.shippingAddressUpdatedAt)throw Error("invalid_checkout_intent");
+ return {idempotency_key:input.idempotencyKey,locale:input.locale,delivery_date:q.deliveryDate,
+  lines:q.lines.map(line=>({...line})),expected_shipping_fee_vnd:q.shippingFeeVnd,expected_total_vnd:q.totalVnd,
+  ...(q.shippingAddressUpdatedAt?{shipping_address_updated_at:q.shippingAddressUpdatedAt}:{}),...(input.guest?{guest:input.guest}:{}),
+  ...(q.coupon&&q.voucherQuote?{coupon_code:q.coupon.code,expected_voucher_quote:q.voucherQuote}:{})};
+}
+
+// Compare the values the buyer reviewed, not the opaque voucher token or only the final total.
+export function matchesCheckoutEstimate(server:StoreCheckoutQuote,input:{quote:StoreQuote;deliveryDate:string;shippingFeeVnd:number;discountAmountVnd:number;totalVnd:number;voucherCode:string}){
+ return server.deliveryDate===input.deliveryDate&&server.subtotalVnd===input.quote.cashSubtotalVnd&&server.shippingFeeVnd===input.shippingFeeVnd&&server.discountAmountVnd===input.discountAmountVnd&&server.totalVnd===input.totalVnd&&(server.coupon?.code??'')===input.voucherCode&&server.lines.length===input.quote.lines.length&&server.lines.every(line=>{
+  const shown=input.quote.lines.find(item=>item.product.id===line.product_id);
+  return !!shown&&line.quantity===shown.quantity&&line.use_quota===shown.useQuota&&line.expected_unit_price_vnd===shown.product.retail_price_vnd&&line.expected_available_quantity===shown.product.available_quantity&&line.expected_quota_quantity===shown.quotaQuantity;
+ });
 }

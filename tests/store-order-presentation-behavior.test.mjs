@@ -57,6 +57,7 @@ function detailModule(settings=null){
   vm.runInNewContext(compile("src/store/store-format.ts"),{exports:format,require:()=>({})});
   vm.runInNewContext(compile("src/components/BankTransferPanel.tsx"),{exports:shared,require:name=>name==="@/state/NFVContext"?{useNFV:()=>({copyToClipboard:async()=>true})}:name==="react"?h.react:name==="react/jsx-runtime"?jsx:name==="@/components/UI"?{Icon:"Icon"}:{copyTextToClipboard:async()=>{}}});
   vm.runInNewContext(compile("src/screens/store/StoreOrderDetail.tsx"),{exports,URL,URLSearchParams,Date,crypto,window:{setInterval:()=>1,clearInterval(){}},require:name=>{
+    if(name==="@/store/store-delivery"){const value={};vm.runInNewContext(compile("src/store/store-delivery.ts"),{exports:value,Date,Intl});return value;}
     if(name==="@/state/NFVContext")return {useNFV:()=>({copyToClipboard:async()=>true})};
     if(name==="@/components/store/StorePrimitives")return primitives;
     if(name==="@/components/BankTransferPanel")return shared;
@@ -258,5 +259,17 @@ test('mobile order parent remains an explicit localized link for both origins',(
   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:order().id,locale,initialOrder:order(),returnTo});
   const link=all(tree).find(n=>n.type==='a'&&n.props.className==='mobile-order-back');
   assert.ok(link);assert.equal(link.props.href,returnTo==='csa'?`/account/${locale}?tab=csa#csa-points-history`:`/account/${locale}?tab=orders`);
+ }
+});
+
+test('known CSA shipping reasons are localized without exposing implementation codes',()=>{
+ const {storeShippingDiscountReason}=presentation();
+ for(const reason of ['csa_companion_delivery','csa_round','active_csa_with_csa_product'])for(const locale of ['vi','en']){const label=storeShippingDiscountReason(reason,locale);assert.ok(label.length);assert.notEqual(label,reason);}
+ assert.equal(storeShippingDiscountReason('csa_round','vi'),'Giao hàng trong gói CSA');assert.equal(storeShippingDiscountReason('csa_companion_delivery','en'),'Free delivery with CSA');
+});
+test('member and guest retail detail use saved delivery dates, legacy remains blank',()=>{
+ for(const access of ['member','guest'])for(const date of ['2026-12-31',null]){
+  const d=detailModule();const tree=d.h.render(d.exports.StoreOrderDetail,{id:'order',access,locale:'vi',initialOrder:order({deliveryDate:date})});
+  assert.match(text(tree),/Ngày giao hàng/);assert.ok(text(tree).includes(date?'31/12/2026':'—'));
  }
 });

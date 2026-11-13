@@ -26,6 +26,7 @@ function hookHarness(){
 function viewHarness(getStoreOrders,storage){
   const hooks=hookHarness(),exports={};
   vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,console,Date,...(storage?{window:{sessionStorage:storage,addEventListener(){},removeEventListener(){},matchMedia:()=>({matches:false})},document:{visibilityState:"visible"}}:{}),require:name=>{
+    if(name==="@/store/store-delivery"){const exp={};vm.runInNewContext(ts.transpileModule(readFileSync("src/store/store-delivery.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,Intl,Date});return exp;}
     if(name==="@/store/use-buy-again")return {useBuyAgain:()=>({start(){},busy:null,error:""})};
     if(name==="@/account/orders-view-state"){
       const view={};vm.runInNewContext(ts.transpileModule(readFileSync(new URL("../src/account/orders-view-state.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:view,window:storage?{sessionStorage:storage}:undefined});return view;

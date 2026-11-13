@@ -18,7 +18,11 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
   if(cache.has(path))return cache.get(path);
   const exports={};cache.set(path,exports);
   vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,URLSearchParams,require:name=>{
-   if(name==="react")return {...React,useState:initial=>{const i=hook++;const value=i<seeds.length?seeds[i]:i===12?`${authenticated?"test-user":"guest"}:vi:0`:i===13?`${authenticated?"test-user":"guest"}:66:1:0`:i===18?(authenticated?"test-user":"guest"):i===26?true:initial;return React.useState(!cart&&path==="src/screens/Checkout.tsx"?value:initial)}};
+   if(name==="@/account/account-api")return load("src/account/account-api.ts");
+   if(name==="@/store/use-checkout-delivery")return {useCheckoutDelivery:()=>({date:"2026-11-14",calendar:null,calendarLoading:false,calendarError:null,invalidDate:false,quote:null,error:null,quoteLoading:false,select(){},refresh(){},retryQuote(){}})};
+   if(name==="@/components/store/StoreDeliveryDates")return load("src/components/store/StoreDeliveryDates.tsx");
+   if(name==="@/store/store-delivery")return load("src/store/store-delivery.ts");
+   if(name==="react")return {...React,useState:initial=>{const i=hook++;const value=i<seeds.length?seeds[i]:i===12?`${authenticated?"test-user":"guest"}:vi:0`:i===13?`${authenticated?"test-user":"guest"}:66:1:0`:i===18?(authenticated?"test-user":"guest"):i===27?true:initial;return React.useState(!cart&&path==="src/screens/Checkout.tsx"?value:initial)}};
    if(name==="react/jsx-runtime")return jsx;
    if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
     if(name==="@/auth/AuthProvider")return {useAuth:()=>({status:authenticated?"authenticated":"guest",session:authenticated?{subject:"test-user"}:null})};
@@ -52,7 +56,7 @@ test("guest checkout hides CSA even with stale membership/quota state and uses e
  assert.match(html,/checkout-flow-main/);
  assert.match(html,/checkout-flow-actions store-checkout-actions/);
  assert.match(html,/3 × 1 kg/);
- assert.match(html,/150\.000đ/);
+ assert.doesNotMatch(html,/150\.000đ/); // No payable total before an authoritative BE quote.
 });
 
 test("CSA member may select partial quota while a cash-only customer sees no unused benefit row",()=>{

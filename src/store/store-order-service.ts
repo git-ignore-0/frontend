@@ -1,8 +1,9 @@
+import {parseStoreDeliveryCalendar} from "./store-delivery.ts";
 import {parseStoreProductDetail} from "./store-model";
 import {csaUnits} from "../lib/csa-units.ts";
 import {AccountApiError} from "@/account/account-api";
 import type {Locale} from "@/types";
-import {parseStoreOrder,parseStoreVoucherPreview,type StoreVoucherPreview,type StoreOrder,type StoreOrderStatus} from "./store-order-model";
+import {parseStoreOrder,parseStoreCheckoutQuote,type StoreCheckoutQuote,type StoreOrder,type StoreOrderStatus} from "./store-order-model";
 import type {StoreQuotaAvailability} from "./store-quote";
 type R=Record<string,unknown>;
 async function api(path:string,init?:RequestInit){let response:Response;try{response=await fetch(`/api/store-orders/${path}`,{...init,credentials:"same-origin",cache:"no-store",headers:{...(init?.body?{"Content-Type":"application/json","X-NFV-Public-Request":"1"}:{}),...init?.headers}})}catch{throw new AccountApiError("network_error",0)}const payload=await response.json().catch(()=>null) as R|null;if(!response.ok){const errors=Array.isArray(payload?.errors)?payload?.errors:[],first=errors[0] as R|undefined,context=first?.context&&typeof first.context==="object"&&!Array.isArray(first.context)?first.context as R:undefined;throw new AccountApiError(typeof first?.code==="string"?first.code:typeof payload?.error==="string"?payload.error:"request_failed",response.status,context)}if(!payload||typeof payload!=="object")throw new AccountApiError("invalid_response",502);return payload}
@@ -44,8 +45,13 @@ export async function prepareBuyAgain(id:string,locale:Locale):Promise<BuyAgainL
  });
 }
 
-export type {StoreVoucherPreview,StoreCouponSnapshot,StoreVoucherExpectedLine} from "./store-order-model";
-export async function previewStoreVoucher(input:{locale:Locale;coupon_code:string;lines:{product_id:string;quantity:number;use_quota:boolean}[]}):Promise<StoreVoucherPreview>{
- const payload=await api("voucher-preview",{method:"POST",body:JSON.stringify(input)});
- try{return parseStoreVoucherPreview(payload.data)}catch{throw new AccountApiError("invalid_response",502)}
+export type {StoreCheckoutQuote,StoreCouponSnapshot,StoreVoucherExpectedLine} from "./store-order-model";
+export type StoreQuoteRequest={delivery_date:string;locale:Locale;coupon_code?:string;guest?:{recipient_name:string;phone_number:string;province_code:string;ward_code:string;address:string};lines:{product_id:string;quantity:number;use_quota:boolean}[]};
+export async function getStoreQuote(input:StoreQuoteRequest):Promise<StoreCheckoutQuote>{
+ const payload=await api("quote",{method:"POST",body:JSON.stringify(input)});
+ try{return parseStoreCheckoutQuote(payload.data)}catch{throw new AccountApiError("invalid_response",502)}
+}
+export async function getStoreDeliveryDates(){
+ const payload=await api("delivery-dates");
+ try{return parseStoreDeliveryCalendar(payload.data)}catch{throw new AccountApiError("invalid_response",502)}
 }

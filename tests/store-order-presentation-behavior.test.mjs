@@ -150,7 +150,7 @@ test("order shares the checkout recipient and totals layout and renders the API 
 test("order breadcrumbs return to the entry source instead of the Store catalogue",()=>{
  for(const [returnTo,href,label] of [["csa","/account/vi?tab=csa#csa-points-history","Lịch sử điểm"],["orders","/account/vi?tab=orders","Đơn hàng của tôi"]]){
   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:order().id,locale:"vi",initialOrder:order(),returnTo});
-  const link=all(tree).find(node=>node.type==="a"&&node.props.href===href);
+  const link=all(tree).find(node=>node.type==="a"&&node.props.href===href&&node.props.className!=="mobile-order-back");
   assert.ok(link);assert.equal(link.props.children,label);
  }
 });
@@ -249,5 +249,14 @@ test('automatic CSA cancellation explains the reselection deadline in both local
   const value=order({status:'cancelled',paymentStatus:'not_required',payment:null,totalVnd:0,cancellationReason:'reselection_expired',csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest',status:'closed',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'cancelled',reopenUntil:'2026-11-19T03:00:00Z'}}});
   const {h,exports}=detailModule();const tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
   assert.ok(text(tree).includes(reason));assert.equal(text(tree).includes('reselection_expired'),false);
+ }
+});
+
+
+test('mobile order parent remains an explicit localized link for both origins',()=>{
+ for(const locale of ['vi','en'])for(const returnTo of ['orders','csa']){
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:order().id,locale,initialOrder:order(),returnTo});
+  const link=all(tree).find(n=>n.type==='a'&&n.props.className==='mobile-order-back');
+  assert.ok(link);assert.equal(link.props.href,returnTo==='csa'?`/account/${locale}?tab=csa#csa-points-history`:`/account/${locale}?tab=orders`);
  }
 });

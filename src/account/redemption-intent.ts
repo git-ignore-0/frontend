@@ -1,7 +1,7 @@
 export type RedemptionIntent = {
   giftId: string;
   idempotencyKey: string;
-  phase: "confirm" | "success" | "error";
+  phase: "confirm" | "pending" | "success" | "error";
 };
 
 export function beginRedemptionIntent(

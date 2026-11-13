@@ -285,7 +285,11 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     const epoch=++authEpoch.current;
     if(auth.status!=="checking"){
       const owner=auth.status==="authenticated"?auth.session?.subject??null:null;
-      if(giftIntentOwner.current!==owner){giftIntentOwner.current=owner;setUI(s=>({...s,giftIntent:null}));}
+      if(giftIntentOwner.current!==owner){
+        const previousOwner=giftIntentOwner.current;
+        giftIntentOwner.current=owner;
+        setUI(s=>({...s,giftIntent:null,...(previousOwner?{referrerDraft:"",referrerError:"",addressEditing:false,visible:{}}:{})}));
+      }
     }
     setUI(s=>({...s,busyKeys:[],error:""}));
     let active=true;

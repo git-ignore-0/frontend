@@ -13,7 +13,7 @@ function providerHarness({authenticated=false,initialResources=[]}={}){
  const jsx={jsx:(type,props)=>({type,props})};
  const react={createContext:()=>({Provider:"Provider"}),useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],value=>{states[i]=typeof value==="function"?value(states[i]):value}]},useRef(initial){const i=cursor++;return states[i]??={current:initial}},useEffect(fn){cursor++;effects.push(fn)},useMemo(fn,next){const i=cursor++;if(!deps[i]||next.some((value,j)=>value!==deps[i][j])){deps[i]=next;memos[i]=fn()}return memos[i]},useCallback(fn,next){return react.useMemo(()=>fn,next)}};
  const original={id:"p",slug:"rau",retail_price_vnd:40000,available_quantity:10};
- const responses=[],resourceRequests=[];
+ const responses=[],resourceRequests=[],redemptions=[];
  const auth={status:authenticated?"authenticated":"guest",session:authenticated?{subject:"owner"}:null};
  const load=(path,stub)=>{const exports={};vm.runInNewContext(compile(path),{exports,AbortController,window:{NFV_BACKEND:{}},fetch:(_url,options)=>{const response=deferred();responses.push({...response,signal:options.signal});return response.promise},require:stub});return exports};
  const snapshots=load("src/store/store-product-snapshots.ts",()=>({}));
@@ -23,6 +23,7 @@ function providerHarness({authenticated=false,initialResources=[]}={}){
   if(name==="@/store/store-limits")return load("src/store/store-limits.ts",()=>({}));
   if(name==="react")return react;
   if(name==="react/jsx-runtime")return jsx;
+  if(name==="@/account/rewards-service")return {redeemGift:input=>{const response=deferred();redemptions.push({...response,input});return response.promise}};
   if(name==="@/account/csa-service")return {getCSA:()=>{const response=deferred();resourceRequests.push(response);return response.promise}};
   if(name==="@/auth/AuthProvider")return {useAuth:()=>auth};
   if(name==="@/auth/auth-service")return {isUnauthorized:error=>error?.status===401};
@@ -33,7 +34,7 @@ function providerHarness({authenticated=false,initialResources=[]}={}){
   return {};
  });
  const render=()=>{cursor=0;effects=[];return provider.NFVProvider({children:null}).props.value};
- return {auth,render,responses,original,resourceRequests,startAccountLoad:()=>effects.at(-1)()};
+ return {auth,render,responses,original,resourceRequests,redemptions,startAccountLoad:()=>effects.at(-1)()};
 }
 
 test("Provider requote invalidates old coordinator network response and publishes a ready authoritative snapshot",async()=>{
@@ -191,7 +192,7 @@ test("an old gift callback cannot replace a new owner's in-flight intent",async(
  const nextIntent={...gift.intent,idempotencyKey:"22222222-2222-4222-8222-222222222222"};
  gift.read().patch({giftIntent:nextIntent});gift.confirm().props.onClick();
  gift.requests[0].resolve({accepted:true,rewards:gift.rewards(90)});await tick();let context=gift.read();
- assert.equal(context.ui.giftIntent.idempotencyKey,nextIntent.idempotencyKey);assert.equal(context.ui.giftIntent.phase,"confirm");assert.equal(context.data.rewards.balance,200);assert.ok(context.ui.busyKeys.includes("gift:redeem"));
+ assert.equal(context.ui.giftIntent.idempotencyKey,nextIntent.idempotencyKey);assert.equal(context.ui.giftIntent.phase,"pending");assert.equal(context.data.rewards.balance,200);assert.ok(context.ui.busyKeys.includes("gift:redeem"));
  gift.requests[1].resolve({accepted:true,rewards:gift.rewards(190)});await tick();context=gift.read();
  assert.equal(context.ui.giftIntent.phase,"success");assert.equal(context.data.rewards.balance,190);
 });
@@ -199,7 +200,7 @@ test("an old gift callback cannot replace a new owner's in-flight intent",async(
 test("duplicate gift clicks do not create an error and a real failure retries the same key",async()=>{
  const h=providerHarness({authenticated:true});h.render();h.startAccountLoad();await tick();const gift=giftHarness(h),button=gift.confirm();
  button.props.onClick();button.props.onClick();await tick();
- assert.equal(gift.requests.length,1);assert.equal(gift.read().ui.giftIntent.phase,"confirm");
+ assert.equal(gift.requests.length,1);assert.equal(gift.read().ui.giftIntent.phase,"pending");
  gift.requests[0].reject(Error("offline"));await tick();assert.equal(gift.read().ui.giftIntent.phase,"error");
  gift.confirm().props.onClick();assert.equal(gift.requests[1].arg.idempotencyKey,gift.requests[0].arg.idempotencyKey);
  gift.requests[1].resolve({accepted:true,rewards:gift.rewards(90)});await tick();assert.equal(gift.read().ui.giftIntent.phase,"success");
@@ -341,4 +342,47 @@ test("authoritative unavailable state cancels an older product refresh without d
  const h=providerHarness();let context=h.render();context.retryCartProduct("p");const old=h.responses[0];
  context.markCartProductsUnavailable(["p"]);context=h.render();assert.equal(old.signal.aborted,true);assert.equal(context.ui.cartProductState.p,"unavailable");assert.equal(context.ui.cart.p,1);
  old.resolve({ok:true,status:200,json:async()=>({...h.original,retail_price_vnd:99000})});await tick();context=h.render();assert.equal(context.ui.cartProductState.p,"unavailable");assert.equal(context.data.storeProducts.p.retail_price_vnd,40000);
+});
+
+
+test('account owner changes clear private UI drafts but same-owner revalidation preserves them',async()=>{
+ const h=providerHarness({authenticated:true});h.render();h.startAccountLoad();await tick();let ctx=h.render();
+ ctx.patch({referrerDraft:'ZXCVBN2345',referrerError:'old error',addressEditing:true,visible:{referrals:14}});
+ h.startAccountLoad();await tick();ctx=h.render();assert.equal(ctx.ui.referrerDraft,'ZXCVBN2345');
+ h.auth.session={subject:'new-owner'};h.render();h.startAccountLoad();await tick();ctx=h.render();
+ assert.equal(ctx.ui.referrerDraft,'');assert.equal(ctx.ui.referrerError,'');assert.equal(ctx.ui.addressEditing,false);assert.equal(Object.keys(ctx.ui.visible).length,0);
+});
+
+
+// Exercise the real confirmation task and real provider epoch changes together.
+function giftComponent(ctx,name,props={}){
+ const exports={},source=readFileSync(new URL('../src/screens/AccountBenefits.tsx',import.meta.url),'utf8')+'\nexport {GiftModal,RewardsGifts};';
+ const jsx=(type,props)=>({type,props});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require(module){
+  if(module==='react')return {useRef:current=>({current}),useState:v=>[v,()=>{}],useEffect:fn=>fn()};
+  if(module==='react/jsx-runtime')return {jsx,jsxs:jsx};
+  if(module==='@/state/NFVContext')return {useNFV:()=>ctx};
+  if(module==='@/components/UI')return {Button:'Button',localized:x=>x.name};
+  if(module==='@/components/overlays/useOverlayDialog')return {useOverlayDialog(){}};
+  if(module==='@/account/redemption-intent')return {redemptionRequest:intent=>({giftId:intent.giftId,idempotencyKey:intent.idempotencyKey})};
+  if(module==='@/data/account-copy')return {copyText:(_,key)=>key};
+  return {};
+ }});
+ return exports[name](props);
+}
+const giftNodes=tree=>!tree||typeof tree!=='object'?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(giftNodes)];
+test('submitted redemption retains its key through same-owner auth reload and retries idempotently',async()=>{
+ const h=providerHarness({authenticated:true});h.render();h.startAccountLoad();await tick();let ctx=h.render();
+ const rewards={balance:1000,gifts:[{id:'gift',name:'Gift',points:100}],redemptions:[]};
+ ctx.setData(s=>({...s,rewards}));ctx.patch({giftIntent:{giftId:'gift',idempotencyKey:'original-key',phase:'confirm'}});ctx=h.render();
+ const confirm=()=>giftNodes(giftComponent(ctx,'GiftModal')).find(n=>n.type==='Button'&&n.props.loading!==undefined).props.onClick();
+ confirm();ctx=h.render();assert.equal(ctx.ui.giftIntent.phase,'pending');assert.equal(h.redemptions.length,1);
+ h.auth.session={subject:'owner',profile:{name:'Updated elsewhere'}};h.render();h.startAccountLoad();await tick();ctx=h.render();
+ assert.equal(ctx.ui.busyKeys.includes('gift:redeem'),false);
+ giftComponent(ctx,'RewardsGifts',{active:false});ctx=h.render();assert.equal(ctx.ui.giftIntent.idempotencyKey,'original-key');
+ ctx.setData(s=>({...s,rewards}));ctx=h.render();confirm();ctx=h.render();assert.equal(h.redemptions.length,2);
+ assert.equal(h.redemptions[0].input.idempotencyKey,h.redemptions[1].input.idempotencyKey);
+ h.redemptions[0].resolve({accepted:true,balance:900});await tick();ctx=h.render();assert.equal(ctx.ui.giftIntent.phase,'pending','obsolete epoch must not publish success');
+ h.redemptions[1].resolve({accepted:true,balance:900});await tick();ctx=h.render();assert.equal(ctx.ui.giftIntent.phase,'success');
+ giftComponent(ctx,'RewardsGifts',{active:false});assert.equal(h.render().ui.giftIntent,null);
 });

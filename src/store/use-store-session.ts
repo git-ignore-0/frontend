@@ -9,12 +9,12 @@ export function useStoreSession(){
  const auth=useAuth();
  const current=useRef(auth),mounted=useRef(true);
  useLayoutEffect(()=>{mounted.current=true;current.current=auth;return()=>{mounted.current=false}},[auth]);
- return useCallback(async<T,>(task:()=>Promise<T>,onUnauthorized?:()=>void):Promise<T>=>{
+ return useCallback(async<T,>(task:()=>Promise<T>,onUnauthorized?:()=>void,isCurrent:()=>boolean=()=>true):Promise<T>=>{
   const started=current.current,session=started.status==="authenticated"?started.session:null,owner=session?.subject;
   try{return await task()}
   catch(error){
    const latest=current.current;
-   if(mounted.current&&owner&&latest.status==="authenticated"&&latest.session===session&&latest.session?.subject===owner&&isUnauthorized(error)){onUnauthorized?.();latest.expire();}
+   if(isCurrent()&&mounted.current&&owner&&latest.status==="authenticated"&&latest.session===session&&latest.session?.subject===owner&&isUnauthorized(error)){onUnauthorized?.();latest.expire();}
    throw error;
   }
  },[]);

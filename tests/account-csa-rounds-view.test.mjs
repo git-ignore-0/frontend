@@ -11,9 +11,11 @@ function moduleAt(file,imports,events={}){const exports={};vm.runInNewContext(ts
 const treeNodes=tree=>!tree||typeof tree!=='object'?[]:[tree,...[tree.props?.children,tree.props?.actions].flat(Infinity).flatMap(treeNodes)];
 const copy={title:'Rounds',rounds:'rounds',show:'Expand',hide:'Collapse',loading:'Loading',previous:'Previous',next:'Next',retry:'Retry'};
 const round={id:'r',name:'Round',serverTime:'2026-11-20T08:00:00Z'};
-function listHarness(total,hasMembership=true,selectionRequest=async()=>null,listRequest=null){const h=hooks(),calls={list:0,selection:0},owner='member',events={},ui={locale:'vi',page:'account',accountTab:'csa',accountHubOpen:false};
- const imports={react:h.react,'@/components/UI':{Button:'Button',DataState:'DataState',Icon:'Icon',Section:'Section'},'@/state/NFVContext':{useNFV:()=>({ui,data:{csa:{active:hasMembership?{status:'active'}:null}},accountSessionKey:owner})},'@/auth/AuthProvider':{useAuth:()=>({status:'authenticated',session:{subject:owner}})},'@/account/csa-rounds-service':{async getRoundsPage(){calls.list++;if(listRequest)return listRequest();return {items:total?[round,...(total>1?[{...round,id:'s'}]:[])]:[],total,pageSize:20}},async getRoundSelection(id){calls.selection++;return selectionRequest(id)}},'@/data/csa-rounds-copy':{csaRoundsCopy:()=>copy,csaRoundError:()=> 'Failed'},'./csa-rounds-presentation':{roundsExpanded:(n,open)=>n===1||n>1&&open},'./CsaRoundItem':{CsaRoundItem:'RoundItem'}};
- const {AccountCsaRounds}=moduleAt('src/screens/account-csa/AccountCsaRounds.tsx',imports,events);let tree;async function settle(){for(let i=0;i<5;i++){tree=h.render(AccountCsaRounds);h.flush();await new Promise(r=>setImmediate(r))}return tree};return {h,calls,settle,events,ui};}
+function listHarness(total,hasMembership=true,selectionRequest=async()=>null,listRequest=null){const h=hooks(),calls={list:0,selection:0},owner='member',events={},auth={status:'authenticated',session:{subject:'member'},expire(){calls.expired=(calls.expired??0)+1}},ui={locale:'vi',page:'account',accountTab:'csa',accountHubOpen:false};
+ const imports={react:h.react,'@/components/UI':{Button:'Button',DataState:'DataState',Icon:'Icon',Section:'Section'},'@/state/NFVContext':{useNFV:()=>({ui,data:{csa:{active:hasMembership?{status:'active'}:null}},accountSessionKey:owner})},'@/auth/AuthProvider':{useAuth:()=>auth},'@/account/csa-rounds-service':{async getRoundsPage(){calls.list++;if(listRequest)return listRequest();return {items:total?[round,...(total>1?[{...round,id:'s'}]:[])]:[],total,pageSize:20}},async getRoundSelection(id){calls.selection++;return selectionRequest(id)}},'@/data/csa-rounds-copy':{csaRoundsCopy:()=>copy,csaRoundError:()=> 'Failed'},'./csa-rounds-presentation':{roundsExpanded:(n,open)=>n===1||n>1&&open},'./CsaRoundItem':{CsaRoundItem:'RoundItem'}};
+ h.react.useLayoutEffect=h.react.useEffect;
+ imports['@/store/use-store-session']=moduleAt('src/store/use-store-session.ts',{react:h.react,'@/auth/AuthProvider':{useAuth:()=>auth},'@/auth/auth-service':{isUnauthorized:e=>e?.status===401}});
+ const {AccountCsaRounds}=moduleAt('src/screens/account-csa/AccountCsaRounds.tsx',imports,events);let tree;async function settle(){for(let i=0;i<5;i++){tree=h.render(AccountCsaRounds);h.flush();await new Promise(r=>setImmediate(r))}return tree};return {h,calls,settle,events,ui,auth};}
 test('one round renders directly and fetches only its selection',async()=>{const v=listHarness(1);try{const tree=await v.settle();assert.equal(treeNodes(tree).filter(n=>n.type==='RoundItem').length,1);assert.equal(v.calls.selection,1);assert.equal(treeNodes(tree).filter(n=>n.type==='Button'&&n.props['aria-expanded']!==undefined).length,0)}finally{v.h.dispose()}});
 test('multiple rounds start collapsed, then expand without fetching catalog',async()=>{const v=listHarness(2);try{let tree=await v.settle();assert.equal(v.calls.selection,0);assert.equal(treeNodes(tree).filter(n=>n.type==='RoundItem').length,0);const expand=treeNodes(tree).find(n=>n.type==='button'&&n.props['aria-controls']);assert.equal(expand.props['aria-expanded'],false);assert.ok(JSON.stringify(expand).includes('Rounds'));assert.equal(treeNodes(tree).filter(n=>n.type==='Button').length,0);expand.props.onClick();tree=await v.settle();assert.equal(v.calls.selection,2);assert.equal(treeNodes(tree).filter(n=>n.type==='RoundItem').length,2);assert.equal(treeNodes(tree).find(n=>n.type==='button'&&n.props['aria-controls']).props['aria-expanded'],true)}finally{v.h.dispose()}});
 test('no membership and no rounds does not add an empty section',async()=>{const v=listHarness(0,false);try{const tree=await v.settle();assert.equal(tree,null);assert.equal(v.calls.selection,0)}finally{v.h.dispose()}});
@@ -115,4 +117,21 @@ test('returning to CSA refetches selection when list revalidation fails',async()
   const item=treeNodes(tree).find(n=>n.type==='RoundItem');assert.equal(item.props.loading,false);assert.equal(item.props.selection?.revision,2);
   assert.ok(treeNodes(tree).some(n=>n.props?.role==='alert'));
  }finally{v.h.dispose()}
+});
+
+test('current rounds and preview 401 expire auth, non-401 errors do not',async()=>{
+ for(const preview of [false,true]){
+  const error=Object.assign(Error('session expired'),{status:401});
+  const v=listHarness(1,true,async()=>{if(preview)throw error;return null},preview?null:async()=>{throw error});
+  try{await v.settle();assert.equal(v.calls.expired,1)}finally{v.h.dispose()}
+ }
+ const v=listHarness(1,true,async()=>null,async()=>{throw Object.assign(Error('offline'),{status:503})});
+ try{await v.settle();assert.equal(v.calls.expired??0,0)}finally{v.h.dispose()}
+});
+test('late 401 from replaced session or unmounted rounds cannot expire current auth',async()=>{
+ for(const dispose of [false,true]){
+  let reject;const v=listHarness(1,true,async()=>null,()=>new Promise((_,r)=>reject=r));
+  await v.settle();if(dispose)v.h.dispose();else {v.auth.session={subject:'member'};await v.settle()}
+  reject(Object.assign(Error('old session'),{status:401}));await v.settle();assert.equal(v.calls.expired??0,0);v.h.dispose();
+ }
 });

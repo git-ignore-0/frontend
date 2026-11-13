@@ -22,6 +22,13 @@ export function Account() {
   const authenticated=auth.status==="authenticated";
   const ownerReady=authenticated&&!!auth.session?.subject&&accountSessionKey===auth.session.subject;
   const [persistentTabs,setPersistentTabs]=useState<ReadonlyArray<AccountTab>>(()=>accountPersistentTabs([],activeTab));
+  const [mobile,setMobile]=useState(false);
+  useEffect(()=>{
+    const media=window.matchMedia("(max-width: 1023px)");
+    const update=()=>setMobile(media.matches);
+    update();media.addEventListener("change",update);
+    return()=>media.removeEventListener("change",update);
+  },[]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hubLinkRefs = useRef<Partial<Record<AccountTab,HTMLButtonElement|null>>>({});
   const nextFocus = useRef<"detail"|"hub"|null>(null);
@@ -84,7 +91,7 @@ export function Account() {
     if(tab==="address")return <AddressView/>;
     if(tab==="profile")return <ProfileView/>;
     if(tab==="csa-tracker")return null;
-    return <BenefitsView kind={tab}/>;
+    return <BenefitsView kind={tab} active={activeTab===tab&&!(mobile&&ui.accountHubOpen)}/>;
   };
   const renderedTabs=accountPersistentTabs(persistentTabs,activeTab);
 

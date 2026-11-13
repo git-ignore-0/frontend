@@ -34,7 +34,7 @@ function BenefitSection({title,description,children,className=""}:{title:string;
 function Empty({title,description,icon="leaf"}:{title:string;description?:string;icon?:string}){
  return <DataState title={title} description={description} icon={icon}/>;
 }
-export function BenefitsView({kind}:{kind:Exclude<AccountTab,"orders"|"address"|"profile">}){
+export function BenefitsView({kind,active=true}:{active?:boolean;kind:Exclude<AccountTab,"orders"|"address"|"profile">}){
  const {ui,refreshResource}=useNFV();
  const resource:Resource=kind==="csa"?"csa":kind==="referrals"?"referrals":"rewards";
  const status=ui.accountFetchState[resource];
@@ -42,9 +42,9 @@ export function BenefitsView({kind}:{kind:Exclude<AccountTab,"orders"|"address"|
  if(kind==="csa")return <CSABenefits status={status}/>;
  if(status==="loading")return <section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>;
  if(status==="error")return <section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource(resource)}}/></section>;
- if(kind==="referrals")return <ReferralBenefits/>;
+ if(kind==="referrals")return <ReferralBenefits active={active}/>;
  if(kind==="rewards")return <RewardsPoints/>;
- return <RewardsGifts/>;
+ return <RewardsGifts active={active}/>;
 }
 function Balance(){
  const {data,ui}=useNFV();const balance=data.rewards?.balance;
@@ -52,7 +52,7 @@ function Balance(){
  return <section className="acc-section benefit-section benefit-points-overview" aria-label={L("rewards.available")}><div className="benefit-balance"><span>{L("rewards.available")}</span><strong>{balance===null||balance===undefined||!Number.isFinite(Number(balance))?"—":Number(balance).toLocaleString(ui.locale==="en"?"en-US":"vi-VN")}<small> {L("common.points")}</small></strong></div></section>;
 }
 function useCursor(){
- const {ui,patch,setData,act,call,data}=useNFV();
+ const {ui,patch,setUI,setData,act,call,data}=useNFV();
  const [error,setError]=useState<Record<string,boolean>>({});
  const next=async(kind:"rewards"|"redemptions"|"gifts"|"referrals",cursor?:string|null)=>{
    const count=kind==="gifts"?8:7;
@@ -64,21 +64,34 @@ function useCursor(){
    if(!cursor)return;
    const method=kind==="referrals"?"getReferralsPage":kind==="gifts"?"getRewardGiftsPage":"getRewardHistoryPage";
    const arg=kind==="referrals"||kind==="gifts"?{cursor,limit:count}:{type:kind==="rewards"?"points":"redemptions",cursor,limit:count};
+   const initialMeta=kind==="referrals"?(data.referrals?.pagination?.invitees??data.referrals?.pagination?.referrals):data.rewards?.pagination?.[kind==="rewards"?"points":kind];
    const res=await act("page:"+kind,()=>call<Paged<unknown>>(method,arg));
    if(!res||!Array.isArray(res.items)){setError(s=>({...s,[kind]:true}));return;}
    if(!res.items.length&&res.nextCursor===cursor){setError(s=>({...s,[kind]:true}));return;}
-   if(kind==="referrals"){
-     const old=data.referrals;if(!old)return;
-     const items=old.invitees||[],known=new Set(items.map(x=>String(x.id)));
-     setData(s=>({...s,referrals:{...old,invitees:[...items,...(res.items as Invitee[]).filter(x=>x&&x.id&&!known.has(String(x.id)))],pagination:{...old.pagination,invitees:{nextCursor:res.nextCursor,total:res.total}}}}));
-   }else if(data.rewards){
+   // Preserve metadata updated while this request was pending; otherwise trust the server, including decreases.
+   const pageTotal=(previous?:number|null)=>previous!==initialMeta?.total?previous??res.total:res.total??previous;
+   setData(s=>{
+     if(kind==="referrals"){
+       const current=s.referrals;if(!current)return s;
+       const meta=current.pagination?.invitees??current.pagination?.referrals;
+       if(meta?.nextCursor!==undefined&&meta.nextCursor!==cursor)return s;
+       const items=current.invitees||[],known=new Set(items.map(x=>String(x.id)));
+       const added=(res.items as Invitee[]).filter(x=>{if(!x?.id||known.has(String(x.id)))return false;known.add(String(x.id));return true});
+       return {...s,referrals:{...current,invitees:[...items,...added],pagination:{...current.pagination,invitees:{nextCursor:res.nextCursor,total:pageTotal(meta?.total)}}}};
+     }
+     if(!s.rewards)return s;
      const name=kind==="gifts"?"gifts":kind==="rewards"?"history":"redemptions";
-     const oldEntries=(data.rewards[name]||[]) as {id:string}[],known=new Set(oldEntries.map(x=>String(x.id)));
-     const items=res.items.filter(x=>!!x && typeof x==="object" && "id" in x && !known.has(String(x.id)));
      const metaName=kind==="rewards"?"points":kind;
-     setData(s=>({...s,rewards:{...s.rewards,...{[name]:[...oldEntries,...items]},pagination:{...s.rewards?.pagination,[metaName]:{nextCursor:res.nextCursor,total:res.total}}}}));
-   }
-   patch({visible:{...ui.visible,[kind]:(ui.visible[kind]||count)+count}});setError(s=>({...s,[kind]:false}));
+     const meta=s.rewards.pagination?.[metaName];
+     if(meta?.nextCursor!==undefined&&meta.nextCursor!==cursor)return s;
+     const entries=s.rewards[name]||[],known=new Set(entries.map(x=>String(x.id)));
+     const items=res.items.filter((x):x is Gift | RewardEntry=>{
+       if(!x||typeof x!=="object"||!("id" in x)||!x.id||known.has(String(x.id)))return false;
+       known.add(String(x.id));return true;
+     });
+     return {...s,rewards:{...s.rewards,[name]:[...entries,...items],pagination:{...s.rewards.pagination,[metaName]:{nextCursor:res.nextCursor,total:pageTotal(meta?.total)}}}};
+   });
+   setUI(s=>({...s,visible:{...s.visible,[kind]:(s.visible[kind]||count)+count}}));setError(s=>({...s,[kind]:false}));
  };
  return {next,error,pending:ui.busyKeys};
 }
@@ -124,10 +137,14 @@ function GiftModal(){
  if(!gift||!intent)return null;
  const L=(key:string)=>copyText(ui.locale,key),done=intent.phase==="success",error=intent.phase==="error";
  const balance=Number(data.rewards?.balance||0),points=Number(gift.points||0);
- const setPhase=(phase:"error"|"success")=>setUI(state=>state.giftIntent?.idempotencyKey===intent.idempotencyKey?{...state,giftIntent:{...state.giftIntent,phase}}:state);
+ const setPhase=(phase:"pending"|"error"|"success")=>setUI(state=>state.giftIntent?.idempotencyKey===intent.idempotencyKey?{...state,giftIntent:{...state.giftIntent,phase}}:state);
  const confirm=()=>{
    const request=redemptionRequest(intent);
-   return act("gift:redeem",()=>call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",request),undefined,res=>{
+   return act("gift:redeem",()=>{
+     // This marker belongs to the intent, not the session-scoped busyKeys or component lifetime.
+     setPhase("pending");
+     return call<{accepted:boolean;rewards?:typeof data.rewards;balance?:number;redemption?:RewardEntry}>("redeemGift",request);
+   },undefined,res=>{
      if(res?.accepted!==true){setPhase("error");return;}
      setData(s=>({...s,rewards:res.rewards||(res.redemption&&typeof res.balance==="number"?applyRedemptionResult(s.rewards,{balance:res.balance,redemption:res.redemption}):s.rewards)}));
      setPhase("success");
@@ -141,15 +158,18 @@ function GiftModal(){
    <div className="benefit-modal-actions"><Button small variant="outline" disabled={ui.busyKeys.includes("gift:redeem")} onClick={close}>{done?L("common.close"):L("common.cancel")}</Button>{!done&&<Button small loading={ui.busyKeys.includes("gift:redeem")} onClick={()=>void confirm()}>{error?L("rewards.retry"):L("common.confirm")}</Button>}</div>
  </section></div>;
 }
-function RewardsGifts(){
- const {data,ui}=useNFV();const {next,error,pending}=useCursor();const L=(key:string)=>copyText(ui.locale,key);
+function RewardsGifts({active=true}:{active?:boolean}){
+ const {data,ui,patch}=useNFV();const {next,error,pending}=useCursor();const L=(key:string)=>copyText(ui.locale,key);
+ useEffect(()=>{
+   if(!active&&(ui.giftIntent?.phase==="confirm"||ui.giftIntent?.phase==="success")&&!ui.busyKeys.includes("gift:redeem"))patch({giftIntent:null});
+ },[active,ui.giftIntent?.phase,ui.busyKeys,patch]);
  const gifts=data.rewards?.gifts||[],meta=data.rewards?.pagination?.gifts||{};
  return <div className="benefits-page redeem-page"><Balance/>
    <BenefitSection title={L("rewards.gifts")} description={L("rewards.giftsDesc")}>
      <div data-benefit-gifts="true"><PagedList kind="gifts" items={gifts} pageSize={8} className="benefit-gift-list" emptyTitle={L("rewards.noGifts")}
        nextCursor={meta.nextCursor} total={meta.total} pending={pending.includes("page:gifts")} failed={!!error.gifts} onMore={()=>void next("gifts",meta.nextCursor)} render={g=><GiftRow gift={g} key={g.id}/>} /></div>
    </BenefitSection><BenefitSection title={L("rewards.history")}><div className="benefit-history-host"><RewardsHistory kind="redemptions"/></div></BenefitSection>
-   {ui.giftIntent&&<GiftModal/>}</div>;
+   {active&&ui.giftIntent&&<GiftModal/>}</div>;
 }
 export function QuotaRow({quota:q}:{quota:CSAQuota}){
  const {ui}=useNFV();
@@ -191,7 +211,7 @@ function CsaPointHistoryRow({usage:u}:{usage:CSAUsage}){
  const unit=ui.locale==="en"?(u.unitEn||u.unit||""):(u.unit||"");
  return <BenefitTransactionRow title={localized(u as unknown as Record<string,unknown>,"productName",ui.locale)||u.productName||"—"} meta={dateLabel(u.date)} action={u.orderId?<button type="button" className="acc-text-link" onClick={()=>navigate("order-detail",{productId:u.orderId,tab:"csa"})}>{copyText(ui.locale,"csa.viewOrder")}<Icon name="chev" size={13}/></button>:undefined} amount={`${reversed?"":"−"}${u.quantity} ${unit}`} badge={reversed?<MetricBadge>{ui.locale==="vi"?"Đã hoàn điểm":"Points restored"}</MetricBadge>:undefined}/>;
 }
-function ReferralBenefits(){
+function ReferralBenefits({active=true}:{active?:boolean}){
  const {data,ui,patch,call,act,setData,toast,copyToClipboard}=useNFV();const {next,error,pending}=useCursor();
  const ref=data.referrals||{},invites=ref.invitees||ref.history||[],person=ref.referrer;
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
@@ -215,7 +235,7 @@ function ReferralBenefits(){
  const count=Number.isFinite(Number(ref.invitedCount))?Number(ref.invitedCount):invites.length;
  return <div className="benefits-page referral-benefits-page">
    <section className="acc-section benefit-section referral-program-card" aria-label={L("ref.title")}>
-     <div className="referral-personal-row"><h2 className="referral-part-title">{L("ref.personalCode")}</h2><div className="referral-part-body">{code?<div className="benefit-ref-code-line"><code id="referralPersonalCode">{code}</code><div className="benefit-code-actions"><Button small variant="outline" onClick={()=>void copy()}>{L("ref.copy")}</Button><ReferralShareDialog code={code} locale={ui.locale}/></div></div>:<p className="referral-muted-note">{L("ref.noCode")}</p>}</div></div>
+     <div className="referral-personal-row"><h2 className="referral-part-title">{L("ref.personalCode")}</h2><div className="referral-part-body">{code?<div className="benefit-ref-code-line"><code id="referralPersonalCode">{code}</code><div className="benefit-code-actions"><Button small variant="outline" onClick={()=>void copy()}>{L("ref.copy")}</Button><ReferralShareDialog code={code} locale={ui.locale} active={active}/></div></div>:<p className="referral-muted-note">{L("ref.noCode")}</p>}</div></div>
      <section className="referral-earnings-row" aria-labelledby="referralEarningsTitle"><h2 id="referralEarningsTitle" className="referral-part-title">{L("ref.earningsTitle")}</h2><dl className="referral-earnings-list"><div><dt>{L("ref.successfulPoints")}</dt><dd>{L("ref.successfulLabel")}</dd></div><div><dt>{L("ref.secondOrderBonus")}</dt><dd>{L("ref.secondOrderLabel")}</dd></div></dl></section>
      <div className="referral-referrer-row"><h2 className="referral-part-title">{person?L("ref.attached"):L("ref.enterTitle")}</h2>
        <div className="referral-part-body">{person?<div className="referral-linked-details">{person.code&&<BenefitInfoRow title={L("ref.codeLabel")} value={person.code}/>} {person.name&&<BenefitInfoRow title={L("ref.attached")} value={person.name}/>} {person.linkedAt&&<BenefitInfoRow title={L("ref.dateLinked")} value={dateLabel(person.linkedAt)}/>}</div>:

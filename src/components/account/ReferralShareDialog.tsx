@@ -35,10 +35,11 @@ function isShareCancellation(error:unknown){
   return typeof error==="object"&&error!==null&&"name" in error&&error.name==="AbortError";
 }
 
-export function ReferralShareDialog({code,locale}:{code:string;locale:Locale}){
+export function ReferralShareDialog({code,locale,active=true}:{code:string;locale:Locale;active?:boolean}){
   const L=(key:string)=>copyText(locale,key);
   const {copyToClipboard,toast}=useNFV();
   const [open,setOpen]=useState(false);
+  if(!active&&open)setOpen(false);
   const [origin,setOrigin]=useState("");
   const [message,setMessage]=useState("");
   const mobileShareSurface=useSyncExternalStore(subscribeShareSurface,getClientShareSurface,getServerShareSurface);
@@ -79,7 +80,7 @@ export function ReferralShareDialog({code,locale}:{code:string;locale:Locale}){
 
   return <>
     <Button small onClick={openDialog}>{L("ref.share")}</Button>
-    {open&&targets?<ResponsiveDialog title={L("ref.shareDialogTitle")} closeLabel={L("ref.closeShareDialog")} onClose={()=>setOpen(false)} returnRef={triggerRef} className="referral-share-dialog" descriptionId={descriptionId}>
+    {active&&open&&targets?<ResponsiveDialog title={L("ref.shareDialogTitle")} closeLabel={L("ref.closeShareDialog")} onClose={()=>setOpen(false)} returnRef={triggerRef} className="referral-share-dialog" descriptionId={descriptionId}>
       <p className="referral-share-description" id={descriptionId}>{L("ref.shareDialogDescription")}</p>
       <div className="referral-share-field">
         <label htmlFor="referralShareLink">{L("ref.referralLinkLabel")}</label>

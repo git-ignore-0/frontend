@@ -3,6 +3,7 @@
 import {useCallback, useEffect, useId, useRef, useState} from 'react';
 import {Button, DataState, Icon, Section} from '@/components/UI';
 import {useNFV} from '@/state/NFVContext';
+import {useStoreSession} from '@/store/use-store-session';
 import {useAuth} from '@/auth/AuthProvider';
 import {getRoundsPage, getRoundSelection} from '@/account/csa-rounds-service';
 import type {CsaRound, CsaSelection} from '@/account/csa-rounds-model';
@@ -17,6 +18,7 @@ type RoundsPage = {items: CsaRound[]; total: number; pageSize: number; receivedA
 export function AccountCsaRounds() {
   const {data, ui, accountSessionKey} = useNFV();
   const auth = useAuth();
+  const request = useStoreSession();
   const owner = auth.session?.subject;
   const ready = auth.status === 'authenticated' && !!owner && accountSessionKey === owner;
   const activePane = ui.page === 'account' && ui.accountTab === 'csa' && !(ui.accountHubOpen && typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches);
@@ -41,7 +43,7 @@ export function AccountCsaRounds() {
     if (loadedKey.current !== key) setSelections({});
     setError(null);
     try {
-      const next = await getRoundsPage(page);
+      const next = await request(()=>getRoundsPage(page),undefined,()=>epoch.current===current);
       if (epoch.current === current) {
         const lastPage = Math.max(1, Math.ceil(next.total / next.pageSize));
         if (page > lastPage) {setPage(lastPage); return;}
@@ -51,7 +53,7 @@ export function AccountCsaRounds() {
     } catch (caught) {
       if (epoch.current === current) setError(caught);
     }
-  }, [page, ready, owner, activePane, key]);
+  }, [page, ready, owner, activePane, key, request]);
 
   useEffect(() => {
     const counter = selectionEpoch;
@@ -82,12 +84,12 @@ export function AccountCsaRounds() {
     const isCurrent = () => current === selectionEpoch.current && requests.get(id)?.sequence === sequence;
     setSelections(rows => ({...rows, [id]: {...rows[id], loading: rows[id]?.selection === undefined, error: undefined}}));
     try {
-      const selection = await getRoundSelection(id);
+      const selection = await request(()=>getRoundSelection(id),undefined,isCurrent);
       if (isCurrent()) setSelections(rows => ({...rows, [id]: {loading: false, selection, receivedAt: Date.now()}}));
     } catch (caught) {
       if (isCurrent()) setSelections(rows => ({...rows, [id]: {...rows[id], loading: false, error: caught}}));
     }
-  }, [ready, activePane, result?.epoch]);
+  }, [ready, activePane, result?.epoch, request]);
 
   useEffect(() => {
     if (!ready || !activePane || !visible || !result) return;

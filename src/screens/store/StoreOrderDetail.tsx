@@ -45,7 +45,7 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const buyAgain=useBuyAgain(locale,!readOnly);
  const owner=auth.status==="authenticated"?auth.session?.subject??"":auth.status,key=`${owner}:${id}`;
  const [initialOwner]=useState(owner),[orderKey,setOrderKey]=useState(key);
- const [order,setOrder]=useState(initialOrder),[state,setState]=useState(initialOrder?"ready":"loading"),[error,setError]=useState(""),[busy,setBusy]=useState(""),[now,setNow]=useState(0),[receivedAt,setReceivedAt]=useState(0),[addressNames,setAddressNames]=useState<{key:string;value:StoreOrderAddressNames}|null>(null);
+ const [order,setOrder]=useState(initialOrder),[state,setState]=useState(initialOrder?"ready":"loading"),[error,setError]=useState(""),[busy,setBusy]=useState(""),[now,setNow]=useState(0),[receivedAt,setReceivedAt]=useState(0),[addressNames,setAddressNames]=useState<{key:string;value:StoreOrderAddressNames|null}|null>(null);
  const initialSnapshot=useRef(initialOrder),expiredRefresh=useRef<string|null>(null),requestSeq=useRef(0),mutationSeq=useRef(0),activeRequest=useRef<"load"|"mutation"|null>(null);
  const clock=()=>typeof performance!=="undefined"?performance.now():Date.now();
  const [dialog,setDialog]=useState<"cancel"|"claim"|"request"|null>(null),[unresolved,setUnresolved]=useState(false);
@@ -60,7 +60,7 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const addressKey=order?`${locale}:${order.shippingAddress.provinceCode}:${order.shippingAddress.wardCode}`:"";
  // addressKey captures locale and both snapshot codes; the async result is keyed before display.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- useEffect(()=>{if(!order)return;let active=true;resolveAdministrativeAddressNames(order.shippingAddress.provinceCode,order.shippingAddress.wardCode,locale).then(value=>{if(active)setAddressNames({key:addressKey,value})}).catch(()=>{});return()=>{active=false}},[addressKey]);
+ useEffect(()=>{if(!order)return;let active=true;resolveAdministrativeAddressNames(order.shippingAddress.provinceCode,order.shippingAddress.wardCode,locale).then(value=>{if(active)setAddressNames({key:addressKey,value})}).catch(()=>{if(active)setAddressNames({key:addressKey,value:null})});return()=>{active=false}},[addressKey]);
  const left=order&&orderKey===key?remaining(order,receivedAt,now):null;
  // Crossing the server deadline triggers one refresh; requestSeq still owns stale protection.
  // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,8 +90,31 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
   finally{if(mutation===mutationSeq.current){if(activeRequest.current==="mutation")activeRequest.current=null;setBusy("");}}
  };
 
- if(auth.status==="checking"||orderKey!==key||state==="loading"&&!order)return <DataState kind="loading" title={copy.loading}/>;
- if(!order)return <DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/>;
+ // A direct load waits for address labels; supplied snapshots keep their existing entry behavior.
+ const initialLoading=auth.status==="checking"||orderKey!==key||state==="loading"&&!order||!initialOrder&&!!order&&addressNames?.key!==addressKey;
+ const paymentAreaRef=useRef<HTMLDivElement>(null);
+ const hasPaymentArea=!!order&&!readOnly&&!order.csa&&order.totalVnd>0&&order.status==="payment_pending";
+ // Retain only the transfer area; history disclosure must remain free to shrink.
+ useEffect(()=>{
+  if(initialLoading)return;
+  const cleanups=[paymentAreaRef.current].map(element=>{
+   if(!element)return ()=>{};
+   let width=0,height=0;
+   const measure=()=>{
+    const nextWidth=element.getBoundingClientRect().width;
+    if(nextWidth!==width){width=nextWidth;height=0;element.style.minHeight=""}
+    height=Math.max(height,element.getBoundingClientRect().height);
+    element.style.minHeight=`${height}px`;
+   };
+   measure();
+   const observer=typeof ResizeObserver!=="undefined"?new ResizeObserver(measure):null;
+   observer?.observe(element);
+   return()=>{observer?.disconnect();element.style.minHeight=""};
+  });
+  return()=>cleanups.forEach(cleanup=>cleanup());
+ },[key,initialLoading,hasPaymentArea]);
+ if(initialLoading)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="loading" title={copy.loading}/></div></div>;
+ if(!order)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/></div></div>;
  const actions=storeOrderActions(order),qr=storePaymentQrUrl(order),totals=storeOrderTotals(order),events=[{label:copy.created,time:order.createdAt},{label:copy.transfer,time:order.transferReportedAt},{label:copy.approved,time:order.approvedAt},{label:locale==="vi"?"Đã nhận tiền":"Payment received",time:order.paymentReceivedAt},{label:order.workflowVersion===2?(locale==="vi"?"Mở đối soát":"Reconciliation opened"):(locale==="vi"?"Yêu cầu hoàn tiền":"Refund requested"),time:order.refundRequestedAt},{label:locale==="vi"?"Kết thúc yêu cầu hoàn":"Refund request closed",time:order.refundRequestClosedAt},{label:locale==="vi"?"Đã hoàn tiền":"Refunded",time:order.refundedAt},{label:copy.delivered,time:order.deliveredAt},{label:copy.cancelled,time:order.cancelledAt}].filter(item=>item.time).sort((a,b)=>Date.parse(a.time!)-Date.parse(b.time!));
  const contactLine=(contact.phone||contact.email)&&<p className="store-order-contact">{copy.contact}: {contact.phone&&<a href={contact.phoneHref}>{contact.phone}</a>}{contact.phone&&contact.email?" · ":null}{contact.email&&<a href={`mailto:${contact.email}`}>{contact.email}</a>}</p>;
  const resolvedAddress=addressNames?.key===addressKey?addressNames.value:null;
@@ -132,7 +155,9 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
    <StoreSection title={copy.recipient} className="store-order-address"><StoreRecipientSummary name={order.shippingAddress.recipientName} phone={order.shippingAddress.phoneNumber} address={storeOrderAddressLine(order.shippingAddress,resolvedAddress)}/></StoreSection>
    <StoreSection title={copy.products} className="store-order-products">{order.lines.map(line=><StoreProductRow key={line.id} name={line.name} image={<Photo src={line.imageUrl??undefined} alt={line.name} locale={locale}/>} meta={<>{line.quantity} × {formatUnitSize(line.unitSize)} {line.unitLabel}</>} amount={money(line.quantity*line.unitPriceVnd)} actions={line.quotaQuantity>0?<span className="store-csa-usage">{locale==="vi"?`Dùng ${line.quotaUnits} điểm CSA`:`Use ${line.quotaUnits} CSA points`}</span>:undefined}/>)}</StoreSection>
    {paymentPending&&<StoreSection title={copy.payment} className="store-order-transfer">
+    <div ref={paymentAreaRef} className="order-detail-transfer-body">
     {paymentExpired?<DataState compact kind={state==="loading"?"loading":"error"} title={copy.expired} description={copy.paymentExpired} action={state==="loading"||busy?undefined:{label:copy.retry,onClick:()=>void load()}}/>:qr&&order.payment?<BankTransferPanel appearance="store" qrUrl={qr} bankName={order.payment!.bankName} accountNumber={order.payment!.accountNumber} accountName={order.payment!.accountName} transferContent={order.payment!.transferContent} amount={money(order.totalVnd)} busy={!!busy} labels={{bank:copy.bank,account:copy.account,name:copy.name,content:copy.content,amount:copy.amount,copyAccount:locale==="vi"?"Sao chép số tài khoản":"Copy account number",copyContent:locale==="vi"?"Sao chép nội dung chuyển khoản":"Copy transfer content",copied:copy.copied,qrAlt:copy.payment,qrFailed:copy.qrFailed}}/>:<><div className="callout" role="alert">{copy.paymentInvalid}</div>{contactLine}</>}
+    </div>
    </StoreSection>}
    <StoreSection title={locale==="vi"?"Đơn hàng của bạn":"Your order"} className="store-order-payment store-summary">
     <StoreSummaryAmounts totalLabel={locale==="vi"?"Tổng đơn hàng":"Order total"} locale={locale} goods={money(totals.goodsValueVnd)} shipping={totals.shippingFeeVnd===0?(locale==="vi"?"Miễn phí":"Free"):money(totals.shippingFeeVnd)} benefit={totals.quotaValueVnd>0?`−${money(totals.quotaValueVnd)}`:undefined} cashSubtotal={order.coupon?money(order.subtotalVnd):undefined} voucher={order.coupon?{code:order.coupon.code,discount:`−${money(order.discountAmountVnd)}`}:undefined} total={money(totals.totalVnd)}/>

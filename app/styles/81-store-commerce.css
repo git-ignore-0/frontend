@@ -231,3 +231,10 @@
 .store-delivery-days legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 .store-cart-fields{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;border:0;margin:0;padding:0}
+
+/* Scoped to checkout and order detail; other screens retain their existing loading UI. */
+.checkout-initial-loading,.order-detail-initial-loading{display:grid;align-items:center;min-height:max(280px,calc(100svh - 160px));min-width:0}
+.checkout-initial-loading>.nfv-data-state,.order-detail-initial-loading>.nfv-data-state{border:0;background:transparent;width:100%}
+.checkout-refresh-status{height:3.2em;min-height:40px;margin:0 0 var(--store-content-gap);font-size:var(--store-meta-size);line-height:1.6;color:var(--muted);overflow:hidden}
+.store-checkout .store-product-actions{min-height:3.8em}
+.order-detail-transfer-body{display:flow-root;min-width:0}

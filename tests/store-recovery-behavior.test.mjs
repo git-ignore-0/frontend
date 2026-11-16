@@ -20,7 +20,7 @@ const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
 const product={id:PRODUCT_ID,slug:"rau",name:"Rau",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,csa_quota_group:null};
 const order=(id="A",overrides={})=>({id,referenceCode:id,workflowVersion:1,refundStatus:null,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
 
-function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")},clock=performance}={}){
+function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")},clock=performance,resizeObserver}={}){
  let cursor=0,states=[],deps=[],effects=[],cleanups=[],tree;const timers=new Map(),listeners=new Map(),document={visibilityState:"visible"};let timerId=0;
  const react={
   useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],v=>states[i]=typeof v==="function"?v(states[i]):v]},
@@ -30,7 +30,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  };
  react.useLayoutEffect=react.useEffect;
  context.ui??={locale:"vi"};
- const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,Date,Intl,performance:clock,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay,once:true,createdAt:clock.now()});return id},clearTimeout:id=>timers.delete(id),location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
+ const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,ResizeObserver:resizeObserver,Date,Intl,performance:clock,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay,once:true,createdAt:clock.now()});return id},clearTimeout:id=>timers.delete(id),location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
   if(name==="@/store/use-checkout-delivery")return load("src/store/use-checkout-delivery.ts");
   if(name==="@/components/store/StoreDeliveryDates")return load("src/components/store/StoreDeliveryDates.tsx");
@@ -67,7 +67,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/store/store-format")return {formatUnitSize:Number};
   if(name==="@/store/store-model")return {parseStoreProductDetail:v=>v};
   if(name==="@/account/shipping-service")return {getSupportedShippingAreas:services.getSupportedShippingAreas??(async()=>[{code:"66",wards:[{code:"1"}]}])};
-  if(name==="@/account/administrative-units-service")return {resolveAdministrativeAddressNames:async()=>({provinceName:"Tỉnh thử",wardName:"Phường thử"})};
+  if(name==="@/account/administrative-units-service")return {resolveAdministrativeAddressNames:services.resolveAdministrativeAddressNames??(async()=>({provinceName:"Tỉnh thử",wardName:"Phường thử"}))};
   if(name==="@/account/shipping-address-model")return load("src/account/shipping-address-model.ts");
   if(name==="@/components/account/GuestBuyerFields")return {GuestBuyerFields:"GuestBuyerFields"};
   if(name==="@/account/account-api")return {AccountApiError:ApiError};
@@ -128,7 +128,7 @@ test("checkout waits for cart hydration before deciding that the cart is empty",
 });
 
 test("checkout hides the transfer total while shipping is unresolved",()=>{
- const r=checkout();r.render("Checkout");assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));r.flush();r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");r.dispose();
+ const r=checkout();r.render("Checkout");assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));r.flush();r.render();assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng"));r.dispose();
 });
 
 test("checkout exposes product refresh failure with a working retry",async()=>{
@@ -178,7 +178,8 @@ test("changing checkout owner hides the old address and waits for the new owner'
  assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"30000");
  auth.session={subject:"B"};r.render();assert.ok(!text(r.tree).includes("Owner A"));r.flush();assert.equal(r.context.ui.applyCSA[PRODUCT_ID],undefined);
  r.context.accountSessionKey="B";r.context.data.shippingAddress={...address,name:"Owner B"};r.render();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");
+ assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng"));
+ assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));
  pending.resolve({active:false,products:[]});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"70000");r.dispose();
 });
 
@@ -209,8 +210,8 @@ test("order detail hides a private snapshot immediately when the session changes
  const auth={status:"authenticated",session:{subject:"A"}},pending=deferred();
  const r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth,services:{getStoreOrder:()=>pending.promise}});
  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:order()});await r.settle();
- auth.status="guest";auth.session=null;r.render();assert.equal(r.tree.type,"DataState");assert.equal(r.tree.props.kind,"loading");
- r.flush();pending.reject(Error("not found"));await r.settle();assert.equal(r.tree.props.kind,"error");r.dispose();
+ auth.status="guest";auth.session=null;r.render();assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));
+ r.flush();pending.reject(Error("not found"));await r.settle();assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="error"));r.dispose();
 });
 
 test("a failed expiry refresh preserves the loaded order and exposes retry",async()=>{
@@ -1477,5 +1478,61 @@ test("GET recovery cannot enable a saved confirmation after cancellation becomes
   r.focus();await r.settle();const recovery=recoveryRead(recoveryDialog(r));assert.ok(recovery,"open dialog must expose GET recovery");recovery.props.action.onClick();await r.settle();
   const currentConfirm=recoveryCancel(recoveryDialog(r));assert.ok(!currentConfirm||currentConfirm.props.disabled);if(currentConfirm)currentConfirm.props.onClick();await r.settle();assert.equal(posts,0);
   assert.ok(savedConfirm);assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã giao"));
+ }finally{r.dispose()}
+});
+
+
+test("direct order detail keeps one centered loader until address names settle",async()=>{
+ const names=deferred(),r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>order(),resolveAdministrativeAddressNames:()=>names.promise}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi"});await r.settle();
+  assert.ok(nodes(r.tree).some(n=>n.props?.className==="order-detail-initial-loading"));
+  assert.equal(nodes(r.tree).filter(n=>n.type==="DataState"&&n.props.kind==="loading").length,1);
+  assert.ok(!nodes(r.tree).some(n=>n.props?.className==="store-order-flow"));
+  names.resolve({provinceName:"Tỉnh thử",wardName:"Phường thử"});await r.settle();
+  assert.ok(text(r.tree).includes("12 Đường thử, Phường thử, Tỉnh thử"));
+  assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));
+ }finally{r.dispose()}
+});
+
+test("order address lookup failure leaves the loader and uses snapshot codes",async()=>{
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>order(),resolveAdministrativeAddressNames:async()=>{throw Error("offline")}}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi"});await r.settle();
+  assert.ok(text(r.tree).includes("12 Đường thử, 1, 66"));
+  assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));
+ }finally{r.dispose()}
+});
+
+
+test("checkout exposes product retry while delivery calendar is still pending",async()=>{
+ const held=deferred();let retries=0;
+ const r=checkout({services:{getStoreDeliveryDates:()=>held.promise}});
+ r.context.ui.cartProductState[PRODUCT_ID]="error";
+ r.context.retryCartProduct=()=>{retries++};
+ try{
+  r.render("Checkout");await r.settle();
+  const error=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error"&&n.props.action);
+  assert.ok(error,"pending calendar must not hide product recovery");
+  error.props.action.onClick();assert.equal(retries,1);
+  assert.equal(confirm(r).props.disabled,true);
+ }finally{r.dispose()}
+});
+
+test("order history expansion never pins the whole order flow height",async()=>{
+ const observers=[];
+ class Observer{constructor(callback){this.callback=callback}observe(element){observers.push({element,callback:this.callback})}disconnect(){}}
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{resizeObserver:Observer});
+ let naturalHeight=600;
+ const flow={style:{minHeight:""},getBoundingClientRect:()=>({width:700,height:Math.max(naturalHeight,parseFloat(flow.style.minHeight)||0)})};
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:order()});
+  const node=nodes(r.tree).find(n=>n.props?.className==="store-order-flow");
+  if(node.props.ref)node.props.ref.current=flow;
+  r.flush();await r.settle();
+  naturalHeight=1000;observers.forEach(o=>o.callback());
+  naturalHeight=600;observers.forEach(o=>o.callback());
+  assert.equal(flow.style.minHeight,"","history should shrink with its content");
+  assert.equal(flow.getBoundingClientRect().height,600);
  }finally{r.dispose()}
 });

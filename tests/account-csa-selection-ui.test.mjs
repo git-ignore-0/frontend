@@ -24,7 +24,7 @@ test('review shows only chosen products without repeating quota or quantity cont
 });
 test('selection keeps schedule, quota and review visible in the shared page layout',()=>{
  const file=resolve(root,'src/screens/account-csa/CsaRoundSelectionPage.tsx');
- const bundle={round:{id:'r',name:'Round',status:'open',opensAt:'2026-11-20T00:00:00Z',closesAt:'2026-11-21T00:00:00Z',deliveryAt:'2026-11-22T00:00:00Z',serverTime:'2026-11-20T12:00:00Z'},products:[],quota:[],selection:null};
+ const bundle={round:{id:'r',name:'Round',status:'open',opensAt:'2026-11-20T00:00:00Z',closesAt:'2026-11-21T00:00:00Z',deliveryDate:'2026-11-22',serverTime:'2026-11-20T12:00:00Z'},products:[],quota:[],selection:null};
  let current=bundle,dirty=false,busy=false,error=null;
  const state=()=>({current,dirty,busy,error,draft:{p:1},draftProducts:[],access:{mode:current?.round.status==='cancelled'?'readonly':'select'},setDraft(){},load(){},submit(){}});
  const out={};

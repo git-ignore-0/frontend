@@ -48,7 +48,7 @@ export function AccountCsaRounds() {
         const lastPage = Math.max(1, Math.ceil(next.total / next.pageSize));
         if (page > lastPage) {setPage(lastPage); return;}
         loadedKey.current = key;
-        setLoaded({...next, receivedAt: Date.now(), epoch: current, key});
+        setLoaded({...next, receivedAt: performance.now(), epoch: current, key});
       }
     } catch (caught) {
       if (epoch.current === current) setError(caught);
@@ -85,7 +85,7 @@ export function AccountCsaRounds() {
     setSelections(rows => ({...rows, [id]: {...rows[id], loading: rows[id]?.selection === undefined, error: undefined}}));
     try {
       const selection = await request(()=>getRoundSelection(id),undefined,isCurrent);
-      if (isCurrent()) setSelections(rows => ({...rows, [id]: {loading: false, selection, receivedAt: Date.now()}}));
+      if (isCurrent()) setSelections(rows => ({...rows, [id]: {loading: false, selection, receivedAt: performance.now()}}));
     } catch (caught) {
       if (isCurrent()) setSelections(rows => ({...rows, [id]: {...rows[id], loading: false, error: caught}}));
     }

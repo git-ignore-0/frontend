@@ -3,7 +3,7 @@
 import {ActionLink, Button, DataState, Status} from '@/components/UI';
 import {StorePageHeading, StoreSection} from '@/components/store/StorePrimitives';
 import {AuthGate} from '@/components/auth/AuthGate';
-import {formatDateTime} from '@/lib/date-format';
+import {formatDate,formatDateTime} from '@/lib/date-format';
 import {CSA_SELECTION_MAX_LINES,pointHundredths} from '@/account/csa-rounds-model';
 import {AccountApiError} from '@/account/account-api';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
@@ -63,7 +63,7 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
       {!readonly && <strong className={styles.roundIdentity}>{round.name}</strong>}
       <dl className={styles.roundSchedule}>
         <div><dt>{c.window}</dt><dd>{formatDateTime(round.opensAt)} → {formatDateTime(round.closesAt)}</dd></div>
-        <div><dt>{copy.delivery}</dt><dd><strong>{formatDateTime(round.deliveryAt)}</strong></dd></div>
+        <div><dt>{copy.delivery}</dt><dd><strong>{formatDate(round.deliveryDate)}</strong></dd></div>
         {selection?.reopenUntil && <div><dt>{c.deadline}</dt><dd>{formatDateTime(selection.reopenUntil)}</dd></div>}
       </dl>
       {round.cancellationReason && <p className={styles.cancellationReason}><span>{c.reason}</span>{round.cancellationReason}</p>}

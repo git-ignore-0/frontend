@@ -10,7 +10,7 @@ const jsx={jsx:(type,props)=>typeof type==="function"?type(props):({type,props})
 const all=tree=>!tree||typeof tree!=="object"?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(all)];
 const text=tree=>all(tree).flatMap(node=>[node.props?.children].flat(Infinity)).filter(value=>typeof value==="string").join(" ");
 const line=(overrides={})=>({id:"l1",productId:"p1",sku:"P1",name:"Rau",unitSize:"1.000",unitLabel:"kg",unitPriceVnd:40000,quantity:3,quotaGroupId:null,quotaCost:0,quotaQuantity:0,quotaUnits:0,cashQuantity:3,cashSubtotalVnd:120000,...overrides});
-const order=(overrides={})=>({id:"11111111-1111-4111-8111-111111111111",referenceCode:"SO-1",status:"payment_pending",paymentStatus:"unconfirmed",locale:"vi",lines:[line()],shippingAddress:{recipientName:"An",phoneNumber:"+84901234567",provinceCode:"66",wardCode:"22015",address:"Số 12"},subtotalVnd:120000,shippingFeeVnd:30000,shippingDiscountReason:null,totalVnd:150000,payment:{status:"unconfirmed",bankBin:"970436",bankName:"Vietcombank",accountNumber:"998877",accountName:"NFV",transferContent:"SO-1",qrPayload:{acqId:"970436",accountNo:"998877",accountName:"NFV",amount:150000,addInfo:"SO-1"},receivedAt:null,refundedAt:null,refundAmountVnd:null,refundNote:""},expiresAt:"2026-11-01T01:05:00Z",serverTime:"2026-11-01T01:00:00Z",transferReportedAt:null,approvedAt:null,deliveredAt:null,cancelledAt:null,cancellationReason:null,reconciliationNote:"",createdAt:"2026-11-01T01:00:00Z",updatedAt:"2026-11-01T01:00:00Z",...overrides});
+const order=(overrides={})=>({id:"11111111-1111-4111-8111-111111111111",referenceCode:"SO-1",workflowVersion:1,refundStatus:null,status:"payment_pending",paymentStatus:"unconfirmed",locale:"vi",lines:[line()],shippingAddress:{recipientName:"An",phoneNumber:"+84901234567",provinceCode:"66",wardCode:"22015",address:"Số 12"},subtotalVnd:120000,shippingFeeVnd:30000,shippingDiscountReason:null,totalVnd:150000,payment:{status:"unconfirmed",bankBin:"970436",bankName:"Vietcombank",accountNumber:"998877",accountName:"NFV",transferContent:"SO-1",qrPayload:{acqId:"970436",accountNo:"998877",accountName:"NFV",amount:150000,addInfo:"SO-1"},receivedAt:null,refundedAt:null,refundAmountVnd:null,refundNote:""},expiresAt:"2026-11-01T01:05:00Z",serverTime:"2026-11-01T01:00:00Z",transferReportedAt:null,approvedAt:null,deliveredAt:null,cancelledAt:null,cancellationReason:null,reconciliationNote:"",createdAt:"2026-11-01T01:00:00Z",updatedAt:"2026-11-01T01:00:00Z",...overrides});
 
 function presentation(){const exports={};vm.runInNewContext(compile("src/store/store-order-presentation.ts"),{exports,URL,URLSearchParams,require:()=>({})});return exports}
 
@@ -57,6 +57,7 @@ function detailModule(settings=null){
   vm.runInNewContext(compile("src/store/store-format.ts"),{exports:format,require:()=>({})});
   vm.runInNewContext(compile("src/components/BankTransferPanel.tsx"),{exports:shared,require:name=>name==="@/state/NFVContext"?{useNFV:()=>({copyToClipboard:async()=>true})}:name==="react"?h.react:name==="react/jsx-runtime"?jsx:name==="@/components/UI"?{Icon:"Icon"}:{copyTextToClipboard:async()=>{}}});
   vm.runInNewContext(compile("src/screens/store/StoreOrderDetail.tsx"),{exports,URL,URLSearchParams,Date,crypto,window:{setInterval:()=>1,clearInterval(){}},require:name=>{
+    if(name==="@/lib/date-format"){const value={};vm.runInNewContext(compile("src/lib/date-format.ts"),{exports:value,Date,Intl});return value;}
     if(name==="@/store/store-delivery"){const value={};vm.runInNewContext(compile("src/store/store-delivery.ts"),{exports:value,Date,Intl});return value;}
     if(name==="@/state/NFVContext")return {useNFV:()=>({copyToClipboard:async()=>true})};
     if(name==="@/components/store/StorePrimitives")return primitives;
@@ -77,13 +78,13 @@ function detailModule(settings=null){
     if(name==="@/lib/contact-settings")return {contactPresentation:value=>value?{phone:"0901234567",phoneHref:"tel:0901234567",email:"hello@example.com"}:{phone:"",phoneHref:"",email:""}};
     return {};
   }});
-  return {h,exports};
+  return {h,exports,shared};
 }
 
 test("QR image failure has an explicit fallback while manual snapshot instructions remain available",()=>{
-  const {h,exports}=detailModule(),props={url:"https://img.vietqr.io/qr.png",alt:"QR",locale:"vi"};
-  let tree=h.render(exports.StorePaymentQr,props),image=all(tree).find(node=>node.type==="img");
-  assert.ok(image);image.props.onError();tree=h.render(exports.StorePaymentQr,props);
+  const {h,shared}=detailModule(),props={url:"https://img.vietqr.io/qr.png",alt:"QR",fallback:"Không thể tải mã QR. Bạn vẫn có thể chuyển khoản bằng thông tin bên cạnh."};
+  let tree=h.render(shared.PaymentQr,props),image=all(tree).find(node=>node.type==="img");
+  assert.ok(image);image.props.onError();tree=h.render(shared.PaymentQr,props);
   assert.match(text(tree),/Không thể tải mã QR/);
   const detailRuntime=detailModule(),detail=detailRuntime.h.render(detailRuntime.exports.StoreOrderDetail,{id:order().id,locale:"vi",initialOrder:order()});
   assert.match(text(detail),/998877/);
@@ -143,7 +144,7 @@ test("order shares the checkout recipient and totals layout and renders the API 
  assert.ok(all(tree).some(n=>n.props?.className==="store-recipient-summary"));
  assert.ok(all(tree).some(n=>n.type==="Photo"&&n.props.src==="https://example.com/rau.webp"));
  const labels=all(tree).filter(n=>n.type==="MoneyLine").map(n=>n.props.label);
- assert.deepEqual(labels.slice(0,4),["Tiền hàng","Phí giao","CSA thanh toán","Tổng chuyển khoản"]);
+ assert.deepEqual(labels.slice(0,4),["Tiền hàng","Phí giao","CSA thanh toán","Tổng đơn hàng"]);
  assert.ok(text(tree).includes("Dùng 4 điểm CSA"));
 });
 
@@ -184,7 +185,7 @@ test("voucher detail shows one snapshot discount and backend cash subtotal and t
   assert.equal(voucher.length,1);
   assert.equal(voucher[0].props.value,"−30000đ");
   assert.equal(lines.find(node=>node.props.label===(locale==="vi"?"Tiền hàng cần trả":"Cash goods subtotal")).props.value,"120000đ");
-  assert.equal(lines.find(node=>node.props.label===(locale==="vi"?"Tổng chuyển khoản":"Transfer total")).props.value,"120000đ");
+  assert.equal(lines.find(node=>node.props.label===(locale==="vi"?"Tổng đơn hàng":"Order total")).props.value,"120000đ");
   assert.ok(all(tree).some(node=>node.type==="img"&&node.props.src.includes("amount=120000")));
   assert.match(text(tree),/120000đ/);
  }
@@ -199,7 +200,7 @@ test("mixed quota voucher keeps goods, CSA deduction and backend totals without 
  assert.equal(amount("Tiền hàng cần trả"),"40000đ");
  assert.equal(amount("Voucher · MIXED10"),"−10000đ");
  assert.equal(amount("Phí giao"),"30000đ");
- assert.equal(amount("Tổng chuyển khoản"),"60000đ");
+ assert.equal(amount("Tổng đơn hàng"),"60000đ");
 });
 
 test("fully discounted order keeps zero payable review workflow without QR or transfer instructions",()=>{
@@ -207,7 +208,7 @@ test("fully discounted order keeps zero payable review workflow without QR or tr
  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:"vi",initialOrder:value});
  const lines=all(tree).filter(node=>node.type==="MoneyLine");
  assert.equal(lines.find(node=>node.props.label==="Voucher · FULL")?.props.value,"−120000đ");
- assert.equal(lines.find(node=>node.props.label==="Tổng chuyển khoản")?.props.value,"0đ");
+ assert.equal(lines.find(node=>node.props.label==="Tổng đơn hàng")?.props.value,"0đ");
  assert.match(text(tree),/đang chờ cửa hàng duyệt/);
  assert.equal(all(tree).some(node=>node.type==="img"&&node.props.src.includes("vietqr")),false);
  assert.doesNotMatch(text(tree),/998877|Tôi đã chuyển khoản/);
@@ -218,13 +219,13 @@ test("legacy and current no-coupon orders show no artificial voucher or cash sub
   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:"vi",initialOrder:value});
   const lines=all(tree).filter(node=>node.type==="MoneyLine");
   assert.equal(lines.some(node=>/Voucher|Tiền hàng cần trả/.test(node.props.label)),false);
-  assert.equal(lines.find(node=>node.props.label==="Tổng chuyển khoản")?.props.value,"150000đ");
+  assert.equal(lines.find(node=>node.props.label==="Tổng đơn hàng")?.props.value,"150000đ");
  }
 });
 
 test("CSA round orders show delivery and reselection link without retail countdown or buy again",()=>{
  for(const locale of ['vi','en']){
-  const value=order({canBuyAgain:true,status:'pending_review',totalVnd:0,payment:null,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const value=order({canBuyAgain:true,status:'pending_review',totalVnd:0,payment:null,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',deliveryDate:'2026-11-20'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
   assert.match(text(tree),/Harvest round/);assert.ok(all(tree).some(node=>node.type==='a'&&node.props.href===`/account/csa-rounds/22222222-2222-4222-8222-222222222222/${locale}`));
   assert.doesNotMatch(text(tree),/Thời gian còn lại|Time remaining|Mua lại|Buy again|998877/);
@@ -238,7 +239,7 @@ test("CSA order QR presentation stays absent even with inconsistent payment meta
 
 test("expired or terminal CSA orders link to round history without inviting reselection",()=>{
  for(const change of [{serverTime:'2026-11-20T00:00:00Z'},{status:'cancelled'},{status:'delivered'}]){
-  const value=order({...change,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',status:'closed',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const value=order({...change,csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest round',status:'closed',deliveryDate:'2026-11-20'},selection:{state:'reselecting',reopenUntil:'2026-11-19T03:00:00Z'}}});
   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale:'en',initialOrder:value});
   assert.ok(all(tree).some(node=>node.type==='a'&&node.props.children==='View CSA round'));assert.equal(all(tree).some(node=>node.type==='a'&&node.props.children==='Choose again'),false);
  }
@@ -247,7 +248,7 @@ test("expired or terminal CSA orders link to round history without inviting rese
 
 test('automatic CSA cancellation explains the reselection deadline in both locales',()=>{
  for(const [locale,reason] of [['vi','Đã hết hạn chọn lại sản phẩm'],['en','Reselection deadline expired']]){
-  const value=order({status:'cancelled',paymentStatus:'not_required',payment:null,totalVnd:0,cancellationReason:'reselection_expired',csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest',status:'closed',deliveryAt:'2026-11-20T03:00:00Z'},selection:{state:'cancelled',reopenUntil:'2026-11-19T03:00:00Z'}}});
+  const value=order({status:'cancelled',paymentStatus:'not_required',payment:null,totalVnd:0,cancellationReason:'reselection_expired',csa:{round:{id:'22222222-2222-4222-8222-222222222222',name:'Harvest',status:'closed',deliveryDate:'2026-11-20'},selection:{state:'cancelled',reopenUntil:'2026-11-19T03:00:00Z'}}});
   const {h,exports}=detailModule();const tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
   assert.ok(text(tree).includes(reason));assert.equal(text(tree).includes('reselection_expired'),false);
  }
@@ -272,4 +273,25 @@ test('member and guest retail detail use saved delivery dates, legacy remains bl
   const d=detailModule();const tree=d.h.render(d.exports.StoreOrderDetail,{id:'order',access,locale:'vi',initialOrder:order({deliveryDate:date})});
   assert.match(text(tree),/Ngày giao hàng/);assert.ok(text(tree).includes(date?'31/12/2026':'—'));
  }
+});
+
+test("v2 before goods and read-only lookup never disclose bank details",()=>{
+ for(const props of [{initialOrder:order({workflowVersion:2,status:"pending_review",payment:null})},{initialOrder:order({workflowVersion:2}),readOnly:true}]){
+ const runtime=detailModule(),tree=runtime.h.render(runtime.exports.StoreOrderDetail,{id:order().id,locale:"vi",...props});
+ assert.doesNotMatch(text(tree),/998877/);
+ }
+});
+
+test("order history and CSA reselection use Vietnam time even on an overseas device",()=>{
+ const previous=process.env.TZ;process.env.TZ="America/Los_Angeles";
+ try{
+  const deadline="2026-11-19T03:00:00Z";
+  const value=order({status:"pending_review",paymentStatus:"not_required",totalVnd:0,payment:null,createdAt:deadline,csa:{round:{id:"r",name:"Harvest",status:"closed",deliveryDate:"2026-11-20"},selection:{state:"reselecting",reopenUntil:deadline}}});
+  for(const locale of ["vi","en"]){
+   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
+   const times=all(tree).filter(node=>node.type==="time"&&node.props.dateTime===deadline);
+   assert.ok(times.length>=3);
+   for(const time of times)assert.equal(time.props.children,"19/11/2026 10:00");
+  }
+ }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous}
 });

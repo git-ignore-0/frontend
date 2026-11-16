@@ -6,7 +6,7 @@ const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('nod
 const root=path.resolve(__dirname,'..'),ts=require(root+'/node_modules/typescript');
 const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})};
 const id='11111111-1111-4111-8111-111111111111';
-const round={id,sequence:1,name:'Round',status:'open',opensAt:'2026-11-01T00:00:00Z',closesAt:'2026-11-03T00:00:00Z',deliveryAt:'2026-11-04T00:00:00Z',serverTime:'2026-11-02T00:00:00Z',cancellationReason:null};
+const round={id,sequence:1,name:'Round',status:'open',opensAt:'2026-11-01T00:00:00Z',closesAt:'2026-11-03T00:00:00Z',deliveryDate:'2026-11-04',serverTime:'2026-11-02T00:00:00Z',cancellationReason:null};
 const products=Array.from({length:101},(_,i)=>({id:`${(i+1).toString(16).padStart(8,'0')}-1111-4111-8111-111111111111`,name:'Produce'+i,unitSize:'1',unitLabel:'kg',availableQuantity:100,quotaGroupId:id,quotaGroupName:'Vegetables',quotaCost:1,imageUrl:null}));
 const snapshot={round,selection:null,products,quota:[{groupId:id,availableUnits:200}]};
 const h={current:snapshot,draft:Object.fromEntries(products.map(p=>[p.id,1])),draftProducts:products,access:{mode:'select'},loading:false,busy:false,error:null,needsReload:false,dirty:true,setDraft(){},load(){},submit(){}};

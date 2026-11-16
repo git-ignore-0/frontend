@@ -10,7 +10,7 @@ async function api(path:string,init?:RequestInit){let response:Response;try{resp
 export async function createStoreCheckout(body:unknown){return parseStoreOrder((await api("checkout",{method:"POST",body:JSON.stringify(body)})).data)}
 export async function getStoreOrder(id:string){return parseStoreOrder((await api(`orders/${encodeURIComponent(id.toLowerCase())}`)).data)}
 export async function reportStoreTransfer(id:string){return parseStoreOrder((await api(`orders/${encodeURIComponent(id.toLowerCase())}/report-transfer`,{method:"POST",body:"{}"})).data)}
-export async function cancelStoreOrder(id:string,idempotencyKey:string){return parseStoreOrder((await api(`orders/${encodeURIComponent(id.toLowerCase())}/cancel`,{method:"POST",body:JSON.stringify({idempotency_key:idempotencyKey})})).data)}
+export async function cancelStoreOrder(id:string,idempotencyKey:string,requestRefund=false){return parseStoreOrder((await api(`orders/${encodeURIComponent(id.toLowerCase())}/cancel`,{method:"POST",body:JSON.stringify({idempotency_key:idempotencyKey,request_refund:requestRefund})})).data)}
 export async function lookupStoreOrder(referenceCode:string,phoneNumber:string){return parseStoreOrder((await api("lookup",{method:"POST",body:JSON.stringify({reference_code:referenceCode,phone_number:phoneNumber})})).data)}
 export async function currentLookupStoreOrder(){return parseStoreOrder((await api("lookup/current")).data)}
 export async function getStoreOrders(input:{page:number;status?:StoreOrderStatus}){const query=new URLSearchParams({page:String(input.page),page_size:"20"});if(input.status)query.set("status",input.status);const payload=await api(`user-orders?${query}`),meta=payload.meta as R;if(!Array.isArray(payload.data)||!meta)throw new AccountApiError("invalid_response",502);return {items:payload.data.map(parseStoreOrder),meta:{page:Number(meta.page),pageSize:Number(meta.page_size),total:Number(meta.total)}}}
@@ -55,3 +55,5 @@ export async function getStoreDeliveryDates(){
  const payload=await api("delivery-dates");
  try{return parseStoreDeliveryCalendar(payload.data)}catch{throw new AccountApiError("invalid_response",502)}
 }
+
+export async function requestStoreRefund(id:string,idempotencyKey:string){return parseStoreOrder((await api(`orders/${encodeURIComponent(id.toLowerCase())}/request-refund`,{method:"POST",body:JSON.stringify({idempotency_key:idempotencyKey})})).data)}

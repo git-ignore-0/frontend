@@ -2,7 +2,7 @@ import type {StoreOrderStatus} from '../store/store-order-model.ts';
 
 type OrdersView = {status?: StoreOrderStatus; page: number};
 type ViewStorage = Pick<Storage, 'getItem' | 'setItem'>;
-const statuses = new Set(['payment_pending', 'pending_review', 'pending_delivery', 'delivered', 'cancelled']);
+const statuses = new Set(['payment_pending', 'pending_review', 'payment_review', 'pending_delivery', 'delivered', 'cancelled']);
 const key = (owner: string) => `nfv:account-orders:view:${owner}`;
 function storage(): ViewStorage | null {
   try {return typeof window === 'undefined' ? null : window.sessionStorage;} catch {return null;}

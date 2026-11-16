@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 const serviceUrl=new URL('../src/account/csa-rounds-service.ts',import.meta.url).href;
 const bffUrl=new URL('../src/account/bff-path.ts',import.meta.url).href;
 const id='11111111-1111-4111-8111-111111111111';
-const round={id,sequence:1,name:'Đợt 1',opens_at:'2026-11-11T01:00:00Z',closes_at:'2026-11-11T02:00:00Z',delivery_at:'2026-11-12T01:00:00Z',status:'open',server_time:'2026-11-11T01:30:00Z',cancellation_reason:null};
+const round={id,sequence:1,name:'Đợt 1',opens_at:'2026-11-11T01:00:00Z',closes_at:'2026-11-11T02:00:00Z',delivery_date:'2026-11-12',status:'open',server_time:'2026-11-11T01:30:00Z',cancellation_reason:null};
 const selection={id,round_id:id,membership_id:id,state:'selecting',revision:2,order_id:null,reopen_until:null,server_time:round.server_time,lines:[{product_id:id,quantity:2,name:'Rau',unit_label:'túi',quota_group_id:id,quota_cost:'0.25'}]};
 const product={id,name:'Rau',unit_size:'0.500',unit_label:'túi',primary_image:null,available_quantity:5,csa_quota_group:{id,name:'Rau nhóm',cost:.25}};
 function run(script){const result=spawnSync(process.execPath,['--experimental-strip-types','--input-type=module','--eval',`import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});const id=${JSON.stringify(id)},round=${JSON.stringify(round)},selection=${JSON.stringify(selection)},product=${JSON.stringify(product)};${script}`],{encoding:'utf8'});assert.equal(result.status,0,result.stderr||result.stdout);}

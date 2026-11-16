@@ -32,6 +32,7 @@ async function handler(request:NextRequest,context:{params:Promise<{path:string[
   const parsed=await request.json().catch(()=>null);if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return error("invalid_request",400);
   const sanitized={...(parsed as Record<string,unknown>)};
   if(target.guestOrder)delete sanitized.access_token;
+  if(path[0]==="orders"&&path[2]==="cancel"&&"request_refund" in sanitized&&typeof sanitized.request_refund!=="boolean")return error("invalid_request",400);
   body=JSON.stringify(useGuestAuthority?{...sanitized,access_token:guestToken}:sanitized);
  }
  const clientIdentity=target.lookupCookie&&method==="POST"?storeLookupIdentityHeaders(request.headers):{};

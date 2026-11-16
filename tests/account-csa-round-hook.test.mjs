@@ -8,10 +8,10 @@ const require=createRequire(import.meta.url),ts=require('typescript'),root=resol
 const tick=()=>new Promise(r=>setImmediate(r));
 function hooks(){let cursor=0;const state=[],deps=[],cleanup=[];let pending=[];return {
  react:{useState(initial){const i=cursor++;if(!(i in state))state[i]=typeof initial==='function'?initial():initial;return [state[i],value=>{state[i]=typeof value==='function'?value(state[i]):value}]},useRef(initial){const i=cursor++;if(!(i in state))state[i]={current:initial};return state[i]},useCallback(fn,next){const i=cursor++;if(!deps[i]||next.some((d,n)=>!Object.is(d,deps[i][n]))){deps[i]=next;state[i]=fn}return state[i]},useEffect(fn,next){const i=cursor++;if(!deps[i]||next.some((d,n)=>!Object.is(d,deps[i][n]))){deps[i]=next;pending.push({i,fn})}}},render(fn){cursor=0;return fn()},flush(){const effects=pending;pending=[];for(const {i,fn} of effects){cleanup[i]?.();cleanup[i]=fn()}},dispose(){cleanup.forEach(fn=>fn?.())}}}
-function loader(stubs,globals={}){const cache=new Map();return function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const exports={};cache.set(path,exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;vm.runInNewContext(source,{exports,console,Date,URL,AbortController,queueMicrotask,setInterval,clearInterval,...globals,require(name){if(name in stubs)return stubs[name];if(name.startsWith('.')||name.startsWith('@/')){let target=name.startsWith('@/')?resolve(root,'src',name.slice(2)):resolve(dirname(path),name);if(!existsSync(target))target+=existsSync(target+'.ts')?'.ts':'.tsx';return load(target)}return require(name)}},{filename:path});return exports}}
+function loader(stubs,globals={}){const cache=new Map();return function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const exports={};cache.set(path,exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;vm.runInNewContext(source,{exports,console,Date,performance,URL,AbortController,queueMicrotask,setInterval,clearInterval,...globals,require(name){if(name in stubs)return stubs[name];if(name.startsWith('.')||name.startsWith('@/')){let target=name.startsWith('@/')?resolve(root,'src',name.slice(2)):resolve(dirname(path),name);if(!existsSync(target))target+=existsSync(target+'.ts')?'.ts':'.tsx';return load(target)}return require(name)}},{filename:path});return exports}}
 const line={productId:'p',quantity:1,name:'Tomato',unitLabel:'kg',quotaGroupId:'g',quotaCost:1};
 const selection={id:'s',roundId:'r',membershipId:'m',state:'selecting',revision:3,orderId:null,reopenUntil:null,serverTime:'2026-11-20T08:00:00Z',lines:[line]};
-const bundle={round:{id:'r',sequence:1,name:'Round',opensAt:'2026-11-20T07:00:00Z',closesAt:'2026-11-21T08:00:00Z',deliveryAt:'2026-11-22T08:00:00Z',status:'open',serverTime:'2026-11-20T08:00:00Z',cancellationReason:null},selection,products:[{id:'p',name:'Tomato',quotaGroupId:'g',quotaGroupName:'Vegetables',quotaCost:1,availableQuantity:10,unitSize:'1.000',unitLabel:'kg',imageUrl:null}],quota:[{groupId:'g',availableUnits:4}]};
+const bundle={round:{id:'r',sequence:1,name:'Round',opensAt:'2026-11-20T07:00:00Z',closesAt:'2026-11-21T08:00:00Z',deliveryDate:'2026-11-22',status:'open',serverTime:'2026-11-20T08:00:00Z',cancellationReason:null},selection,products:[{id:'p',name:'Tomato',quotaGroupId:'g',quotaGroupName:'Vegetables',quotaCost:1,availableQuantity:10,unitSize:'1.000',unitLabel:'kg',imageUrl:null}],quota:[{groupId:'g',availableUnits:4}]};
 function selectionHarness(){const h=hooks(),events={},auth={status:'authenticated',session:{subject:'member'},expire(){}},context={data:{csa:{active:{status:'active'}}},async refreshResource(){}},calls={get:0,save:[],confirm:[]};let latest=bundle;
  const services={async getRoundProducts(){calls.get++;return latest},async getRoundSelection(){return latest.selection},async getRoundsPage(){throw Error('unexpected fallback')},async saveRoundSelection(input){calls.save.push(input);return {...selection,revision:4,lines:input.lines.map(l=>({...line,...l}))}},async confirmRoundSelection(input){calls.confirm.push(input);return {...selection,revision:4,state:'confirmed'}}};
  const load=loader({react:h.react,'@/auth/AuthProvider':{useAuth:()=>auth},'@/state/NFVContext':{useNFV:()=>context},'@/account/csa-rounds-service':services,'../../account/csa-rounds-service.ts':services,'@/store/store-order-service':{},'./useCsaServerClock':{useCsaServerClock:()=>Date.parse(bundle.round.serverTime)}},{window:{addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}},document:{visibilityState:'visible',addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}}});
@@ -26,8 +26,8 @@ test('actual server revision change preserves draft but blocks silent overwrite'
  const harness=selectionHarness();try{let value=await harness.settle();value.setDraft({p:2});await harness.settle();harness.latest({...bundle,selection:{...selection,revision:9}});harness.events.focus();value=await harness.settle();assert.equal(value.draft.p,2);assert.equal(value.needsReload,true);await value.submit(false);assert.equal(harness.calls.save.length,0)}finally{harness.h.dispose()}
 });
 test('server clock includes time a round spent inside a collapsed list',()=>{
- const h=hooks(),load=loader({react:h.react}),clock=load(resolve(root,'src/screens/account-csa/useCsaServerClock.ts'));
- const now=h.render(()=>clock.useCsaServerClock('2026-11-20T08:00:00Z',Date.now()-20*60*1000));
+ const h=hooks(),load=loader({react:h.react},{performance:{now:()=>2000000}}),clock=load(resolve(root,'src/screens/account-csa/useCsaServerClock.ts'));
+ const now=h.render(()=>clock.useCsaServerClock('2026-11-20T08:00:00Z',800000));
  assert.ok(now>=Date.parse('2026-11-20T08:20:00Z'));h.dispose();
 });
 test('editing and saving do not register a native leave confirmation',async()=>{
@@ -98,8 +98,26 @@ test('hidden round clocks stop their interval and resume on activation',()=>{
  const load=loader({react:h.react},{setInterval(){return ++started},clearInterval(){stopped++}});
  const {useCsaServerClock}=load(resolve(root,'src/screens/account-csa/useCsaServerClock.ts'));
  try{
-  h.render(()=>useCsaServerClock(bundle.round.serverTime,Date.now(),true));h.flush();assert.equal(started,1);
-  h.render(()=>useCsaServerClock(bundle.round.serverTime,Date.now(),false));h.flush();assert.equal(started,1);assert.equal(stopped,1);
-  h.render(()=>useCsaServerClock(bundle.round.serverTime,Date.now(),true));h.flush();assert.equal(started,2);
+  h.render(()=>useCsaServerClock(bundle.round.serverTime,performance.now(),true));h.flush();assert.equal(started,1);
+  h.render(()=>useCsaServerClock(bundle.round.serverTime,performance.now(),false));h.flush();assert.equal(started,1);assert.equal(stopped,1);
+  h.render(()=>useCsaServerClock(bundle.round.serverTime,performance.now(),true));h.flush();assert.equal(started,2);
+ }finally{h.dispose()}
+});
+
+for(const jump of [-3600000,3600000])test(`CSA editing eligibility ignores device wall-clock jump ${jump}`,async()=>{
+ const h=hooks();let wall=Date.parse(bundle.round.serverTime),elapsed=1000,timer;
+ class DeviceDate extends Date {static now(){return wall}}
+ const load=loader({react:h.react},{Date:DeviceDate,performance:{now:()=>elapsed},setInterval(fn){timer=fn;return 1},clearInterval(){}});
+ const {useCsaServerClock}=load(resolve(root,'src/screens/account-csa/useCsaServerClock.ts'));
+ const {selectionAccess}=load(resolve(root,'src/account/csa-rounds-model.ts'));
+ const round={...bundle.round,closesAt:'2026-11-20T08:01:00Z'};
+ try{
+  h.render(()=>useCsaServerClock(round.serverTime));h.flush();await tick();
+  wall+=jump;elapsed+=1000;timer();
+  let now=h.render(()=>useCsaServerClock(round.serverTime));
+  assert.equal(now,Date.parse('2026-11-20T08:00:01Z'));
+  assert.equal(selectionAccess({round,selection,eligible:true,serverNow:now}).mode,'edit');
+  elapsed+=60000;timer();now=h.render(()=>useCsaServerClock(round.serverTime));
+  assert.equal(selectionAccess({round,selection,eligible:true,serverNow:now}).mode,'readonly');
  }finally{h.dispose()}
 });

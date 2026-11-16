@@ -19,3 +19,7 @@ test('disabled browser storage does not prevent opening or using orders',()=>{
  const s={getItem(){throw Error('denied')},setItem(){throw Error('denied')}};
  assert.equal(view.readOrdersView('A',s),null);assert.doesNotThrow(()=>view.saveOrdersView('A',{page:1},s));
 });
+test('payment review view restores its page without sharing an owner snapshot',()=>{
+ const s=storage();view.saveOrdersView('A',{status:'payment_review',page:2},s);
+ assert.deepEqual(JSON.parse(JSON.stringify(view.readOrdersView('A',s))),{status:'payment_review',page:2});assert.equal(view.readOrdersView('B',s),null);
+});

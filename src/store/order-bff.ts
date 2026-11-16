@@ -14,7 +14,7 @@ export function storeOrderTarget(path:string[],method:"GET"|"POST"):StoreOrderTa
  if(path.length===2&&path[0]==="lookup"&&path[1]==="current"&&method==="GET")return {path:"/api/v1/public/store-order-lookups/current",session:"none",query:"none",lookupCookie:true};
  if(path.length>=2&&path[0]==="orders"&&UUID.test(path[1])){
   if(path.length===2&&method==="GET")return {path:`/api/v1/public/store-orders/${path[1]}`,session:"optional",query:"none",guestOrder:true};
-  if(path.length===3&&method==="POST"&&(path[2]==="report-transfer"||path[2]==="cancel"))return {path:`/api/v1/public/store-orders/${path[1]}/${path[2]}`,session:"optional",query:"none",guestOrder:true};
+  if(path.length===3&&method==="POST"&&(path[2]==="report-transfer"||path[2]==="cancel"||path[2]==="request-refund"))return {path:`/api/v1/public/store-orders/${path[1]}/${path[2]}`,session:"optional",query:"none",guestOrder:true};
  }
  return null;
 }
@@ -22,5 +22,5 @@ export function storeOrderQueryAllowed(url:URL,policy:StoreOrderQueryPolicy){
  const keys=[...url.searchParams.keys()],allowed=policy==="locale"?["locale"]:policy==="orders"?["page","page_size","status"]:policy==="quota"?["locale","store_order_id"]:[];
  if(keys.some(key=>!allowed.includes(key))||keys.some(key=>url.searchParams.getAll(key).length!==1))return false;
  const page=url.searchParams.get("page"),size=url.searchParams.get("page_size"),locale=url.searchParams.get("locale"),order=url.searchParams.get("store_order_id"),status=url.searchParams.get("status");
- return (!page||/^[1-9]\d{0,3}$/.test(page))&&(!size||/^(?:[1-9]|[1-4]\d|50)$/.test(size))&&(!locale||locale==="vi"||locale==="en")&&(!order||UUID.test(order))&&(!status||["payment_pending","pending_review","pending_delivery","delivered","cancelled"].includes(status));
+ return (!page||/^[1-9]\d{0,3}$/.test(page))&&(!size||/^(?:[1-9]|[1-4]\d|50)$/.test(size))&&(!locale||locale==="vi"||locale==="en")&&(!order||UUID.test(order))&&(!status||["payment_pending","pending_review","payment_review","pending_delivery","delivered","cancelled"].includes(status));
 }

@@ -6,7 +6,7 @@ const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('nod
 const root=path.resolve(__dirname,'..'),ts=require(root+'/node_modules/typescript');
 const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})};
 const id='11111111-1111-4111-8111-111111111111';
-const round={id,sequence:1,name:'Đợt giao hỗn hợp',status:'cancelled',opensAt:'2026-11-01T00:00:00Z',closesAt:'2026-11-02T00:00:00Z',deliveryAt:'2026-11-03T00:00:00Z',serverTime:'2026-11-04T00:00:00Z',cancellationReason:'Hủy các đơn còn lại'};
+const round={id,sequence:1,name:'Đợt giao hỗn hợp',status:'cancelled',opensAt:'2026-11-01T00:00:00Z',closesAt:'2026-11-02T00:00:00Z',deliveryDate:'2026-11-03',serverTime:'2026-11-04T00:00:00Z',cancellationReason:'Hủy các đơn còn lại'};
 const selection={id,roundId:id,membershipId:id,state:'delivered',revision:3,orderId:id,reopenUntil:null,serverTime:round.serverTime,lines:[{productId:id,name:'Rau',quantity:1,unitLabel:'kg',quotaGroupId:id,quotaCost:1}]};
 const snapshot={round,selection,products:[],quota:[]};
 const h={current:snapshot,draft:{[id]:1},draftProducts:[],access:{mode:'readonly'},loading:false,busy:false,error:null,needsReload:false,dirty:false,setDraft(){},load(){},submit(){}};

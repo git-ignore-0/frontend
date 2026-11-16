@@ -59,9 +59,9 @@ test("matching guest-order cookie remains the authority before and after OAuth l
 });
 
 test("guest authority injects only the matching order token into report and cancel bodies",async()=>{
-  for(const action of ["report-transfer","cancel"]){
+  for(const action of ["report-transfer","cancel","request-refund"]){
     const harness=routeHarness({guestOrders:{[UUID]:"guest-secret","22222222-2222-4222-8222-222222222222":"other-secret"},storedSession:{accessToken:"oauth-token"}});
-    const clientBody=action==="cancel"?{idempotency_key:"33333333-3333-4333-8333-333333333333"}:{};
+    const clientBody=action==="cancel"?{idempotency_key:"33333333-3333-4333-8333-333333333333",request_refund:false}:action==="request-refund"?{idempotency_key:"33333333-3333-4333-8333-333333333333"}:{};
     await harness.call(["orders",UUID,action],{method:"POST",body:clientBody});
     assert.deepEqual(JSON.parse(harness.calls[0].init.body),{...clientBody,access_token:"guest-secret"});
     assert.equal(harness.calls[0].init.headers.Authorization,undefined);
@@ -187,5 +187,22 @@ test('calendar and shared quote forward optional buyer session, stay private and
   const expired=routeHarness({storedSession:{accessToken:'old'},authError:Error('expired')});assert.equal((await expired.call(path,{method})).status,401);assert.equal(expired.calls.length,0);
   const query=routeHarness();assert.equal((await query.call(path,{method,query:'?locale=vi'})).status,404);assert.equal(query.calls.length,0);
   assert.equal((await routeHarness().call([...path,'extra'],{method})).status,404);
+ }
+});
+test('cancel validates explicit refund booleans and request refund never accepts browser guest authority',async()=>{
+ for(const request_refund of ['false',0,1,null,[],{}]){const h=routeHarness({guestOrders:{[UUID]:'guest'}});assert.equal((await h.call(['orders',UUID,'cancel'],{method:'POST',body:{idempotency_key:UUID,request_refund}})).status,400);assert.equal(h.calls.length,0)}
+ for(const request_refund of [false,true]){const h=routeHarness({guestOrders:{[UUID]:'guest'}});await h.call(['orders',UUID,'cancel'],{method:'POST',body:{idempotency_key:UUID,request_refund,access_token:'evil'}});assert.deepEqual(JSON.parse(h.calls[0].init.body),{idempotency_key:UUID,request_refund,access_token:'guest'});}
+ const h=routeHarness();await h.call(['orders',UUID,'request-refund'],{method:'POST',body:{idempotency_key:UUID,access_token:'evil'}});assert.equal(JSON.parse(h.calls[0].init.body).access_token,undefined);
+});
+
+
+test("old cancellation payload omits optional refund flag and reaches upstream unchanged",async()=>{
+ for(const guest of [true,false]){
+  const h=routeHarness({guestOrders:guest?{[UUID]:"guest-secret"}:{},storedSession:guest?null:{accessToken:"owner-token"}});
+  const body={idempotency_key:"33333333-3333-4333-8333-333333333333"};
+  const response=await h.call(["orders",UUID,"cancel"],{method:"POST",body:{...body,access_token:"evil"}});
+  assert.equal(response.status,200);assert.equal(h.calls.length,1);
+  assert.deepEqual(JSON.parse(h.calls[0].init.body),guest?{...body,access_token:"guest-secret"}:body);
+  assert.equal(h.calls[0].init.headers.Authorization,guest?undefined:"Bearer owner-token");
  }
 });

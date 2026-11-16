@@ -3,7 +3,7 @@
 import {useEffect, useRef} from 'react';
 import {ActionLink, Button, Status} from '@/components/UI';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
-import {formatDateTime} from '@/lib/date-format';
+import {formatDate,formatDateTime} from '@/lib/date-format';
 import {csaRoundHref} from '@/lib/csa-navigation';
 import {selectionAccess, type CsaRound, type CsaSelection} from '@/account/csa-rounds-model';
 import type {Locale} from '@/types';
@@ -57,7 +57,7 @@ export function CsaRoundItem({round, selection, error, loading, eligible, receiv
       <h3>{canShowActions ? <a className={styles.roundView} href={csaRoundHref(round.id, locale)} aria-label={`${label ?? c.view}: ${round.name}`}>{round.name}</a> : round.name}</h3>
     </div>
     <dl className={styles.roundDates}>
-      <div className={styles.roundDelivery}><dt>{c.delivery}:</dt><dd>{formatDateTime(round.deliveryAt)}</dd></div>
+      <div className={styles.roundDelivery}><dt>{c.delivery}:</dt><dd>{formatDate(round.deliveryDate)}</dd></div>
       <div><dt>{c.window}:</dt><dd>{formatDateTime(round.opensAt)} → {formatDateTime(round.closesAt)}</dd></div>
       {selection?.reopenUntil && <div className={styles.roundDeadline}><dt>{c.deadline}:</dt><dd>{formatDateTime(selection.reopenUntil)}</dd></div>}
     </dl>

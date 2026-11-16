@@ -18,7 +18,7 @@ const DELIVERY_DATE="2026-11-01";
 const guest={name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"};
 const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
 const product={id:PRODUCT_ID,slug:"rau",name:"Rau",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,csa_quota_group:null};
-const order=(id="A",overrides={})=>({id,referenceCode:id,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
+const order=(id="A",overrides={})=>({id,referenceCode:id,workflowVersion:1,refundStatus:null,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
 
 function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")},clock=performance}={}){
  let cursor=0,states=[],deps=[],effects=[],cleanups=[],tree;const timers=new Map(),listeners=new Map(),document={visibilityState:"visible"};let timerId=0;
@@ -37,6 +37,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/store/store-delivery"||name==="./store-delivery.ts")return load("src/store/store-delivery.ts");
   if(name==="@/account/orders-view-state")return load("src/account/orders-view-state.ts");
   if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
+  if(name==="@/lib/date-format")return load("src/lib/date-format.ts");
   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
   if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
@@ -53,6 +54,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/components/UI")return Object.fromEntries(uiNames.map(k=>[k,k]));
   if(name==="@/components/account/ListPaginationFooter")return load("src/components/account/ListPaginationFooter.tsx");
   if(name==="@/components/store/StorePrimitives")return {...load("src/components/store/StorePrimitives.tsx"),...primitives};
+  if(name==="@/components/overlays/OverlayPrimitives")return {ResponsiveDialog:"ResponsiveDialog"};
   if(name==="@/components/BankTransferPanel")return {BankTransferPanel:"BankTransferPanel",PaymentQr:"PaymentQr"};
   if(name==="@/store/use-store-session")return load("src/store/use-store-session.ts");
   if(name==="@/auth/site-auth")return load("src/auth/site-auth.ts");
@@ -126,7 +128,7 @@ test("checkout waits for cart hydration before deciding that the cart is empty",
 });
 
 test("checkout hides the transfer total while shipping is unresolved",()=>{
- const r=checkout();r.render("Checkout");assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));r.flush();r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");r.dispose();
+ const r=checkout();r.render("Checkout");assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="loading"));r.flush();r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");r.dispose();
 });
 
 test("checkout exposes product refresh failure with a working retry",async()=>{
@@ -173,11 +175,11 @@ test("changing checkout owner hides the old address and waits for the new owner'
  const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
  const r=checkout({auth,context:{accountSessionKey:"A",data:{authenticated:true,shippingAddress:address,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}}}},services:{getStoreQuota:()=>++requests===1?Promise.resolve({active:true,products:[{productId:"g",availableUnits:1}]}):pending.promise}});
  r.context.ui.accountFetchState.address="ready";r.context.ui.applyCSA={[PRODUCT_ID]:true};r.render("Checkout");await r.settle();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"30000");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"30000");
  auth.session={subject:"B"};r.render();assert.ok(!text(r.tree).includes("Owner A"));r.flush();assert.equal(r.context.ui.applyCSA[PRODUCT_ID],undefined);
  r.context.accountSessionKey="B";r.context.data.shippingAddress={...address,name:"Owner B"};r.render();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");
- pending.resolve({active:false,products:[]});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"70000");r.dispose();
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");
+ pending.resolve({active:false,products:[]});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"70000");r.dispose();
 });
 
 function addressCheckout(options={}){
@@ -191,7 +193,7 @@ test("a slow requote cannot overwrite shipping resolved for the updated saved ad
  r.context.refreshResource=async()=>{r.context.data.shippingAddress={...r.context.data.shippingAddress,provinceCode:"77",wardCode:"2",updatedAt:"2026-11-02T00:00:00Z"}};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();await r.settle();
  products.resolve({ok:true,json:async()=>product});await r.settle();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"90000");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"90000");
  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")).props.disabled,false);r.dispose();
 });
 
@@ -199,7 +201,7 @@ test("a failed saved-address refresh cannot publish or accept a final requote",a
  const r=addressCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"shipping_address_changed"})}}});
  r.context.refreshResource=async()=>{r.context.ui.accountFetchState.address="error"};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();await r.settle();
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");
  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")).props.disabled,true);r.dispose();
 });
 
@@ -273,18 +275,14 @@ test("a saved checkout intent from another owner is never replayed",async()=>{
  second.render("Checkout");await second.settle();assert.doesNotMatch(text(second.tree),/Chưa xác định/);second.dispose();
 });
 
-test("failed verification preserves payment snapshot but blocks both handler and buttons until GET succeeds",async()=>{
+test("unknown transfer result keeps snapshot and retries without automatic refresh",async()=>{
  let reports=0,gets=0;
  const paid=order("A",{status:"payment_pending",paymentStatus:"unconfirmed",totalVnd:40000,payment:{bankBin:"970436",bankName:"Bank",accountNumber:"123",accountName:"NFV",transferContent:"A",qrPayload:{acqId:"970436",accountNo:"123",accountName:"NFV",amount:40000,addInfo:"A"}},expiresAt:"2099-11-01T00:00:00Z"});
- const pending=deferred();
- const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>++gets===1?Promise.reject(Error("offline")):pending.promise,reportStoreTransfer:async()=>{reports++;throw Error("offline")}}});
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{gets++;return paid},reportStoreTransfer:async()=>{reports++;throw new ApiError(0)}}});
  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:paid});await r.settle();
- const report=()=>nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Tôi đã chuyển khoản"));
- await report().props.onClick();await r.settle();
- assert.ok(nodes(r.tree).some(n=>n.type==="StorePageHeading"));assert.equal(report().props.disabled,true);
- await report().props.onClick();assert.equal(reports,1);
- const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error");retry.props.action.onClick();r.render();assert.equal(report().props.disabled,true);
- pending.resolve(paid);await r.settle();assert.equal(report().props.disabled,false);r.dispose();
+ const report=()=>nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Tôi đã chuyển khoản");
+ await report().props.onClick();await r.settle();assert.equal(report().props.disabled,true);assert.equal(gets,0);
+ const retry=nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Thử lại");await retry.props.onClick();await r.settle();assert.equal(reports,2);assert.equal(gets,0);r.dispose();
 });
 
 test("checkout does not send an order when durable attempt storage is unavailable",async()=>{
@@ -417,17 +415,17 @@ test("orders revalidate on tab re-entry and focus without hiding the snapshot",a
  r.render("OrdersView",{active:true});await r.settle();assert.equal(calls,1);
  r.render(undefined,{active:false});await r.settle();r.focus();assert.equal(calls,1);
  r.render(undefined,{active:true});r.flush();assert.equal(calls,2);r.render();assert.ok(nodes(r.tree).some(n=>n.type==="article"));
- current=order("A",{status:"pending_delivery"});pending.resolve({items:[current],meta:{total:1}});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"pending_delivery");
- current=order("A",{status:"delivered"});r.focus();await r.settle();assert.equal(calls,3);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"delivered");r.dispose();
+ current=order("A",{status:"pending_delivery"});pending.resolve({items:[current],meta:{total:1}});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Chờ giao");
+ current=order("A",{status:"delivered"});r.focus();await r.settle();assert.equal(calls,3);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Đã giao");r.dispose();
 });
 
 test("failed order-list refresh preserves its snapshot and exposes a working retry",async()=>{
  let fail=false,calls=0;
  const r=runtime("src/screens/AccountOrders.tsx",{auth:{status:"authenticated",session:{subject:"A"}},context:{ui:{locale:"vi"},navigate(){}},services:{getStoreOrders:async()=>{calls++;if(fail)throw Error("offline");return {items:[order("A",{status:calls===1?"pending_review":"pending_delivery"})],meta:{total:1}}}}});
  r.render("OrdersView");await r.settle();fail=true;r.focus();await r.settle();
- assert.ok(nodes(r.tree).some(n=>n.type==="article"));assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"pending_review");
+ assert.ok(nodes(r.tree).some(n=>n.type==="article"));assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Chờ duyệt");
  const warning=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error");assert.ok(warning);assert.ok(warning.props.action);
- fail=false;warning.props.action.onClick();await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"pending_delivery");assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="error"));r.dispose();
+ fail=false;warning.props.action.onClick();await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Chờ giao");assert.ok(!nodes(r.tree).some(n=>n.type==="DataState"&&n.props.kind==="error"));r.dispose();
 });
 
 test("order-list refresh reloads all loaded pages and publishes them together",async()=>{
@@ -435,8 +433,8 @@ test("order-list refresh reloads all loaded pages and publishes them together",a
  const result=page=>({items:Array.from({length:20},(_,i)=>order(`order-${(page-1)*20+i}`,{status:refresh?"pending_delivery":"pending_review"})),meta:{total:40}});
  const r=runtime("src/screens/AccountOrders.tsx",{auth:{status:"authenticated",session:{subject:"A"}},context:{ui:{locale:"vi"},navigate(){}},services:{getStoreOrders:async input=>{calls.push(input.page);return refresh&&input.page===2?second.promise:result(input.page)}}});
  r.render("OrdersView");await r.settle();nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xem thêm")).props.onClick();await r.settle();assert.equal(nodes(r.tree).filter(n=>n.type==="article").length,40);
- refresh=true;r.focus();await tick();r.render();assert.equal(nodes(r.tree).filter(n=>n.type==="article").length,40);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"pending_review");
- second.resolve(result(2));await r.settle();assert.equal(nodes(r.tree).filter(n=>n.type==="article").length,40);assert.ok(nodes(r.tree).filter(n=>n.type==="Status").every(n=>n.props.label==="pending_delivery"));assert.deepEqual(calls,[1,2,1,2]);r.dispose();
+ refresh=true;r.focus();await tick();r.render();assert.equal(nodes(r.tree).filter(n=>n.type==="article").length,40);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Chờ duyệt");
+ second.resolve(result(2));await r.settle();assert.equal(nodes(r.tree).filter(n=>n.type==="article").length,40);assert.ok(nodes(r.tree).filter(n=>n.type==="Status").every(n=>n.props.label==="Chờ giao"));assert.deepEqual(calls,[1,2,1,2]);r.dispose();
 });
 
 test("an old background list refresh cannot overwrite a newer filter result",async()=>{
@@ -461,7 +459,7 @@ test("mobile Account hub re-entry refreshes orders while the hidden hub does not
  const r=runtime("src/screens/AccountOrders.tsx",{mobileAccount:true,auth:{status:"authenticated",session:{subject:"A"}},context,services:{getStoreOrders:async()=>{calls++;return {items:[order("A",{status:calls===1?"pending_review":"pending_delivery"})],meta:{total:1}}}}});
  r.render("OrdersView",{active:true});await r.settle();assert.equal(calls,1);
  context.ui.accountHubOpen=true;r.render();r.flush();r.focus();await r.settle();assert.equal(calls,1);
- context.ui.accountHubOpen=false;r.render();await r.settle();assert.equal(calls,2);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"pending_delivery");r.dispose();
+ context.ui.accountHubOpen=false;r.render();await r.settle();assert.equal(calls,2);assert.equal(nodes(r.tree).find(n=>n.type==="Status").props.label,"Chờ giao");r.dispose();
 });
 
 
@@ -838,7 +836,7 @@ test("voucher apply uses backend price, stock, totals and exact payload; remove 
  const sent=[],previews=[];const r=voucherCheckout({services:{previewStoreVoucher:async input=>{previews.push(input);return voucherResponse()},createStoreCheckout:async input=>{sent.push(input);return order()},storeOrderHref:()=>"/done"}});
  r.render("Checkout");await r.settle();await applyCode(r);
  assert.equal(previews.length,1);assert.equal(previews[0].coupon_code,"SAVE");
- assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"60000");
+ assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"60000");
  assert.ok(nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label==="Voucher · SAVE"));
  await confirm(r).props.onClick();
  assert.equal(sent[0].coupon_code,"SAVE");assert.equal(sent[0].expected_voucher_quote,"a".repeat(40));assert.equal(sent[0].expected_total_vnd,60000);
@@ -846,7 +844,7 @@ test("voucher apply uses backend price, stock, totals and exact payload; remove 
  r.render();assert.equal(r.context.ui.cart[PRODUCT_ID],undefined);r.dispose();
  const remove=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});remove.render("Checkout");await remove.settle();await applyCode(remove);
  nodes(remove.tree).find(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã").props.onClick();remove.render();await remove.settle();
- assert.equal(voucherInput(remove).props.value,"");assert.ok(!nodes(remove.tree).some(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã"));assert.ok(!text(remove.tree).includes("Thông tin đã thay đổi"));assert.equal(nodes(remove.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"70000");remove.dispose();
+ assert.equal(voucherInput(remove).props.value,"");assert.ok(!nodes(remove.tree).some(n=>n.type==="button"&&n.props["aria-label"]==="Bỏ mã"));assert.ok(!text(remove.tree).includes("Thông tin đã thay đổi"));assert.equal(nodes(remove.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"70000");remove.dispose();
 });
 test("guest voucher controls never invoke authenticated preview",async()=>{
  let called=0;const r=checkout({services:{previewStoreVoucher:async()=>{called++;return voucherResponse()}}});r.render("Checkout");await r.settle();
@@ -856,7 +854,7 @@ test("changing code invalidates totals immediately and a late response cannot ap
  let called=0;const late=deferred();const r=voucherCheckout({services:{previewStoreVoucher:()=>{called++;return late.promise}}});r.render("Checkout");await r.settle();
  voucherInput(r).props.onChange({target:{value:"OLD"}});r.render();r.flush();applyVoucher(r).props.onClick();r.render();r.flush();await tick();
  assert.equal(called,1);voucherInput(r).props.onChange({target:{value:"NEW"}});r.render();late.resolve(voucherResponse("OLD"));await tick();r.render();
- assert.equal(confirm(r).props.disabled,true);assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng chuyển khoản").props.value,"—");assert.equal(voucherInput(r).props.value,"NEW");r.dispose();
+ assert.equal(confirm(r).props.disabled,true);assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");assert.equal(voucherInput(r).props.value,"NEW");r.dispose();
 });
 for(const change of ["quantity","quota","address","locale","account"]){
  test(`voucher context ${change} invalidates the old result before effects`,async()=>{
@@ -867,7 +865,7 @@ for(const change of ["quantity","quota","address","locale","account"]){
   if(change==="address")r.context.data.shippingAddress={...r.context.data.shippingAddress,updatedAt:"2026-11-02T00:00:00Z"};
   if(change==="locale")r.context.ui.locale="en";
   if(change==="account"){r.auth.session={subject:"B"};r.context.accountSessionKey="B";}
-  r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&/Tổng chuyển khoản|Transfer total/.test(n.props.label))?.props.value??"—","—");
+  r.render();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&/Tổng đơn hàng|Order total/.test(n.props.label))?.props.value??"—","—");
   assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&/Tiếp tục|Continue/.test(text(n)))?.props.disabled??true,true);r.dispose();
  });
 }
@@ -923,7 +921,7 @@ test("voucher checkout mixed quota uses BE quantities once and allows a zero tot
  assert.equal(values.find(n=>n.props.label==="Tiền hàng").props.value,"126000");
  assert.equal(values.find(n=>n.props.label==="CSA thanh toán").props.value,"−42000");
  assert.equal(values.find(n=>n.props.label.includes("SAVE")).props.value,"−84000");
- assert.equal(values.find(n=>n.props.label==="Tổng chuyển khoản").props.value,"0");
+ assert.equal(values.find(n=>n.props.label==="Tổng đơn hàng").props.value,"0");
  assert.equal(confirm(r).props.disabled,false);r.dispose();
 });
 test("preview double clicks are locked and a newer code wins over a delayed previous response",async()=>{
@@ -1002,7 +1000,7 @@ test('frozen checkout is a definite rejection and leaves no pending order recove
 
 const dateInputs=r=>nodes(r.tree).filter(n=>n.type==='input'&&n.props.name==='store-delivery-date');
 const chooseDate=async(r,index)=>{dateInputs(r)[index].props.onChange();r.render();await r.settle();};
-const checkoutTotal=r=>nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Tổng chuyển khoản')?.props.value;
+const checkoutTotal=r=>nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Tổng đơn hàng')?.props.value;
 function authoritativeQuote(input,{fee=17000,token=null,code=null,subtotal=40000}={}){
  return {deliveryDate:input.delivery_date,shippingDiscountReason:fee===0?'csa_companion_delivery':null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:code?1000:0,shippingFeeVnd:fee,totalVnd:subtotal+fee-(code?1000:0),coupon:code?{id:SOURCE_ORDER,code}:null,voucherQuote:token,shippingAddressUpdatedAt:input.guest?null:'2026-11-01T00:00:00Z',lines:input.lines.map(line=>({product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}))};
 }
@@ -1231,3 +1229,253 @@ for(const unlockAt of [30000,70000]){
   }finally{pending.reject(Error('offline'));r.dispose()}
  });
 }
+
+test("v2 QR is immediate with report and unified cancellation in both locales",async()=>{
+ const paid=order("A",{workflowVersion:2,canBuyAgain:true,status:"payment_pending",paymentStatus:"unconfirmed",approvedAt:"2026-11-01T00:00:00Z",totalVnd:40000,payment:{bankBin:"970436",bankName:"Bank",accountNumber:"123",accountName:"NFV",transferContent:"A",qrPayload:{acqId:"970436",accountNo:"123",accountName:"NFV",amount:40000,addInfo:"A"}},expiresAt:"2099-11-01T00:00:00Z"});
+ for(const locale of ["vi","en"])for(const status of ["payment_pending","payment_review"]){
+ const calls=[],r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth:{status:"authenticated",session:{subject:"buyer"}},services:{cancelStoreOrder:async(...args)=>{calls.push(args);return {...paid,status:"cancelled",refundStatus:"pending"}}}});
+ try{
+ r.render("StoreOrderDetail",{id:"A",locale,initialOrder:{...paid,status}});await r.settle();
+ const button=label=>nodes(r.tree).find(n=>n.type==="Button"&&text(n)===label),cancelLabel=locale==="vi"?"Hủy đơn và yêu cầu hoàn tiền":"Cancel order and request refund";
+ assert.equal(nodes(r.tree).some(n=>n.type==="BankTransferPanel"),status==="payment_pending");
+ assert.equal(!!button(locale==="vi"?"Xác nhận đã chuyển khoản":"Report bank transfer"),status==="payment_pending");
+ assert.equal(nodes(r.tree).filter(n=>n.type==="Button").length,status==="payment_pending"?2:1);
+ assert.equal(button(locale==="vi"?"Mua lại":"Buy again"),undefined);
+ assert.equal(button(locale==="vi"?"Thanh toán":"Pay"),undefined);assert.equal(button(locale==="vi"?"Hủy đơn":"Cancel order"),undefined);
+ button(cancelLabel).props.onClick();r.render();const modal=nodes(r.tree).find(n=>n.type==="ResponsiveDialog");assert.ok(modal);
+ assert.doesNotMatch(text(modal),/Chưa chuyển|Đã chuyển —|Not transferred|Transferred —/);assert.equal(nodes(modal).filter(n=>n.type==="Button").length,1);
+ await nodes(modal).find(n=>n.type==="Button").props.onClick();await r.settle();
+ assert.equal(calls.length,1);assert.equal(calls[0][2],true);assert.equal(typeof calls[0][1],"string");
+ assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Chờ đối soát":"Awaiting reconciliation")));
+ assert.equal(button(locale==="vi"?"Yêu cầu hoàn tiền":"Request refund"),undefined);
+ }finally{r.dispose()}
+ }
+});
+
+test("legacy refund request retries exact key after unknown result and cannot switch intent",async()=>{
+ const item=order("A",{workflowVersion:1,status:"cancelled",paymentStatus:"unconfirmed",totalVnd:40000,refundStatus:null,approvedAt:"2026-11-01T00:00:00Z"});const calls=[];
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{requestStoreRefund:async(...args)=>{calls.push(args);if(calls.length===1)throw new ApiError(0);return {...item,refundStatus:"pending"}}}});
+ r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+ nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").props.onClick();r.render();
+ await nodes(r.tree).filter(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").at(-1).props.onClick();await r.settle();
+ const dialog=nodes(r.tree).find(n=>n.type==="ResponsiveDialog");dialog.props.onClose();r.render();await nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Thử lại").props.onClick();await r.settle();assert.deepEqual(calls[1],calls[0]);assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Chờ hoàn"));assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);r.dispose();
+});
+
+test("order conflict refresh clears mutation busy and permits the next allowed action",async()=>{
+ const item=order("A",{workflowVersion:2,status:"pending_review",paymentStatus:"unconfirmed",refundStatus:null,totalVnd:40000});let calls=0,gets=0;const refreshed=deferred();
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{gets++;return refreshed.promise},cancelStoreOrder:async()=>{if(++calls===1)throw new ApiError(409);return {...item,status:"cancelled"}}}});
+ r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+ const cancel=()=>nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Hủy đơn");
+ const mutation=cancel().props.onClick();await r.settle();assert.equal(gets,1);assert.equal(cancel().props.disabled,true);refreshed.resolve(item);await mutation;await r.settle();assert.equal(cancel().props.disabled,false);
+ await cancel().props.onClick();await r.settle();assert.equal(calls,2);assert.equal(cancel(),undefined);r.dispose();
+});
+
+test("cancelled order begins background polling when a refund request becomes pending",async()=>{
+ const item=order("A",{workflowVersion:1,status:"cancelled",paymentStatus:"unconfirmed",refundStatus:null,totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z"});let gets=0;
+ const pending={...item,refundStatus:"pending"};
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{gets++;return pending},requestStoreRefund:async()=>pending}});
+ r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();r.fireInterval(30000);await r.settle();assert.equal(gets,0);
+ nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").props.onClick();r.render();
+ await nodes(r.tree).filter(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").at(-1).props.onClick();await r.settle();
+ r.fireInterval(30000);await r.settle();assert.equal(gets,1);r.dispose();
+});
+
+test("v2 cancelled orders never offer a new claim, including approved and closed reconciliation",async()=>{
+ for(const closed of [false,true])for(const locale of ["vi","en"]){
+ const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"unconfirmed",refundStatus:null,totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z",refundRequestClosedAt:closed?"2026-11-01T01:00:00Z":null,refundRequestClosedReason:closed?"No funds received":null});
+ let calls=0;const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{requestStoreRefund:async()=>{calls++;return item}}});
+ try{r.render("StoreOrderDetail",{id:"A",locale,initialOrder:item});await r.settle();
+ assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&/hoàn tiền|refund/i.test(text(n))),false);assert.equal(nodes(r.tree).some(n=>n.type==="BankTransferPanel"),false);
+ assert.doesNotMatch(text(r.tree),/đối soát và xử lý hoàn tiền thủ công|reconciliation and a manual refund/);
+ if(closed)assert.match(text(r.tree),/No funds received/);assert.equal(calls,0);
+ }finally{r.dispose()}
+ }
+});
+
+test("pending v2 reconciliation polls until closed without reopening a claim",async()=>{
+ const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"unconfirmed",refundStatus:"pending",totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z"});let gets=0;
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{gets++;return {...item,refundStatus:null,refundRequestClosedAt:"2026-11-01T01:00:00Z",refundRequestClosedReason:"No funds received"}}}});
+ try{r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Chờ đối soát"));
+ r.fireInterval(30000);await r.settle();assert.equal(gets,1);assert.match(text(r.tree),/No funds received/);assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);
+ r.fireInterval(30000);await r.settle();assert.equal(gets,1);
+ }finally{r.dispose()}
+});
+
+for(const recoveryFails of [false,true]){
+ test(`expiry and 409 share one recovery and release the mutation lock (read fails: ${recoveryFails})`,async()=>{
+  let elapsed=0,gets=0;const recovery=deferred();
+  const item=order("A",{workflowVersion:2,status:"payment_review",paymentStatus:"unconfirmed",totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z",expiresAt:"2026-11-01T00:00:01Z"});
+  const cancelled={...item,status:"cancelled",expiresAt:null};
+  const r=runtime("src/screens/store/StoreOrderDetail.tsx",{clock:{now:()=>elapsed},services:{
+   getStoreOrder:()=>{gets++;return gets===1?recovery.promise:Promise.resolve(cancelled)},
+   cancelStoreOrder:async()=>{elapsed=1000;throw new ApiError(409)},
+  }});
+  try{
+   r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+   nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Hủy đơn và yêu cầu hoàn tiền").props.onClick();r.render();
+   const mutation=nodes(r.tree).filter(n=>n.type==="Button"&&text(n)==="Hủy đơn và yêu cầu hoàn tiền").at(-1).props.onClick();
+   await tick();r.render();r.flush();r.fireInterval(1000);await r.settle();
+   assert.equal(gets,1,"deadline refresh must not supersede the conflict recovery");
+   if(recoveryFails)recovery.reject(Error("offline"));else recovery.resolve(cancelled);
+   await mutation;await r.settle();
+   if(recoveryFails){
+    const error=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error");
+    assert.ok(error);await error.props.action.onClick();await r.settle();
+   }
+   assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã hủy"));
+   assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);
+   assert.equal(nodes(r.tree).some(n=>n.type==="ResponsiveDialog"),false);
+  }finally{recovery.resolve(cancelled);r.dispose()}
+ });
+}
+
+test("refunded detail uses a completed badge and removes instructions for an outstanding refund",async()=>{
+ for(const locale of ["vi","en"]){
+  const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"refunded",refundStatus:"refunded",totalVnd:40000,refundAmountVnd:40000,refundNote:"Returned in full"});
+  const r=runtime("src/screens/store/StoreOrderDetail.tsx");
+  try{
+   r.render("StoreOrderDetail",{id:"A",locale,initialOrder:item});await r.settle();
+   const badge=nodes(r.tree).find(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Đã hoàn":"Refunded"));
+   assert.ok(badge);assert.equal(badge.props.status,"confirmed");
+   assert.doesNotMatch(text(r.tree),/để đối soát và xử lý hoàn tiền thủ công|reconciliation and a manual refund/);
+   assert.match(text(r.tree),/Returned in full/);
+  }finally{r.dispose()}
+ }
+});
+
+test("history follows actual timestamps for v2 approval, transfer and post-cancellation refund",async()=>{
+ const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"refunded",refundStatus:"refunded",totalVnd:40000,
+  approvedAt:"2026-11-01T00:01:00Z",transferReportedAt:"2026-11-01T00:02:00Z",cancelledAt:"2026-11-01T00:03:00Z",
+  refundRequestedAt:"2026-11-01T00:03:00Z",paymentReceivedAt:"2026-11-01T00:04:00Z",refundedAt:"2026-11-01T00:05:00Z"});
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx");
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+  const history=nodes(r.tree).find(n=>n.type==="ol"&&n.props["aria-label"]==="Lịch sử");
+  const times=nodes(history).filter(n=>n.type==="time").map(n=>n.props.dateTime);
+  assert.deepEqual(times,[item.createdAt,item.approvedAt,item.transferReportedAt,item.refundRequestedAt,item.cancelledAt,item.paymentReceivedAt,item.refundedAt]);
+  assert.match(text(history),/Mở đối soát/);
+ }finally{r.dispose()}
+});
+
+test("cancelling v2 before goods approval never offers a refund request or refund instructions",async()=>{
+ const item=order("A",{workflowVersion:2,status:"pending_review",paymentStatus:"unconfirmed",totalVnd:40000,approvedAt:null});
+ let claims=0;
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{cancelStoreOrder:async()=>({...item,status:"cancelled"}),requestStoreRefund:async()=>{claims++;throw Error("must not request a refund")}}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+  nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Hủy đơn").props.onClick();await r.settle();
+  assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã hủy"));
+  assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&/hoàn tiền/.test(text(n))),false);
+  assert.doesNotMatch(text(r.tree),/đối soát và xử lý hoàn tiền thủ công/);
+  assert.equal(claims,0);
+ }finally{r.dispose()}
+});
+
+test("each distinct server deadline triggers one authoritative expiry refresh",async()=>{
+ let elapsed=0,gets=0;
+ const item=order("A",{workflowVersion:2,status:"payment_pending",paymentStatus:"unconfirmed",totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z",expiresAt:"2026-11-01T00:00:01Z"});
+ const review={...item,status:"payment_review",serverTime:"2026-11-01T00:00:01Z",expiresAt:"2026-11-01T00:00:03Z",transferReportedAt:"2026-11-01T00:00:00.900Z"};
+ const cancelled={...review,status:"cancelled",serverTime:"2026-11-01T00:00:03Z",expiresAt:null,cancellationReason:"payment_review_expired"};
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{clock:{now:()=>elapsed},services:{getStoreOrder:async()=>++gets===1?review:cancelled}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
+  elapsed=1000;r.fireInterval(1000);await r.settle();assert.equal(gets,1);
+  r.fireInterval(1000);await r.settle();assert.equal(gets,1);
+  elapsed=3000;r.fireInterval(1000);await r.settle();assert.equal(gets,2);
+  assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã hủy"));
+  r.fireInterval(1000);await r.settle();assert.equal(gets,2);
+ }finally{r.dispose()}
+});
+
+test('v2 unknown cancellation retries the exact key and cannot switch to a saved report intent',async()=>{
+ const item=order('A',{workflowVersion:2,status:'payment_pending',paymentStatus:'unconfirmed',approvedAt:'2026-11-01T00:00:00Z',totalVnd:40000,payment:{bankBin:'970436',bankName:'Bank',accountNumber:'123',accountName:'NFV',transferContent:'A',qrPayload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:40000,addInfo:'A'}},expiresAt:'2099-11-01T00:00:00Z'});
+ const calls=[];let reports=0;const r=runtime('src/screens/store/StoreOrderDetail.tsx',{services:{cancelStoreOrder:async(...args)=>{calls.push(args);if(calls.length===1)throw new ApiError(0);return {...item,status:'cancelled',refundStatus:'pending'}},reportStoreTransfer:async()=>{reports++;return item}}});
+ try{
+ r.render('StoreOrderDetail',{id:'A',locale:'vi',initialOrder:item});await r.settle();const report=nodes(r.tree).find(n=>n.type==='Button'&&text(n)==='Xác nhận đã chuyển khoản');assert.ok(report);
+ nodes(r.tree).find(n=>n.type==='Button'&&text(n)==='Hủy đơn và yêu cầu hoàn tiền').props.onClick();r.render();
+ await nodes(nodes(r.tree).find(n=>n.type==='ResponsiveDialog')).find(n=>n.type==='Button').props.onClick();await r.settle();await report.props.onClick();await r.settle();assert.equal(reports,0);
+ nodes(r.tree).find(n=>n.type==='ResponsiveDialog').props.onClose();r.render();await nodes(r.tree).find(n=>n.type==='Button'&&text(n)==='Thử lại').props.onClick();await r.settle();assert.deepEqual(calls[1],calls[0]);assert.equal(calls[0][2],true);
+ }finally{r.dispose()}
+});
+
+test('v2 report keeps money unconfirmed and accepts the server twelve hour review deadline',async()=>{
+ const item=order('A',{workflowVersion:2,status:'payment_pending',paymentStatus:'unconfirmed',approvedAt:'2026-11-01T00:00:00Z',totalVnd:40000,payment:{bankBin:'970436',bankName:'Bank',accountNumber:'123',accountName:'NFV',transferContent:'A',qrPayload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:40000,addInfo:'A'}},expiresAt:'2026-11-01T01:00:00Z'});
+ let calls=0;const r=runtime('src/screens/store/StoreOrderDetail.tsx',{services:{reportStoreTransfer:async()=>{calls++;return {...item,status:'payment_review',transferReportedAt:'2026-11-01T00:00:00Z',expiresAt:'2026-11-01T12:00:00Z'}}}});
+ try{
+ r.render('StoreOrderDetail',{id:'A',locale:'vi',initialOrder:item});await r.settle();const report=nodes(r.tree).find(n=>n.type==='Button'&&text(n)==='Xác nhận đã chuyển khoản');assert.ok(report);await report.props.onClick();await r.settle();
+ assert.equal(calls,1);assert.match(text(r.tree),/12:00:00/);assert.match(text(r.tree),/chưa phải xác nhận đã nhận tiền/);assert.ok(nodes(r.tree).some(n=>n.type==='Status'&&n.props.label==='Chờ xác nhận thanh toán'));assert.ok(nodes(r.tree).some(n=>n.type==='MoneyLine'&&n.props.value==='Chưa xác nhận'));assert.equal(nodes(r.tree).some(n=>n.type==='BankTransferPanel'),false);
+ }finally{r.dispose()}
+});
+
+test('legacy payment cancellation keeps both explicit transfer choices and exact refund booleans',async()=>{
+ const paid=order('A',{workflowVersion:1,status:'payment_pending',paymentStatus:'unconfirmed',totalVnd:40000,expiresAt:'2099-11-01T00:00:00Z'});
+ for(const refund of [false,true]){
+ const calls=[],r=runtime('src/screens/store/StoreOrderDetail.tsx',{services:{cancelStoreOrder:async(...args)=>{calls.push(args);return {...paid,status:'cancelled',refundStatus:refund?'pending':null}}}});
+ try{
+ r.render('StoreOrderDetail',{id:'A',locale:'vi',initialOrder:paid});await r.settle();nodes(r.tree).find(n=>n.type==='Button'&&text(n)==='Hủy đơn').props.onClick();r.render();
+ const modal=nodes(r.tree).find(n=>n.type==='ResponsiveDialog');assert.equal(modal.props.title,'Bạn đã chuyển khoản chưa?');
+ const buttons=nodes(modal).filter(n=>n.type==='Button');assert.equal(buttons.length,2);
+ await buttons.find(n=>text(n)===(refund?'Đã chuyển — Hủy và yêu cầu hoàn tiền':'Chưa chuyển — Hủy đơn')).props.onClick();await r.settle();assert.equal(calls.length,1);assert.equal(calls[0][2],refund);
+ }finally{r.dispose()}
+ }
+});
+
+
+const recoveryOrder=()=>order("A",{workflowVersion:2,status:"payment_review",paymentStatus:"unconfirmed",totalVnd:40000,expiresAt:"2099-11-01T00:00:00Z"});
+const recoveryDialog=r=>nodes(r.tree).find(n=>n.type==="ResponsiveDialog");
+const recoveryCancel=tree=>nodes(tree).find(n=>n.type==="Button"&&text(n)==="Hủy đơn và yêu cầu hoàn tiền");
+const recoveryRead=tree=>nodes(tree).find(n=>n.type==="DataState"&&n.props.kind==="error");
+
+test("failed focus refresh disables cancellation until an explicit GET recovery",async()=>{
+ const item=recoveryOrder(),pending=deferred();let reads=0,posts=0;
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:()=>++reads===1?Promise.reject(Error("offline")):pending.promise,cancelStoreOrder:async()=>{posts++;return {...item,status:"cancelled",refundStatus:"pending"}}}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();r.focus();await r.settle();
+  assert.equal(recoveryCancel(r.tree).props.disabled,true);assert.equal(posts,0);
+  recoveryRead(r.tree).props.action.onClick();r.render();assert.equal(recoveryCancel(r.tree).props.disabled,true);
+  pending.resolve(item);await r.settle();assert.equal(posts,0);assert.equal(recoveryCancel(r.tree).props.disabled,false);
+  recoveryCancel(r.tree).props.onClick();r.render();recoveryCancel(recoveryDialog(r)).props.onClick();await r.settle();assert.equal(posts,1);
+ }finally{pending.resolve(item);r.dispose()}
+});
+
+test("open cancellation dialog recovers a failed GET without posting until confirmed",async()=>{
+ const item=recoveryOrder(),pending=deferred();let reads=0,posts=0;
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:()=>++reads===1?Promise.reject(Error("offline")):pending.promise,cancelStoreOrder:async()=>{posts++;return {...item,status:"cancelled",refundStatus:"pending"}}}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();recoveryCancel(r.tree).props.onClick();r.render();r.focus();await r.settle();
+  assert.equal(recoveryCancel(recoveryDialog(r)).props.disabled,true);assert.ok(recoveryRead(recoveryDialog(r)));
+  recoveryRead(recoveryDialog(r)).props.action.onClick();r.render();assert.equal(recoveryCancel(recoveryDialog(r)).props.disabled,true);
+  assert.ok(nodes(recoveryDialog(r)).some(n=>n.type==="DataState"&&n.props.kind==="loading"));
+  pending.resolve(item);await r.settle();assert.equal(posts,0);assert.equal(recoveryRead(recoveryDialog(r)),undefined);
+  assert.equal(recoveryCancel(recoveryDialog(r)).props.disabled,false);recoveryCancel(recoveryDialog(r)).props.onClick();await r.settle();assert.equal(posts,1);assert.equal(recoveryDialog(r),undefined);
+ }finally{pending.resolve(item);r.dispose()}
+});
+
+for(const closeDialog of [false,true]){
+ test(`unknown cancellation preserves intent across failed GET recovery (close dialog: ${closeDialog})`,async()=>{
+  const item=recoveryOrder(),read=deferred(),replay=deferred(),calls=[];let reads=0;
+  const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:()=>++reads===1?Promise.reject(Error("offline")):read.promise,cancelStoreOrder:async(...args)=>{calls.push(args);if(calls.length===1)throw new ApiError(0);return replay.promise}}});
+  const retry=()=>nodes(closeDialog?r.tree:recoveryDialog(r)).find(n=>n.type==="Button"&&text(n)==="Thử lại");
+  try{
+   r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();recoveryCancel(r.tree).props.onClick();r.render();recoveryCancel(recoveryDialog(r)).props.onClick();await r.settle();
+   assert.equal(calls.length,1);assert.match(text(recoveryDialog(r)),/chưa rõ|unknown/i);
+   if(closeDialog){recoveryDialog(r).props.onClose();r.render()}
+   r.focus();await r.settle();assert.equal(retry().props.disabled,true);
+   const error=recoveryRead(closeDialog?r.tree:recoveryDialog(r));assert.ok(error);error.props.action.onClick();r.render();assert.equal(retry().props.disabled,true);
+   read.resolve({...item,status:"cancelled",refundStatus:"pending"});await r.settle();assert.equal(calls.length,1);assert.equal(retry().props.disabled,false);
+   const click=retry().props.onClick;click();click();await r.settle();assert.equal(calls.length,2);assert.deepEqual(calls[1],calls[0]);assert.equal(calls[0][0],"A");assert.equal(calls[0][2],true);assert.match(calls[0][1],/^[0-9a-f-]{36}$/);
+   replay.resolve({...item,status:"cancelled",refundStatus:"pending"});await r.settle();assert.equal(retry(),undefined);assert.equal(recoveryDialog(r),undefined);
+  }finally{read.resolve(item);replay.resolve(item);r.dispose()}
+ });
+}
+
+test("GET recovery cannot enable a saved confirmation after cancellation becomes invalid",async()=>{
+ const item=recoveryOrder();let reads=0,posts=0;
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{if(++reads===1)throw Error("offline");return {...item,status:"delivered",expiresAt:null}},cancelStoreOrder:async()=>{posts++;return item}}});
+ try{
+  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();recoveryCancel(r.tree).props.onClick();r.render();const savedConfirm=recoveryCancel(recoveryDialog(r));
+  r.focus();await r.settle();const recovery=recoveryRead(recoveryDialog(r));assert.ok(recovery,"open dialog must expose GET recovery");recovery.props.action.onClick();await r.settle();
+  const currentConfirm=recoveryCancel(recoveryDialog(r));assert.ok(!currentConfirm||currentConfirm.props.disabled);if(currentConfirm)currentConfirm.props.onClick();await r.settle();assert.equal(posts,0);
+  assert.ok(savedConfirm);assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã giao"));
+ }finally{r.dispose()}
+});

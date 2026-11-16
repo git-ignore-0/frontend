@@ -30,7 +30,7 @@ test("account order and address screens select bilingual copy from the active lo
 
 test("English order history keeps shared pagination localized",()=>{
  const orders=source("src/screens/AccountOrders.tsx"),pagedList=source("src/components/account/PagedList.tsx"),footer=source("src/components/account/ListPaginationFooter.tsx");
- assert.match(orders,/STORE_STATUS\[order\.status\]\[ui\.locale\]/);
+ assert.match(orders,/storeOrderStatusLabel\(order,ui\.locale\)/);
  assert.match(orders,/ListPaginationFooter/);
  assert.match(pagedList,/ListPaginationFooter/);
  assert.match(footer,/locale==="en"\?"Try again":"Thử lại"/);

@@ -1,9 +1,10 @@
+import {isStoreDeliveryDate} from "../store/store-delivery.ts";
 import {AccountApiError} from "./account-api.ts";
 
 export const CSA_SELECTION_MAX_LINES = 100;
 
 export type CsaRound = {
-  id:string; sequence:number; name:string; opensAt:string; closesAt:string; deliveryAt:string;
+  id:string; sequence:number; name:string; opensAt:string; closesAt:string; deliveryDate:string;
   status:"draft"|"scheduled"|"open"|"closed"|"delivery"|"cancelled";
   serverTime:string; cancellationReason:string|null;
 };
@@ -35,9 +36,9 @@ function points(value:unknown,min=0):number {const result=pointHundredths(value)
 export function parseCsaRound(value:unknown):CsaRound {
   const row=csaRecord(value),status=text(row.status);
   if(!["draft","scheduled","open","closed","delivery","cancelled"].includes(status))return invalid();
-  const opensAt=date(row.opens_at),closesAt=date(row.closes_at),deliveryAt=date(row.delivery_at);
-  if(!(Date.parse(opensAt)<Date.parse(closesAt)&&Date.parse(closesAt)<Date.parse(deliveryAt)))return invalid();
-  return {id:uuid(row.id),sequence:csaInteger(row.sequence,1),name:text(row.name),opensAt,closesAt,deliveryAt,status:status as CsaRound["status"],serverTime:date(row.server_time),cancellationReason:nullable(row.cancellation_reason,text)};
+  const opensAt=date(row.opens_at),closesAt=date(row.closes_at),deliveryDate=isStoreDeliveryDate(row.delivery_date)?row.delivery_date:invalid();
+  if(!(Date.parse(opensAt)<Date.parse(closesAt)&&Date.parse(closesAt)<csaDeliveryStart(deliveryDate)))return invalid();
+  return {id:uuid(row.id),sequence:csaInteger(row.sequence,1),name:text(row.name),opensAt,closesAt,deliveryDate,status:status as CsaRound["status"],serverTime:date(row.server_time),cancellationReason:nullable(row.cancellation_reason,text)};
 }
 export function parseCsaSelection(value:unknown):CsaSelection {
   const row=csaRecord(value),state=text(row.state);
@@ -58,7 +59,10 @@ export function parseCsaQuota(value:unknown):CsaRoundProducts["quota"] {
 export function selectionAccess({round,selection,eligible,serverNow}:{round:CsaRound;selection:CsaSelection|null;eligible:boolean;serverNow:number}):{mode:"readonly"|"select"|"edit"|"reselect";deadline:string|null} {
   const readonly={mode:"readonly" as const,deadline:null};
   if(!Number.isFinite(serverNow)||round.status==="cancelled"||round.status==="draft"||(selection&&!["selecting","reselecting"].includes(selection.state)))return readonly;
-  if(selection?.state==="reselecting")return selection.reopenUntil&&serverNow<Date.parse(selection.reopenUntil)&&serverNow<Date.parse(round.deliveryAt)?{mode:"reselect",deadline:selection.reopenUntil}:readonly;
+  if(selection?.state==="reselecting")return selection.reopenUntil&&serverNow<Date.parse(selection.reopenUntil)&&serverNow<csaDeliveryStart(round.deliveryDate)?{mode:"reselect",deadline:selection.reopenUntil}:readonly;
   if((!selection&&!eligible)||serverNow<Date.parse(round.opensAt)||serverNow>=Date.parse(round.closesAt))return readonly;
   return {mode:selection?.lines.length?"edit":"select",deadline:round.closesAt};
 }
+
+/** Deadline boundary, not an asserted delivery appointment. */
+export function csaDeliveryStart(deliveryDate:string){return isStoreDeliveryDate(deliveryDate)?Date.parse(`${deliveryDate}T00:00:00+07:00`):NaN;}

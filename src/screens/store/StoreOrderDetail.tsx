@@ -1,6 +1,6 @@
 "use client";
 import {deliveryDateLabel} from "@/store/store-delivery";
-import {storeOrderActions,storeOrderStatusLabel,storeRefundStatusLabel,storeOrderDeadlineLabel,storeOrderHasDeadline,storeShippingDiscountReason} from "@/store/store-order-presentation";
+import {storeOrderActions,storeOrderStatusSummary,storeOrderDeadlineLabel,storeOrderHasDeadline,storeShippingDiscountReason} from "@/store/store-order-presentation";
 
 import {ResponsiveDialog} from "@/components/overlays/OverlayPrimitives";
 import {useEffect,useRef,useState} from "react";
@@ -131,8 +131,7 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
     <details className="store-order-history-toggle">
      <summary>
       <span className="store-order-current-status">
-       <Status status={["payment_pending","pending_review","payment_review"].includes(order.status)?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusLabel(order,locale)}/>
-       {order.status==="cancelled"&&order.refundStatus&&<Status status={order.refundStatus==="pending"?"pending":"confirmed"} label={storeRefundStatusLabel(order,locale)}/>}
+       <Status status={["payment_pending","pending_review","payment_review"].includes(order.status)?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,locale)}/>
        {events.at(-1)?.time&&<time dateTime={events.at(-1)!.time!}>{formatDateTime(events.at(-1)!.time!)}</time>}
       </span>
       <span className="store-history-control"><span className="store-history-expand">{locale==="vi"?"Xem lịch sử":"View history"}</span><span className="store-history-collapse">{locale==="vi"?"Thu gọn":"Collapse"}</span><Icon name="chev" size={14}/></span>

@@ -184,13 +184,13 @@ test('returning from detail restores the selected filter and reloads every previ
  assert.deepEqual(all(h.tree).filter(n=>n.props?.className==='store-order-id').map(label),['page-1','page-2']);h.dispose();
 });
 
-test('payment review is a server filter and cancelled keeps a separate refund badge',async()=>{
+test('payment review is a server filter and cancelled shows one combined refund badge',async()=>{
  const calls=[],h=viewHarness(async input=>{calls.push(input);return {items:[{...order('claim','cancelled'),refundStatus:'pending'}],meta:{page:1,pageSize:20,total:40}}});
- h.render();await h.settle();assert.ok(all(h.tree).some(n=>n.type==='Status'&&n.props.label==='Đã hủy'));assert.ok(all(h.tree).some(n=>n.type==='Status'&&n.props.label==='Chờ đối soát'));
+ h.render();await h.settle();assert.deepEqual(all(h.tree).filter(n=>n.type==='Status').map(n=>n.props.label),['Đã hủy · Chờ đối soát']);
  h.button('Chờ xác nhận thanh toán').props.onClick();h.render();await h.settle();assert.deepEqual({...calls.at(-1)},{page:1,status:'payment_review'});h.dispose();
 });
 
 test('cancelled cards distinguish verified refunds from pending reconciliation',async()=>{
  const h=viewHarness(async()=>({items:[{...order('reconcile','cancelled'),refundStatus:'pending'},{...order('refund','cancelled'),refundStatus:'pending',paymentStatus:'refund_required'}],meta:{total:2}}));
- try{h.render();await h.settle();assert.deepEqual(all(h.tree).filter(n=>n.type==='Status').map(n=>n.props.label),['Đã hủy','Chờ đối soát','Đã hủy','Chờ hoàn']);}finally{h.dispose()}
+ try{h.render();await h.settle();assert.deepEqual(all(h.tree).filter(n=>n.type==='Status').map(n=>n.props.label),['Đã hủy · Chờ đối soát','Đã hủy · Chờ hoàn']);}finally{h.dispose()}
 });

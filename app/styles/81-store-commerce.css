@@ -65,7 +65,7 @@
 .store-order-id{margin:0;color:var(--ink);font-size:14px;line-height:1.4;font-weight:650;overflow-wrap:anywhere}
 .store-order-date{font-size:var(--store-meta-size);line-height:1.4;color:var(--ink2)}
 .store-order-date time{font-variant-numeric:tabular-nums}
-.store-order-top>.status{margin:0;flex:none}
+.store-order-top>.status{margin:0;flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .store-order-body{min-width:0}
 .store-order-preview{list-style:none;padding:0;margin:0;display:grid;gap:10px;min-width:0}
 .store-order-preview li{display:flex;align-items:center;gap:10px;min-width:0}

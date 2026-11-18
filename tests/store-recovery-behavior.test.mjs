@@ -1247,7 +1247,7 @@ test("v2 QR is immediate with report and unified cancellation in both locales",a
  assert.doesNotMatch(text(modal),/Chưa chuyển|Đã chuyển —|Not transferred|Transferred —/);assert.equal(nodes(modal).filter(n=>n.type==="Button").length,1);
  await nodes(modal).find(n=>n.type==="Button").props.onClick();await r.settle();
  assert.equal(calls.length,1);assert.equal(calls[0][2],true);assert.equal(typeof calls[0][1],"string");
- assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Chờ đối soát":"Awaiting reconciliation")));
+ assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Đã hủy · Chờ đối soát":"Cancelled · Awaiting reconciliation")));
  assert.equal(button(locale==="vi"?"Yêu cầu hoàn tiền":"Request refund"),undefined);
  }finally{r.dispose()}
  }
@@ -1259,7 +1259,7 @@ test("legacy refund request retries exact key after unknown result and cannot sw
  r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();
  nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").props.onClick();r.render();
  await nodes(r.tree).filter(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền").at(-1).props.onClick();await r.settle();
- const dialog=nodes(r.tree).find(n=>n.type==="ResponsiveDialog");dialog.props.onClose();r.render();await nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Thử lại").props.onClick();await r.settle();assert.deepEqual(calls[1],calls[0]);assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Chờ hoàn"));assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);r.dispose();
+ const dialog=nodes(r.tree).find(n=>n.type==="ResponsiveDialog");dialog.props.onClose();r.render();await nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Thử lại").props.onClick();await r.settle();assert.deepEqual(calls[1],calls[0]);assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã hủy · Chờ hoàn"));assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);r.dispose();
 });
 
 test("order conflict refresh clears mutation busy and permits the next allowed action",async()=>{
@@ -1296,7 +1296,7 @@ test("v2 cancelled orders never offer a new claim, including approved and closed
 test("pending v2 reconciliation polls until closed without reopening a claim",async()=>{
  const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"unconfirmed",refundStatus:"pending",totalVnd:40000,approvedAt:"2026-11-01T00:00:00Z"});let gets=0;
  const r=runtime("src/screens/store/StoreOrderDetail.tsx",{services:{getStoreOrder:async()=>{gets++;return {...item,refundStatus:null,refundRequestClosedAt:"2026-11-01T01:00:00Z",refundRequestClosedReason:"No funds received"}}}});
- try{r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Chờ đối soát"));
+ try{r.render("StoreOrderDetail",{id:"A",locale:"vi",initialOrder:item});await r.settle();assert.ok(nodes(r.tree).some(n=>n.type==="Status"&&n.props.label==="Đã hủy · Chờ đối soát"));
  r.fireInterval(30000);await r.settle();assert.equal(gets,1);assert.match(text(r.tree),/No funds received/);assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Yêu cầu hoàn tiền"),false);
  r.fireInterval(30000);await r.settle();assert.equal(gets,1);
  }finally{r.dispose()}
@@ -1330,14 +1330,14 @@ for(const recoveryFails of [false,true]){
  });
 }
 
-test("refunded detail uses a completed badge and removes instructions for an outstanding refund",async()=>{
+test("refunded detail uses one combined badge and removes instructions for an outstanding refund",async()=>{
  for(const locale of ["vi","en"]){
   const item=order("A",{workflowVersion:2,status:"cancelled",paymentStatus:"refunded",refundStatus:"refunded",totalVnd:40000,refundAmountVnd:40000,refundNote:"Returned in full"});
   const r=runtime("src/screens/store/StoreOrderDetail.tsx");
   try{
    r.render("StoreOrderDetail",{id:"A",locale,initialOrder:item});await r.settle();
-   const badge=nodes(r.tree).find(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Đã hoàn":"Refunded"));
-   assert.ok(badge);assert.equal(badge.props.status,"confirmed");
+   const badge=nodes(r.tree).find(n=>n.type==="Status"&&n.props.label===(locale==="vi"?"Đã hủy · Đã hoàn":"Cancelled · Refunded"));
+   assert.ok(badge);assert.equal(badge.props.status,"cancelled");
    assert.doesNotMatch(text(r.tree),/để đối soát và xử lý hoàn tiền thủ công|reconciliation and a manual refund/);
    assert.match(text(r.tree),/Returned in full/);
   }finally{r.dispose()}

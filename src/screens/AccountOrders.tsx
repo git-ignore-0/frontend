@@ -10,7 +10,7 @@ import {useStoreSession} from "@/store/use-store-session";
 import {currentLookupStoreOrder,getStoreOrders,lookupStoreOrder} from "@/store/store-order-service";
 import type {StoreOrder,StoreOrderStatus} from "@/store/store-order-model";
 import {StoreOrderDetail} from "@/screens/store/StoreOrderDetail";
-import {storeOrderStatusLabel,storeRefundStatusLabel} from "@/store/store-order-presentation";
+import {storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
 import {money} from "@/lib/format";
 import {formatUnitSize} from "@/store/store-format";
 import {sanitizeVietnamPhoneInput} from "@/account/shipping-address-model";
@@ -118,7 +118,7 @@ export function OrdersView({active=true}:{active?:boolean}={}){
  <a className="store-order-card-link" href={`/store/orders/${order.id}/${ui.locale}`} aria-label={`${copy.view} ${order.referenceCode}`} onClick={event=>{if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate("order-detail",{productId:order.id,tab:"orders"})}}>
  <div className="store-order-top">
   <div className="store-order-identity"><h3 className="store-order-id" id={`store-order-${order.id}`}>{order.referenceCode}</h3><span className="store-order-date">{copy.placed} <time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></span><span className="store-order-date">{ui.locale==="vi"?"Ngày giao hàng":"Delivery date"}: {order.csa?deliveryDateLabel(order.csa.round.deliveryDate):deliveryDateLabel(order.deliveryDate)}</span></div>
-  <Status status={order.status==="payment_pending"||order.status==="pending_review"||order.status==="payment_review"?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusLabel(order,ui.locale)}/>{order.status==="cancelled"&&order.refundStatus&&<Status status={order.refundStatus==="pending"?"pending":"confirmed"} label={storeRefundStatusLabel(order,ui.locale)}/>}
+  <Status status={order.status==="payment_pending"||order.status==="pending_review"||order.status==="payment_review"?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,ui.locale)}/>
  </div>
  <div className="store-order-body"><ul className="store-order-preview" aria-label={ui.locale==="vi"?"Sản phẩm trong đơn":"Order products"}>{order.lines.map(line=><li key={line.id}><span className="store-product-image"><Photo src={line.imageUrl??undefined} alt={line.name} locale={ui.locale}/></span><div><strong>{line.name}</strong><span>{line.quantity} × {formatUnitSize(line.unitSize)} {line.unitLabel}</span></div></li>)}</ul></div>
  <div className="store-order-footer">

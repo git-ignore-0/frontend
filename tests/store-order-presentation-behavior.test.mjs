@@ -68,7 +68,7 @@ function detailModule(settings=null){
     if(name==="react/jsx-runtime")return jsx;
     if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
     if(name==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated",session:{subject:"test-user"}})};
-    if(name==="@/components/UI")return Object.fromEntries(["Button","DataState","Icon","MoneyLine","Photo"].map(value=>[value,value]));
+    if(name==="@/components/UI")return Object.fromEntries(["Button","DataState","Icon","MoneyLine","Photo","Status"].map(value=>[value,value]));
     if(name==="@/lib/format")return {money:value=>`${value}đ`};
     if(name==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
     if(name==="@/store/store-order-service")return {getStoreOrder:async()=>{throw Error()},cancelStoreOrder:async()=>{throw Error()},reportStoreTransfer:async()=>{throw Error()}};
@@ -294,4 +294,18 @@ test("order history and CSA reselection use Vietnam time even on an overseas dev
    for(const time of times)assert.equal(time.props.children,"19/11/2026 10:00");
   }
  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous}
+});
+
+
+test("cancelled order detail combines cancellation and refund into one badge in both locales",()=>{
+ for(const locale of ["vi","en"]){
+  for(const [refundStatus,paymentStatus,vi,en] of [[null,"unconfirmed","Đã hủy","Cancelled"],["pending","unconfirmed","Đã hủy · Chờ đối soát","Cancelled · Awaiting reconciliation"],["pending","refund_required","Đã hủy · Chờ hoàn","Cancelled · Awaiting refund"],["refunded","refunded","Đã hủy · Đã hoàn","Cancelled · Refunded"]]){
+   const value=order({workflowVersion:2,status:"cancelled",refundStatus,paymentStatus,expiresAt:null,payment:null});
+   const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value});
+   const badges=all(tree).filter(n=>n.type==="Status");
+   assert.equal(badges.length,1);
+   assert.equal(badges[0].props.label,locale==="vi"?vi:en);
+   assert.equal(badges[0].props.status,"cancelled");
+  }
+ }
 });

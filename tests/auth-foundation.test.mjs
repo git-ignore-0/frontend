@@ -74,17 +74,20 @@ test("profile presentation localizes birth dates and missing values",()=>{
   `);
 });
 
-test("session adapter actually consumes v2 data.user instead of the old mock bridge",()=>{
+test("browser session adapter reads all active identity shapes and rejects malformed profiles",()=>{
   const authUrl=new URL("../src/auth/auth-service.ts",import.meta.url).href;
   runScript(`
     import assert from 'node:assert/strict';
     const service=await import(${JSON.stringify(authUrl)});
     const requests=[];
-    globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return new Response(JSON.stringify({data:{user:{sub:'uuid',name:'NFV Customer',email:'x@y.com',phone_number:'+84 912 345 678',date_of_birth:'1990-06-15'}}}),{status:200});};
-    const user=await service.getSession();
-    assert.equal(user.authenticated,true);
-    assert.equal(user.subject,'uuid');
-    assert.deepEqual(user.profile,{name:'NFV Customer',email:'x@y.com',phone:'+84 912 345 678',dateOfBirth:'1990-06-15'});
+    const core={sub:'3f7d06cb-8d37-44d5-a5ab-1e284f9d37d9',name:'NFV Customer',email:null,email_verified:false,login_phone_number:'+84912345678',phone_number:'+84 912 345 678',date_of_birth:'1990-06-15',status:'active',locale:'vi',roles:['member']};
+    for(const payload of [core,{...core,email:'pending@example.com'},{...core,email:'member@example.com',email_verified:true,login_phone_number:null,phone_number:''}]){
+      globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return Response.json({data:{user:payload}});};
+      const user=await service.getSession();
+      assert.equal(user.authenticated,true);
+      assert.equal(user.subject,core.sub);
+      assert.deepEqual(user.profile,{name:core.name,email:payload.email,phone:payload.phone_number,dateOfBirth:core.date_of_birth});
+    }
     assert.equal(requests[0].path,'/api/auth/session');
     assert.equal(requests[0].opts.credentials,'same-origin');
     assert.equal(requests[0].opts.cache,'no-store');
@@ -96,6 +99,12 @@ test("session adapter actually consumes v2 data.user instead of the old mock bri
     await assert.rejects(()=>service.getSession(),/HTTP 502/);
     globalThis.fetch=async()=>new Response('{}',{status:200});
     await assert.rejects(()=>service.getSession(),/không hợp lệ/);
+    globalThis.fetch=async()=>Response.json({data:42});
+    await assert.rejects(()=>service.getSession(),/không hợp lệ/);
+    for(const changes of [{email_verified:true},{email_verified:0},{email:{}},{login_phone_number:42},{login_phone_number:undefined},{phone_number:null},{sub:'legacy-sub'},{status:'suspended'}]){
+      globalThis.fetch=async()=>Response.json({data:{user:{...core,...changes}}});
+      await assert.rejects(()=>service.getSession(),/không hợp lệ/);
+    }
   `);
   assert.doesNotMatch(read("src/auth/auth-service.ts"),/window\.NFV_BACKEND|localStorage|sessionStorage|document\.cookie|mockUsers|login\(|register\(/);
 });

@@ -8,6 +8,7 @@ import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
 import {syncAccountRoute} from "@/lib/account-navigation";
 import type {AccountTab} from "@/types";
+import type {ShippingAddressDraft} from "@/account/shipping-address-model";
 import {GuestOrderLookup,OrdersView} from "@/screens/AccountOrders";
 import {AddressView, ProfileView} from "@/screens/AccountProfile";
 import {BenefitsView} from "@/screens/AccountBenefits";
@@ -21,6 +22,11 @@ export function Account() {
   const activeTab=accountTabForAuth(ui.accountTab,auth.status);
   const authenticated=auth.status==="authenticated";
   const ownerReady=authenticated&&!!auth.session?.subject&&accountSessionKey===auth.session.subject;
+  const addressOwner=authenticated?auth.session?.subject:auth.status==="checking"||auth.status==="error"?auth.lastConfirmedSubject:null;
+  const [addressDraft,setAddressDraft]=useState<{owner:string;value:ShippingAddressDraft}|null>(null);
+  if(addressDraft&&addressDraft.owner!==addressOwner)setAddressDraft(null);
+  const addressEditing=ownerReady&&activeTab==="address"&&addressDraft!==null&&ui.accountFetchState.address!=="loading"&&ui.accountFetchState.address!=="error";
+  useEffect(()=>{patch({addressEditing});return()=>patch({addressEditing:false});},[addressEditing,patch]);
   const [persistentTabs,setPersistentTabs]=useState<ReadonlyArray<AccountTab>>(()=>accountPersistentTabs([],activeTab));
   const [mobile,setMobile]=useState(false);
   useEffect(()=>{
@@ -88,7 +94,8 @@ export function Account() {
   if(!authenticated)return <main className="main-content"><div className="container"><div className="account-title"><h1>{translate("account.titleMobile")}</h1></div>{guestNotice("content")}<GuestOrderLookup/></div></main>;
   const renderTab = (tab:AccountTab) => {
     if(tab==="orders")return <OrdersView active={activeTab==="orders"}/>;
-    if(tab==="address")return <AddressView/>;
+    if(tab==="address")return <AddressView draft={addressDraft&&addressDraft.owner===addressOwner?addressDraft.value:null}
+      onDraftChange={value=>setAddressDraft(value&&addressOwner?{owner:addressOwner,value}:null)}/>;
     if(tab==="profile")return <ProfileView/>;
     if(tab==="csa-tracker")return null;
     return <BenefitsView kind={tab} active={activeTab===tab&&!(mobile&&ui.accountHubOpen)}/>;

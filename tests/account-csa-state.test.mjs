@@ -10,90 +10,113 @@ function run(script){
   assert.equal(result.status,0,result.stderr||result.stdout);
 }
 
-test("stored CSA data is only an Account-scoped request reference for Backend synchronization",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const values=new Map();
-  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
-  const owner={email:"Member@Example.com",phone:"+84 912 345 678"};
-  const confirmation={id:"request-1",requestCode:"CSA-001",status:"payment_confirmed",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2026-11-01T00:00:00.000Z"};
-  pending.saveCsaPending(storage,owner,confirmation);
-  assert.deepEqual(pending.loadCsaPending(storage,{email:"member@example.com",phone:"0912 345 678"},Date.parse("2026-11-02T00:00:00.000Z")),{requestCode:"CSA-001"});
-  assert.equal(pending.loadCsaPending(storage,{email:"other@example.com",phone:"0912345678"},Date.parse("2026-10-26T00:00:00.000Z")),null);
+function runPending(script){
+  run(`
+    import assert from "node:assert/strict";
+    const pending=await import(${JSON.stringify(pendingUrl)});
+    const member="11111111-1111-4111-8111-111111111111", other="22222222-2222-4222-8222-222222222222";
+    const phone="+84901234567";
+    const key=pending.CSA_PENDING_STORAGE_KEY;
+    const makeStorage=()=>{
+      const values=new Map();
+      return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
+    };
+    const confirmation={id:"request-1",requestCode:"CSA-001",status:"payment_confirmed",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2026-11-01T00:00:00.000Z"};
+    ${script}
+  `);
+}
+
+test("new member pending state retains the request recipient phone after email and address changes",()=>runPending(`
+  const storage=makeStorage();
+  pending.saveCsaPending(storage,member,{...confirmation,recipientPhone:phone});
+  const raw=storage.getItem(pending.csaPendingStorageKey(member));
+  assert.equal(storage.getItem(key),null);
+  assert.deepEqual(JSON.parse(raw),{version:3,owner:{subject:member,phone},reference:{requestCode:"CSA-001"}});
+  assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:null,phone:""}),{requestCode:"CSA-001",phone});
+  assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:"added@example.test",phone:"+84911111111"}),{requestCode:"CSA-001",phone});
+  assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:"changed@example.test",phone:"+84922222222"}),{requestCode:"CSA-001",phone});
 `));
 
-test("guest pending reference is scoped by phone without inventing an email",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const values=new Map();
-  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
-  const confirmation={id:"request-guest",requestCode:"CSA-GUEST",status:"payment_confirmed",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2026-11-01T00:00:00.000Z"};
-  pending.saveCsaPending(storage,{email:"",phone:"+84 901 234 567"},confirmation);
-  assert.equal(pending.csaPendingGuestPhone(storage.getItem(pending.CSA_PENDING_STORAGE_KEY)),"0901234567");
-  assert.deepEqual(pending.loadCsaPending(storage,{email:"",phone:"0901234567"}),{requestCode:"CSA-GUEST"});
-  assert.equal(pending.loadCsaPending(storage,{email:"",phone:"0911111111"}),null);
-  assert.equal(pending.csaPendingGuestPhone(JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-PRIVATE"}})),null);
+test("another Core account sharing a recipient phone cannot resolve member pending state",()=>runPending(`
+  const storage=makeStorage();
+  pending.saveCsaPending(storage,member,{...confirmation,recipientPhone:phone});
+  const raw=pending.readCsaPendingSnapshot(storage,member);
+  assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:other,email:"member@example.test",phone}),null);
+  assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:"",email:null,phone}),null);
 `));
 
-test("guest pending requests are not persisted while member recovery remains local",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const localStorage={name:"local"},sessionStorage={name:"session"};
-  assert.equal(pending.csaPendingStorage(false,{localStorage,sessionStorage}),null);
-  assert.equal(pending.csaPendingStorage(true,{localStorage,sessionStorage}),localStorage);
+test("legacy member references require the current email and delivery phone to match",()=>runPending(`
+  for (const raw of [
+    JSON.stringify({version:1,owner:{email:"member@example.test",phone:"0901234567"},confirmation}),
+    JSON.stringify({version:2,owner:{email:"member@example.test",phone:"0901234567"},reference:{requestCode:"CSA-001"}}),
+  ]) {
+    const owner={subject:member,email:" MEMBER@example.test ",phone};
+    assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,owner),{requestCode:"CSA-001",phone});
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,email:"other@example.test"}),null);
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,email:null}),null);
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,phone:""}),null);
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,phone:"+84911111111"}),null);
+  }
 `));
 
-test("guest pending cleanup removes reload state from both browser storage scopes",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const raw=JSON.stringify({version:2,owner:{email:"",phone:"0901234567"},reference:{requestCode:"CSA-GUEST"}});
-  const makeStorage=()=>{const values=new Map([[pending.CSA_PENDING_STORAGE_KEY,raw]]);return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)}};
+test("legacy guest references cannot be recovered under a signed-in member account",()=>runPending(`
+  for (const raw of [
+    JSON.stringify({version:1,owner:{email:"",phone:"0901234567"},confirmation}),
+    JSON.stringify({version:2,owner:{email:"",phone:"0901234567"},reference:{requestCode:"CSA-001"}}),
+  ]) {
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:null,phone}),null);
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:"member@example.test",phone}),null);
+  }
+`));
+
+test("guest mode clears legacy guest references and keeps member state across logout",()=>runPending(`
   const localStorage=makeStorage(),sessionStorage=makeStorage();
-  pending.clearGuestCsaPending({localStorage,sessionStorage});
-  assert.equal(localStorage.getItem(pending.CSA_PENDING_STORAGE_KEY),null);
-  assert.equal(sessionStorage.getItem(pending.CSA_PENDING_STORAGE_KEY),null);
+  const stores={localStorage,sessionStorage};
+  const guest=JSON.stringify({version:2,owner:{email:"",phone:"0901234567"},reference:{requestCode:"CSA-GUEST"}});
+  assert.equal(pending.csaPendingStorage(false,stores),null);
+  assert.equal(pending.csaPendingStorage(true,stores),localStorage);
+  localStorage.setItem(key,guest);sessionStorage.setItem(key,guest);
+  pending.clearGuestCsaPending(stores);
+  assert.equal(localStorage.getItem(key),null);
+  assert.equal(sessionStorage.getItem(key),null);
+  const legacyMember=JSON.stringify({version:2,owner:{email:"member@example.test",phone:"0901234567"},reference:{requestCode:"CSA-001"}});
+  localStorage.setItem(key,legacyMember);
+  pending.clearGuestCsaPending(stores);
+  assert.equal(localStorage.getItem(key),legacyMember);
+  pending.saveCsaPending(localStorage,member,{...confirmation,recipientPhone:phone});
+  const memberRaw=localStorage.getItem(pending.csaPendingStorageKey(member));
+  pending.clearGuestCsaPending(stores);
+  assert.equal(localStorage.getItem(key),legacyMember);
+  assert.equal(localStorage.getItem(pending.csaPendingStorageKey(member)),memberRaw);
 `));
 
-test("legacy guest lookup factors are removed from persistent local storage",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const values=new Map([[pending.CSA_PENDING_STORAGE_KEY,JSON.stringify({version:2,owner:{email:"",phone:"0901234567"},reference:{requestCode:"CSA-GUEST"}})]]);
-  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
-  pending.clearLegacyGuestCsaPending(storage);
-  assert.equal(storage.getItem(pending.CSA_PENDING_STORAGE_KEY),null);
-  storage.setItem(pending.CSA_PENDING_STORAGE_KEY,JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-MEMBER"}}));
-  pending.clearLegacyGuestCsaPending(storage);
-  assert.notEqual(storage.getItem(pending.CSA_PENDING_STORAGE_KEY),null);
+test("discard only removes the matching owner's request from scoped or legacy storage",()=>runPending(`
+  const storage=makeStorage(),owner={subject:member,email:'a@example.test',phone};
+  const legacy=JSON.stringify({version:2,owner:{email:owner.email,phone},reference:{requestCode:'CSA-LEGACY'}});
+  storage.setItem(key,legacy);
+  pending.saveCsaPending(storage,member,{...confirmation,recipientPhone:phone});
+  pending.saveCsaPending(storage,other,{...confirmation,requestCode:'CSA-OTHER',recipientPhone:phone});
+  pending.discardCsaPending(storage,owner,'CSA-OTHER');
+  assert.equal(pending.resolveCsaPendingMemberReference(pending.readCsaPendingSnapshot(storage,member),owner).requestCode,'CSA-001');
+  pending.discardCsaPending(storage,owner,'CSA-001');
+  assert.equal(pending.readCsaPendingSnapshot(storage,member),legacy);
+  pending.discardCsaPending(storage,{...owner,subject:other,email:'b@example.test'},'CSA-LEGACY');
+  assert.equal(storage.getItem(key),legacy);
+  pending.discardCsaPending(storage,owner,'CSA-LEGACY');
+  assert.equal(pending.readCsaPendingSnapshot(storage,member),null);
+  assert.equal(pending.resolveCsaPendingMemberReference(pending.readCsaPendingSnapshot(storage,other),{...owner,subject:other}).requestCode,'CSA-OTHER');
 `));
 
-test("member pending lookup can recover the saved recipient phone for the same signed-in email",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const raw=JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-MEMBER"}});
-  assert.equal(pending.csaPendingMemberPhone(raw," MEMBER@example.com "),"0901234567");
-  assert.equal(pending.csaPendingMemberPhone(raw,"other@example.com"),null);
-`));
-
-test("My CSA resolves a pending request with the persisted shipping phone before a different profile phone",()=>run(`
-  import assert from "node:assert/strict";
-  const pending=await import(${JSON.stringify(pendingUrl)});
-  const raw=JSON.stringify({version:2,owner:{email:"member@example.com",phone:"0901234567"},reference:{requestCode:"CSA-MEMBER"}});
-  assert.deepEqual(
-    pending.resolveCsaPendingMemberReference(raw,"member@example.com","0911111111","0901234567"),
-    {phone:"0901234567",reference:{requestCode:"CSA-MEMBER"}},
-  );
-`));
-
-test("Account review follows the Backend identity contract for a saved delivery address",()=>run(`
+test("member Account review follows the Backend Shipping Address requirements",()=>run(`
   import assert from "node:assert/strict";
   const account=await import(${JSON.stringify(accountUrl)});
-  const profile={name:"Nguyễn Minh Anh",phone:"0912345678",email:"member@example.com"};
-  assert.deepEqual(account.csaAccountReview(profile,undefined),{complete:false,missing:["address"],addressKnown:false,addressLabel:""});
+  assert.deepEqual(account.csaAccountReview(),{complete:false,addressLabel:""});
   const address={name:"Người nhận",phone:"+84912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng",provinceCode:"01",wardCode:"00001",isSupported:true};
-  assert.deepEqual(account.csaAccountReview(profile,address),{complete:true,missing:[],addressKnown:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
-  assert.deepEqual(account.csaAccountReview({...profile,name:"",phone:""},address),{complete:true,missing:[],addressKnown:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
-  assert.deepEqual(account.csaAccountReview(profile,{...address,isSupported:false}).missing,["address"]);
-  assert.deepEqual(account.csaAccountReview(profile,{...address,phone:""}).missing,["address"]);
-  assert.deepEqual(account.csaAccountReview({...profile,email:""},address).missing,["email"]);
-  assert.deepEqual(account.csaAuthenticatedPendingOwner(profile,address),{email:"member@example.com",phone:"+84912345678"});
+  assert.deepEqual(account.csaAccountReview(address),{complete:true,addressLabel:"25 Đường Láng, Phường Láng, Hà Nội"});
+  for (const invalid of [
+    {...address,isSupported:false}, {...address,isSupported:undefined}, {...address,phone:"123"}, {...address,name:" "},
+    {...address,provinceCode:""}, {...address,wardCode:""}, {...address,detail:""},
+  ]) {
+    assert.equal(account.csaAccountReview(invalid).complete,false);
+  }
 `));

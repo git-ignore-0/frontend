@@ -26,8 +26,11 @@ const selectionModel=runModule("src/screens/account-csa/csa-selection-model.ts",
  if(id==="../csa/csa-packages-model")return packageModel;
  throw new Error(`Unexpected selection-model import ${id}`);
 });
-const pendingStorage=runModule("src/screens/account-csa/csa-pending-storage.ts",id=>{throw new Error(`Unexpected pending-storage import ${id}`);});
 const shippingAddressModel=runModule("src/account/shipping-address-model.ts",id=>{throw new Error(`Unexpected shipping-address-model import ${id}`);});
+const pendingStorage=runModule("src/screens/account-csa/csa-pending-storage.ts",id=>{
+ if(id==="../../account/shipping-address-model.ts")return shippingAddressModel;
+ throw new Error(`Unexpected pending-storage import ${id}`);
+});
 const accountReview=runModule("src/screens/account-csa/csa-account-review.ts",id=>{
  if(id==="../../account/shipping-address-model.ts")return shippingAddressModel;
  throw new Error(`Unexpected account-review import ${id}`);
@@ -83,14 +86,14 @@ const guestFields=runModule("src/components/account/GuestBuyerFields.tsx",id=>{
 });
 const voucherCopy=runModule("src/lib/voucher-copy.ts",()=>{throw Error("Unexpected voucher import");});
 const discountField=runModule("src/components/DiscountCodeField.tsx",id=>id==="react/jsx-runtime"?jsxRuntime:id==="@/components/UI"?UI:voucherCopy);
-function loadComponent(){
+function loadComponent({hooks=React,auth={status:"authenticated",session:{subject:"A"}},csaService,context}={}){
  return runModule("src/screens/account-csa/AccountCsaPackageSelection.tsx",id=>{
   if(id==="./useCsaVoucher")return {useCsaVoucher:()=>({code:"",ready:true,loading:false,change:()=>{},clear:()=>{},apply:async()=>{}})};
   if(id==="@/components/DiscountCodeField")return discountField;
   if(id==="@/lib/voucher-copy")return voucherCopy;
   if(id==="@/components/account/GuestBuyerFields")return guestFields;
   if(id==="@/components/BankTransferPanel")return transferPanel;
-  if(id==="react")return React;
+  if(id==="react")return hooks;
   if(id==="react/jsx-runtime")return jsxRuntime;
   if(id==="@/components/UI")return UI;
   if(id==="@/components/account/ShippingAddressFields")return {ShippingAddressFields:({value,areas,missing=[],onChange})=>React.createElement(React.Fragment,null,
@@ -100,15 +103,15 @@ function loadComponent(){
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(id==="@/lib/date-format")return dateFormat;
   if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
-  if(id==="@/auth/AuthProvider")return {useAuth:()=>({status:"authenticated",session:{subject:"A"}})};
-  if(id==="@/account/csa-service")return {confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
+  if(id==="@/auth/AuthProvider")return {useAuth:()=>auth};
+  if(id==="@/account/csa-service")return csaService??{confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
   if(id==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false,retry:()=>{}})};
   if(id==="@/account/referral-share")return {copyTextToClipboard:async()=>{}};
   if(id==="./useCsaTerms")return {useCsaTerms:()=>termsHookState};
   if(id==="./csa-terms-model")return termsModel;
   if(id==="@/screens/csa/csa-packages-model")return packageModel;
   if(id==="@/screens/csa/useCsaPackages")return {useCsaPackages:(locale,page)=>{hookCalls.push([locale,page]);return hookState;}};
-  if(id==="@/state/NFVContext")return {useNFV:()=>({accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}})};
+  if(id==="@/state/NFVContext")return {useNFV:()=>context??{accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"",phone:"",email:""},addresses:[]},patch:()=>{},refreshResource:async()=>{}}};
   if(id==="./csa-selection-model")return selectionModel;
 	  if(id==="./csa-account-review")return accountReview;
 	  if(id==="./csa-pending-storage")return pendingStorage;
@@ -123,6 +126,59 @@ function paymentPlan(id,type,initial,count=1){
 function packageRow(id,plans=[]){
  return {id,name:`Package ${id}`,description:`Description ${id}`,quota_policy:"expire",items:[{product_id:`product-${id}`,product_name:`Vegetable ${id}`,unit_size:"1.000",unit_label_vi:"bó",unit_label_en:"bunch",quota_units:10}],price_options:[{id:`option-${id}`,duration_months:6,monthly_price_vnd:"600000",total_price_vnd:"3600000",sort_order:0,payment_plans:plans}]};
 }
+
+test("returning to a CSA transfer with the same account keeps its quote and payment step",async t=>{
+ const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
+ const address={name:"Member A",phone:"0901234567",provinceCode:"66",wardCode:"22015",city:"Đắk Lắk",ward:"Tuy Hoà",detail:"12 Main Street",isSupported:true,updatedAt:"2026-11-21T01:23:45+00:00"};
+ const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{email:"member-a@example.test"},shippingAddress:address},refreshResource:async()=>{}};
+ const previousPackages=hookState,previousTerms=termsHookState;
+ t.after(()=>{hookState=previousPackages;termsHookState=previousTerms});
+ hookState={status:"ready",page:{data:[packageRow("p",[paymentPlan("full","full","3600000")])]},retry:()=>{}};
+ termsHookState={status:"ready",document:{version:"v1",locale:"vi",hash:"a".repeat(64),content:{title:"Terms",sections:[{key:"one",paragraphs:["Terms"]}]}},retry:()=>{}};
+ const quote={quoteToken:"signed-quote",expiresAt:"2099-10-25T01:00:00Z",shippingAddressUpdatedAt:address.updatedAt,requestCode:"CSA-A1",payment:{bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-A1",amount:"3600000"},summary:{paymentType:"full",initialPaymentAmount:"3600000"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"3600000",addInfo:"CSA-A1"}};
+ let quoteCalls=0,confirmCalls=0,key,slots=[],cursor=0;
+ const hooks={
+  ...React,
+  useState(initial){const index=cursor++;if(!(index in slots))slots[index]=typeof initial==="function"?initial():initial;return [slots[index],value=>{slots[index]=typeof value==="function"?value(slots[index]):value}]},
+  useRef(value){return slots[cursor++]??={current:value}},
+  useEffect(){},useLayoutEffect(){},useCallback:fn=>fn,useSyncExternalStore:()=>null,
+ };
+ const component=loadComponent({hooks,auth,context,csaService:{
+  createCsaPaymentQuote:async()=>{quoteCalls++;return quote},
+  confirmCsaTransfer:async()=>{confirmCalls++},
+ }});
+ function renderPurchase(){
+  const element=component.AccountCsaPackageSelection();
+  const nextKey=element.type===component.CsaPurchaseSession?element.key:null;
+  if(nextKey!==key){key=nextKey;slots=[]}
+  cursor=0;
+  return nextKey===null?element:element.type(element.props);
+ }
+ renderedButtons=[];
+ renderToStaticMarkup(renderPurchase());
+ renderedButtons.find(button=>button.props["data-csa-continue"]==="true").props.onClick();
+ renderPurchase().props.onContinue();
+ renderPurchase().props.onToggleAll(true);
+ renderPurchase().props.onCreatePayment();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(renderToStaticMarkup(renderPurchase()),/CSA-A1/);
+
+ Object.assign(auth,{status:"checking",session:null});
+ const checking=renderToStaticMarkup(renderPurchase());
+ assert.match(checking,/data-kind="loading"/);
+ assert.doesNotMatch(checking,/CSA-A1|csa\.confirmTransfer/);
+ Object.assign(auth,{status:"authenticated",session:{subject:"A"}});
+ const resumed=renderToStaticMarkup(renderPurchase());
+ assert.match(resumed,/CSA-A1/);
+ assert.match(resumed,/csa\.confirmTransfer/);
+ Object.assign(auth,{status:"checking",session:null});renderPurchase();
+ Object.assign(auth,{status:"authenticated",session:{subject:"B"},lastConfirmedSubject:"B"});
+ assert.doesNotMatch(renderToStaticMarkup(renderPurchase()),/CSA-A1|csa\.confirmTransfer/);
+ context.accountSessionKey="B";
+ assert.match(renderToStaticMarkup(renderPurchase()),/csa\.selectionTitle/);
+ assert.equal(quoteCalls,1);
+ assert.equal(confirmCalls,0);
+});
 
 test("Account CSA package loader renders explicit loading, error and empty states",()=>{
  const component=loadComponent();
@@ -202,13 +258,20 @@ test("Account CSA package view supports arbitrary package counts without hiding 
 
 test("Account step requires a known complete address and blocks missing data",()=>{
  const component=loadComponent();
- const profile={name:"Nguyễn Minh Anh",phone:"0912345678",email:"member@example.com"};
+ const profile={name:"Nguyễn Minh Anh",phone:"0911111111",email:null};
  const address={name:"Người nhận",phone:"+84912345678",city:"Hà Nội",ward:"Phường Láng",detail:"25 Đường Láng",provinceCode:"01",wardCode:"00001",isSupported:true};
  const complete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address,onBack:()=>{},onContinue:()=>{}}));
  assert.match(complete,/25 Đường Láng, Phường Láng, Hà Nội/);
+ assert.match(complete,/Người nhận/);
+ assert.match(complete,/\+84912345678/);
+ assert.match(complete,/profile\.noEmail/);
  assert.doesNotMatch(complete,/csa\.accountIncomplete/);
  assert.match(complete,/csa\.continue/);
  assert.doesNotMatch(complete,/csa\.editAccount/);
+ const unverified=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"en",profile:{...profile,email:"unverified@example.test",emailVerified:false},address,onBack:()=>{},onContinue:()=>{}}));
+ assert.match(unverified,/csa\.continue/);
+ assert.match(unverified,/unverified@example\.test/);
+ assert.doesNotMatch(unverified,/csa\.accountIncomplete/);
  const unknownAddress=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:undefined,onBack:()=>{},onContinue:()=>{}}));
  assert.match(unknownAddress,/csa\.accountIncomplete/);
  assert.match(unknownAddress,/csa\.editAccount/);
@@ -347,6 +410,9 @@ test("payment step presents a branded QR and compact accessible copy actions",()
  assert.match(html,/aria-label="csa\.copyTransferContent"[^>]*><span data-icon="copy"><\/span><\/button>/);
  assert.doesNotMatch(html,/csa\.paymentDescription|csa\.contractTotal/);
  assert.equal((html.match(/csa\.paymentAmount/g)||[]).length,1);
+ const expired=renderToStaticMarkup(React.createElement(component.AccountCsaPaymentStep,{locale:"vi",quote:{...quote,expiresAt:"2000-01-01T00:00:00Z"},busy:false,error:"",onBack:()=>{},onConfirm:()=>{}}));
+ assert.match(expired,/csa\.quoteExpiredError/);
+ assert.doesNotMatch(expired,/csa-qr-frame|123456789|csa\.confirmTransfer/);
 });
 
 test("payment detail rows reserve the same value height with or without a copy action",()=>{

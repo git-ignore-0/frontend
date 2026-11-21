@@ -6,18 +6,34 @@ import vm from "node:vm";
 const require=createRequire(import.meta.url),ts=require("typescript");
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 const compile=path=>ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-function module(path,stub=()=>({})){const exports={};vm.runInNewContext(compile(path),{exports,require:name=>name==="./store-delivery.ts"?module("src/store/store-delivery.ts"):name==="./store-limits"?module("src/store/store-limits.ts"):stub(name)});return exports}
+function module(path,stub=()=>({}),globals={}){const exports={};vm.runInNewContext(compile(path),{exports,require:name=>name==="./store-delivery.ts"?module("src/store/store-delivery.ts"):name==="./store-limits"?module("src/store/store-limits.ts"):stub(name),...globals});return exports}
 const jsx={jsx:(type,props,key)=>({type,props,key}),jsxs:(type,props,key)=>({type,props,key})};
 const nodes=tree=>!tree||typeof tree!=="object"?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return {promise,resolve}};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-function csaRuntime(voucher={ready:true,loading:false,code:"",change:()=>{},clear:()=>{},apply:async()=>{}}){
- const quoteInputs=[];
- let cursor=0,states=[],deps=[],effects=[],cleanups=[],saved=0,tree;
- const quoteRequest=deferred(),confirmRequest=deferred(),auth={status:"authenticated",session:{subject:"A"}};
- const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{}},data:{profile:{name:"A",phone:"0901234567",email:"a@example.test"}},refreshResource(){}};
- const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],value=>{states[i]=typeof value==="function"?value(states[i]):value}]},useRef(initial){const i=cursor++;return states[i]??={current:initial}},useEffect(fn,next){const i=cursor++;if(!deps[i]||next.some((v,j)=>v!==deps[i][j])){deps[i]=next;effects.push({i,fn})}},useCallback(fn){cursor++;return fn},useSyncExternalStore(_subscribe,get){cursor++;return get()}};
+const defaultCsaVoucher={ready:true,loading:false,code:"",change:()=>{},clear:()=>{},apply:async()=>{}};
+const shippingAddress={name:"Recipient",phone:"+84901234567",provinceCode:"66",wardCode:"22015",detail:"12 Láng",city:"Hà Nội",ward:"Phường Láng",isSupported:true,updatedAt:"2026-11-21T01:23:45.123456+00:00"};
+const memberQuote={quoteToken:"A",expiresAt:"2099-01-01",shippingAddressUpdatedAt:shippingAddress.updatedAt};
+const shippingAddressModel=module("src/account/shipping-address-model.ts");
+const csaAccountReview=module("src/screens/account-csa/csa-account-review.ts",()=>shippingAddressModel);
+const pendingStorage=module("src/screens/account-csa/csa-pending-storage.ts",()=>shippingAddressModel);
+
+function csaRuntime(voucher=defaultCsaVoucher,localValues=new Map()){
+ const quoteInputs=[],lookups=[];
+ const storage=values=>({getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)});
+ const window={localStorage:storage(localValues),sessionStorage:storage(new Map())};
+ let cursor=0,states=[],deps=[],layoutEffects=[],effects=[],layoutCleanups=[],cleanups=[],tree,mountedKey=null;
+ const quoteRequest=deferred(),nextQuoteRequest=deferred(),confirmRequest=deferred(),auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
+ const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{name:"A",phone:"0911111111",email:"a@example.test"},shippingAddress},refreshResource(){}};
+ const queueEffect=(queue,fn,next)=>{const i=cursor++;if(!deps[i]||next.some((v,j)=>v!==deps[i][j])){deps[i]=next;queue.push({i,fn})}};
+ const react={
+  useState(initial){const i=cursor++,slots=states;if(!(i in slots))slots[i]=typeof initial==="function"?initial():initial;return [slots[i],value=>{slots[i]=typeof value==="function"?value(slots[i]):value}]},
+  useRef(initial){const i=cursor++;return states[i]??={current:initial}},
+  useLayoutEffect(fn,next){queueEffect(layoutEffects,fn,next)},
+  useEffect(fn,next){queueEffect(effects,fn,next)},
+  useCallback(fn){cursor++;return fn},useSyncExternalStore(_subscribe,get){cursor++;return get()},
+ };
  const doc={version:"v1",hash:"h",content:{sections:[]}},selection={packageId:"p"};
  const exports=module("src/screens/account-csa/AccountCsaPackageSelection.tsx",name=>{
   if(name==="react")return react;
@@ -33,37 +49,175 @@ function csaRuntime(voucher={ready:true,loading:false,code:"",change:()=>{},clea
   if(name==="./useCsaTerms")return {useCsaTerms:()=>({document:doc,status:"ready"})};
   if(name==="./csa-terms-model")return {csaTermsAcceptanceKey:()=>"terms"};
   if(name==="./csa-guest-buyer")return {EMPTY_CSA_GUEST_BUYER:{},csaGuestBuyerReview:()=>({complete:false}),normalizeVietnamPhone:x=>x};
-  if(name==="./csa-account-review")return {csaAuthenticatedPendingOwner:profile=>({email:profile.email,phone:profile.phone})};
-  if(name==="./csa-pending-storage")return {csaPendingStorage:()=>({}),parseCsaPending:()=>null,csaPendingMemberPhone:()=>"",saveCsaPending:()=>{saved++}};
+  if(name==="./csa-account-review")return csaAccountReview;
+  if(name==="./csa-pending-storage")return pendingStorage;
   if(name==="./csa-selection-model")return {csaSelectionSummary:()=>null,createCsaSelection:()=>selection};
-  if(name==="@/account/csa-service")return {createCsaPaymentQuote:input=>{quoteInputs.push(input);return quoteRequest.promise;},confirmCsaTransfer:()=>confirmRequest.promise};
+  if(name==="@/account/csa-service")return {createCsaPaymentQuote:input=>{quoteInputs.push(input);return (quoteInputs.length===1?quoteRequest:nextQuoteRequest).promise;},confirmCsaTransfer:()=>confirmRequest.promise,getCsaPurchaseStatus:input=>{lookups.push(input);return Promise.resolve({...input,status:"payment_confirmed"});}};
   return {};
- });
- // pendingStorageSnapshot only reads storage when a browser exists; no browser/global window here.
- const render=(component="CsaPurchaseSession")=>{cursor=0;return tree=exports[component]({})};
- const flush=()=>{for(const {i,fn} of effects.splice(0)){cleanups[i]?.();cleanups[i]=fn()}};
- return {auth,context,quoteInputs,quoteRequest,confirmRequest,get tree(){return tree},get saved(){return saved},render,flush,dispose(){cleanups.forEach(fn=>fn?.())},async toTerms(){render();flush();nodes(tree).find(n=>n.props?.onContinue)?.props.onContinue();render();tree.props.onContinue();render()}};
+ },{window});
+ const selectionElement=()=>exports.AccountCsaPackageSelection();
+ const dispose=()=>{layoutCleanups.forEach(fn=>fn?.());cleanups.forEach(fn=>fn?.())};
+ const render=()=>{
+  const element=selectionElement();
+  const key=element.type===exports.CsaPurchaseSession?element.key:null;
+  if(key!==mountedKey){
+   dispose();
+   states=[];deps=[];layoutEffects=[];effects=[];layoutCleanups=[];cleanups=[];
+   mountedKey=key;
+  }
+  cursor=0;
+  return tree=key===null?element:element.type(element.props);
+ };
+ const runEffects=(queue,callbacks)=>{for(const {i,fn} of queue.splice(0)){callbacks[i]?.();callbacks[i]=fn()}};
+ const flush=()=>{runEffects(layoutEffects,layoutCleanups);runEffects(effects,cleanups)};
+ return {auth,context,quoteInputs,quoteRequest,nextQuoteRequest,confirmRequest,lookups,localValues,get tree(){return tree},selectionElement,render,flush,dispose,async toTerms(){render();flush();nodes(tree).find(n=>n.props?.onContinue)?.props.onContinue();render();tree.props.onContinue();render()}};
 }
 
 test("public CSA owner boundary changes key and hides all content until account resources belong to the new subject",()=>{
  const r=csaRuntime();
- const first=r.render("AccountCsaPackageSelection");assert.equal(first.key,"authenticated:A");
- r.auth.session={subject:"B"};assert.equal(r.render("AccountCsaPackageSelection").type,"DataState");
- r.context.accountSessionKey="B";const next=r.render("AccountCsaPackageSelection");assert.equal(next.key,"authenticated:B");
- r.auth.status="guest";r.auth.session=null;assert.equal(r.render("AccountCsaPackageSelection").key,"guest:guest");
+ const first=r.selectionElement();
+ r.render();r.flush();nodes(r.tree).find(node=>node.props?.onContinue).props.onContinue();
+ assert.equal(r.render().props.profile.email,"a@example.test");
+
+ Object.assign(r.auth,{status:"checking",session:null});
+ assert.equal(r.selectionElement().key,first.key);
+ const checking=r.render();
+ assert.equal(checking.type,"DataState");assert.equal(checking.props.kind,"loading");
+ assert.equal(checking.props.profile,undefined);assert.equal(checking.props.onContinue,undefined);
+
+ Object.assign(r.auth,{status:"authenticated",session:{subject:"B"},lastConfirmedSubject:"B"});
+ const next=r.selectionElement();
+ assert.notEqual(next.key,first.key);assert.equal(next.props.subject,"B");
+ const waitingForB=r.render();r.flush();
+ assert.equal(waitingForB.type,"DataState");assert.equal(waitingForB.props.kind,"loading");
+ assert.equal(waitingForB.props.profile,undefined);assert.equal(waitingForB.props.onContinue,undefined);
+ assert.deepEqual(r.lookups,[]);
+
+ r.context.accountSessionKey="B";
+ r.context.data.profile={...r.context.data.profile,email:"b@example.test"};
+ r.render();nodes(r.tree).find(node=>node.props?.onContinue).props.onContinue();
+ assert.equal(r.render().props.profile.email,"b@example.test");
+
+ Object.assign(r.auth,{status:"guest",session:null,lastConfirmedSubject:null});
+ assert.notEqual(r.selectionElement().key,next.key);
+ assert.equal(r.selectionElement().props.subject,"");
+ r.dispose();
 });
 
 test("late CSA quote response cannot recreate payment state after owner unmount",async()=>{
  const r=csaRuntime();await r.toTerms();r.tree.props.onCreatePayment();r.dispose();
- r.quoteRequest.resolve({quoteToken:"A",expiresAt:"2099-01-01"});await tick();
+ r.quoteRequest.resolve(memberQuote);await tick();
  const tree=r.render();assert.ok(tree.props.onCreatePayment);assert.equal(tree.props.quote,undefined);
 });
 
 test("late CSA confirmation cannot write pending storage after owner unmount",async()=>{
- const r=csaRuntime();await r.toTerms();r.tree.props.onCreatePayment();r.quoteRequest.resolve({quoteToken:"A",expiresAt:"2099-01-01"});await tick();r.render();
- const confirming=r.tree.props.onConfirm();r.dispose();r.confirmRequest.resolve({requestCode:"CSA-A"});await confirming;
- assert.equal(r.saved,0);
+ const r=csaRuntime();await r.toTerms();r.tree.props.onCreatePayment();r.quoteRequest.resolve(memberQuote);await tick();r.render();
+ const confirming=r.tree.props.onConfirm();r.dispose();r.confirmRequest.resolve({...csaConfirmation,recipientPhone:confirmedRecipientPhone});await confirming;
+ assert.equal(r.localValues.size,0);
  const tree=r.render();assert.equal(tree.props.confirmation,undefined);
+});
+
+const csaConfirmation={id:"request-1",requestCode:"CSA-A",status:"payment_confirmed",packageName:"Gói Rau",durationMonths:6,amount:"3000000",initialPaymentAmount:"500000",expiresAt:"2099-01-01"};
+const confirmedRecipientPhone="+84922222222";
+
+test("member purchase reload uses the confirmed order phone instead of the displayed address phone",async()=>{
+ const r=csaRuntime();
+ r.context.data.profile={...r.context.data.profile,email:null};
+ await r.toTerms();
+ r.tree.props.onCreatePayment();
+ assert.equal(r.quoteInputs[0].guestIdentity,null);
+ r.quoteRequest.resolve(memberQuote);await tick();
+ const confirming=r.render().props.onConfirm();
+ r.confirmRequest.resolve({...csaConfirmation,recipientPhone:confirmedRecipientPhone});await confirming;
+ r.dispose();
+ const reloaded=csaRuntime(undefined,r.localValues);
+ reloaded.context.data.profile={...reloaded.context.data.profile,email:"added@example.test"};
+ reloaded.context.data.shippingAddress={...shippingAddress,phone:"+84933333333"};
+ reloaded.render();reloaded.flush();await tick();
+ assert.deepEqual(JSON.parse(JSON.stringify(reloaded.lookups)),[{requestCode:"CSA-A",phone:confirmedRecipientPhone}]);
+ assert.equal(reloaded.render().props.confirmation.requestCode,"CSA-A");
+ reloaded.dispose();
+ const other=csaRuntime(undefined,r.localValues);
+ other.auth.session={subject:"B"};
+ other.context.accountSessionKey="B";
+ other.context.data.shippingAddress={...shippingAddress,phone:confirmedRecipientPhone};
+ other.render();other.flush();
+ assert.deepEqual(other.lookups,[]);
+ other.dispose();
+});
+
+test("member confirmation without a recipient phone succeeds without saving a pending reference",async()=>{
+ const r=csaRuntime();
+ await r.toTerms();
+ r.tree.props.onCreatePayment();
+ r.quoteRequest.resolve(memberQuote);await tick();
+ const confirming=r.render().props.onConfirm();
+ r.confirmRequest.resolve(csaConfirmation);await confirming;
+ assert.equal(r.render().props.confirmation.requestCode,"CSA-A");
+ assert.equal(r.localValues.size,0);
+ r.dispose();
+});
+
+test("CSA hides the transfer until the verified owner's address matches the quote",async()=>{
+ const r=csaRuntime();
+ await r.toTerms();r.tree.props.onCreatePayment();r.quoteRequest.resolve(memberQuote);await tick();
+ assert.equal(r.render().props.quote.quoteToken,"A");
+ Object.assign(r.auth,{status:"checking",session:null});
+ assert.equal(r.render().props.quote,undefined);
+ r.auth.status="error";assert.equal(r.render().props.kind,"error");
+
+ Object.assign(r.auth,{status:"authenticated",session:{subject:"A"}});
+ r.context.ui.accountFetchState.address="loading";
+ assert.equal(r.render().props.quote,undefined);
+ assert.equal(r.tree.props.onConfirm,undefined);
+ r.context.ui.accountFetchState.address="ready";
+ r.context.data.shippingAddress={...shippingAddress};
+ assert.equal(r.render().props.quote.quoteToken,"A");
+
+ r.context.data.shippingAddress={...shippingAddress,phone:"+84933333333",updatedAt:"2026-11-21T01:23:45.123457+00:00"};
+ assert.equal(r.render().props.quote,undefined);
+ assert.equal(r.tree.props.onConfirm,undefined);
+ nodes(r.tree).find(node=>typeof node.props?.action?.onClick==="function").props.action.onClick();
+ assert.equal(r.render().props.address.phone,"+84933333333");
+ assert.equal(r.quoteInputs.length,1);
+ r.tree.props.onContinue();r.render().props.onCreatePayment();
+ r.nextQuoteRequest.resolve({...memberQuote,quoteToken:"new-quote",shippingAddressUpdatedAt:r.context.data.shippingAddress.updatedAt});await tick();
+ assert.equal(r.quoteInputs.length,2);
+ assert.equal(r.render().props.quote.quoteToken,"new-quote");
+ r.dispose();
+});
+
+test("CSA never shows transfer details for a quote without a verified address binding",async()=>{
+ const r=csaRuntime();
+ await r.toTerms();r.tree.props.onCreatePayment();
+ r.quoteRequest.resolve({quoteToken:"unbound",expiresAt:"2099-01-01"});await tick();
+ assert.equal(r.render().props.quote,undefined);
+ assert.equal(r.tree.props.onConfirm,undefined);
+ r.dispose();
+});
+
+test("two members can confirm and later recover their own CSA orders on the same browser",async()=>{
+ const localValues=new Map();
+ const open=(subject)=>{
+  const r=csaRuntime(undefined,localValues);
+  Object.assign(r.auth,{session:{subject},lastConfirmedSubject:subject});
+  r.context.accountSessionKey=subject;
+  return r;
+ };
+ for(const [subject,recipientPhone] of [["A",confirmedRecipientPhone],["B","+84933333333"]]){
+  const buyer=open(subject);
+  await buyer.toTerms();buyer.tree.props.onCreatePayment();buyer.quoteRequest.resolve(memberQuote);await tick();
+  const confirming=buyer.render().props.onConfirm();
+  buyer.confirmRequest.resolve({...csaConfirmation,requestCode:`CSA-${subject}`,recipientPhone});
+  await confirming;buyer.dispose();
+ }
+ for(const [subject,phone] of [["A",confirmedRecipientPhone],["B","+84933333333"]]){
+  const buyer=open(subject);
+  buyer.render();buyer.flush();await tick();
+  assert.deepEqual(JSON.parse(JSON.stringify(buyer.lookups)),[{requestCode:`CSA-${subject}`,phone}]);
+  assert.equal(buyer.render().props.confirmation.requestCode,`CSA-${subject}`);
+  buyer.dispose();
+ }
 });
 
 test("catalog merge preserves cart price/stock while verified refresh is allowed to replace it",()=>{
@@ -147,7 +301,7 @@ test("CSA voucher input belongs to package selection and applied code reaches qu
  const r=csaRuntime(voucher);r.render();r.flush();const choose=nodes(r.tree).find(n=>n.props?.discounts);
  assert.ok(choose);assert.equal(choose.props.discounts.props.id,"csaDiscountCode");assert.equal(r.quoteInputs.length,0);
  await r.toTerms();r.tree.props.onCreatePayment();assert.equal(r.quoteInputs.length,1);assert.equal(r.quoteInputs[0].couponCode,"SAVE");assert.equal(r.quoteInputs[0].termsVersion,"v1");
- r.quoteRequest.resolve({quoteToken:"discounted",expiresAt:"2099-01-01",coupon:voucher.applied.coupon,summary});await tick();const payment=r.render();assert.equal(payment.props.quote.quoteToken,"discounted");assert.equal(payment.props.discounts,undefined);assert.equal(payment.props.selection,undefined);r.dispose();
+ r.quoteRequest.resolve({...memberQuote,quoteToken:"discounted",coupon:voucher.applied.coupon,summary});await tick();const payment=r.render();assert.equal(payment.props.quote.quoteToken,"discounted");assert.equal(payment.props.discounts,undefined);assert.equal(payment.props.selection,undefined);r.dispose();
 });
 
 test("a changed CSA voucher total returns to selection instead of showing the payment quote",async()=>{

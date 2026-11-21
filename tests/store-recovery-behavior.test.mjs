@@ -183,6 +183,44 @@ test("changing checkout owner hides the old address and waits for the new owner'
  pending.resolve({active:false,products:[]});await r.settle();assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"70000");r.dispose();
 });
 
+test("returning to Store Checkout with the same account keeps the selected CSA quota",async()=>{
+ const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
+ const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
+ const sent=[];
+ const r=checkout({auth,context:{accountSessionKey:"A",data:{authenticated:true,shippingAddress:address,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}}}},services:{getStoreQuota:async()=>({active:true,products:[{productId:"g",availableUnits:1}]}),createStoreCheckout:async payload=>{sent.push(payload);return order()}}});
+ const quotaCheckbox=()=>nodes(nodes(r.tree).find(node=>node.type==="StoreProductRow")?.props.actions).find(node=>node.type==="input"&&node.props.type==="checkbox");
+ r.context.ui.accountFetchState.address="ready";
+ r.render("Checkout");await r.settle();
+ quotaCheckbox().props.onChange({target:{checked:true}});r.render();await r.settle();
+ assert.equal(quotaCheckbox().props.checked,true);
+
+ Object.assign(auth,{status:"checking",session:null});
+ r.render();await r.settle();
+ assert.ok(!text(r.tree).includes("Owner A"));
+ assert.equal(confirm(r),undefined);
+ Object.assign(auth,{status:"authenticated",session:{subject:"A"}});
+ r.render();await r.settle();
+ assert.equal(quotaCheckbox().props.checked,true);
+
+ // The context drops account data after a failed check. A retry for A still restores the draft.
+ Object.assign(auth,{status:"checking",session:null});r.render();await r.settle();
+ auth.status="error";r.render();r.flush();
+ r.context.accountSessionKey="error";r.context.ui.applyCSA={};r.context.data.shippingAddress=null;
+ r.render();await r.settle();
+ assert.ok(nodes(r.tree).some(node=>node.type==="DataState"&&node.props.kind==="error"));
+ assert.equal(confirm(r),undefined);
+ auth.status="checking";r.render();r.flush();
+ Object.assign(auth,{status:"authenticated",session:{subject:"A"}});
+ r.context.accountSessionKey="A";r.context.data.shippingAddress=address;
+ r.render();await r.settle();
+ assert.equal(quotaCheckbox().props.checked,true);
+ assert.equal(sent.length,0);
+ await confirm(r).props.onClick();
+ assert.equal(sent.length,1);
+ assert.equal(sent[0].lines[0].use_quota,true);
+ r.dispose();
+});
+
 function addressCheckout(options={}){
  const auth={status:"authenticated",session:{subject:"A"}};
  const r=checkout({...options,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product}},shippingAddress:{name:"Khách thử",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}}});
@@ -561,6 +599,36 @@ test("an expired checkout stays blocked after guest reload and resumes only for 
  restored.render("Checkout");await restored.settle();assert.ok(!confirm(restored));assert.ok(nodes(restored.tree).some(n=>n.type==="a"&&n.props.href?.startsWith("/api/auth/login")));
  restored.auth.status="authenticated";restored.auth.session={subject:"B"};restored.context.accountSessionKey="B";restored.render();await restored.settle();assert.ok(!confirm(restored));assert.equal(calls,0);
  restored.auth.session={subject:"A"};restored.context.accountSessionKey="A";restored.render();await restored.settle();assert.ok(confirm(restored));assert.equal(calls,0);await confirm(restored).props.onClick();await restored.settle();assert.equal(calls,1);assert.equal(storage.has("nfv_store_checkout_intent_v1:A"),false);assert.equal(storage.has("nfv_store_checkout_reauth_v1"),false);restored.dispose();
+});
+
+test("a failed session check offers retry while a member checkout is unresolved",async()=>{
+ const storage=new Map();let posts=0,retries=0;
+ const auth={status:"authenticated",session:{subject:"A"},refresh(){retries++}};
+ const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}},services:{createStoreCheckout:async()=>{posts++;throw new ApiError(0)}}});
+ r.context.ui.accountFetchState.address="ready";
+ r.render("Checkout");await r.settle();await confirm(r).props.onClick();await r.settle();
+ auth.status="error";auth.session=null;r.context.accountSessionKey="error";r.render();await r.settle();
+ const retry=nodes(r.tree).find(node=>node.type==="DataState"&&node.props.kind==="error")?.props.action;
+ assert.ok(retry);retry.onClick();
+ assert.equal(retries,1);assert.equal(posts,1);assert.ok(storage.has("nfv_store_checkout_intent_v1:A"));
+ r.dispose();
+});
+
+test("direct Store order detail hides the order and retries auth after a failed restore",async()=>{
+ let reads=0,retries=0;
+ const auth={status:"authenticated",session:{subject:"A"},refresh(){retries++}};
+ const privateOrder=order("A",{shippingAddress:{...order().shippingAddress,recipientName:"PRIVATE-A"}});
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth,services:{getStoreOrder:async()=>{reads++;return privateOrder}}});
+ r.render("StoreOrderDetail",{id:"A",locale:"vi"});await r.settle();
+ assert.match(text(r.tree),/PRIVATE-A/);
+ auth.status="checking";auth.session=null;r.render();await r.settle();
+ assert.doesNotMatch(text(r.tree),/PRIVATE-A/);
+ auth.status="error";r.render();await r.settle();
+ assert.doesNotMatch(text(r.tree),/PRIVATE-A/);
+ const retry=nodes(r.tree).find(node=>node.type==="DataState"&&node.props.kind==="error")?.props.action;
+ assert.ok(retry);retry.onClick();
+ assert.equal(retries,1);assert.equal(reads,1);
+ r.dispose();
 });
 
 test("a reauthenticated session for the same owner ignores a 401 from the older session",async()=>{
@@ -1213,6 +1281,101 @@ for(const change of ['stock','price']){
   }finally{r.dispose()}
  });
 }
+
+test("a Store voucher survives same-owner verification and is freshly checked only on Continue",async()=>{
+ const attempts=[];
+ let previews=0;
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>{previews++;return voucherResponse()},createStoreCheckout:async input=>{attempts.push(input);return order()}}});
+ r.auth.lastConfirmedSubject="A";
+ try{
+  r.render("Checkout");await r.settle();await applyCode(r);
+  assert.equal(checkoutTotal(r),"60000");
+  Object.assign(r.auth,{status:"checking",session:null});r.render();await r.settle();
+  assert.equal(voucherInput(r),undefined);
+  assert.equal(confirm(r),undefined);
+  r.auth.status="error";r.render();await r.settle();
+  assert.equal(voucherInput(r),undefined);
+  const restored={subject:"A"};
+  Object.assign(r.auth,{status:"authenticated",session:restored});r.render();await r.settle();
+  assert.equal(voucherInput(r).props.value,"SAVE");
+  assert.equal(checkoutTotal(r),"60000");
+  assert.equal(confirm(r).props.disabled,false);
+  assert.equal(previews,1);
+  assert.equal(attempts.length,0);
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(previews,2);
+  assert.equal(attempts.length,1);
+  assert.equal(attempts[0].coupon_code,"SAVE");
+ }finally{r.dispose()}
+});
+
+test("a confirmed replacement Store owner never inherits the previous owner's voucher draft",async()=>{
+ const r=voucherCheckout({services:{previewStoreVoucher:async()=>voucherResponse()}});
+ r.auth.lastConfirmedSubject="A";
+ try{
+  r.render("Checkout");await r.settle();await applyCode(r);
+  Object.assign(r.auth,{status:"checking",session:null});r.render();await r.settle();
+  Object.assign(r.auth,{status:"authenticated",session:{subject:"B"},lastConfirmedSubject:"B"});
+  r.context.accountSessionKey="B";
+  r.context.data.shippingAddress={...r.context.data.shippingAddress,name:"Owner B"};
+  r.render();await r.settle();
+  assert.equal(voucherInput(r).props.value,"");
+  assert.doesNotMatch(text(r.tree),/Voucher · SAVE/);
+ }finally{r.dispose()}
+});
+
+test("order retry presents the same cancellation key after a same-owner session check",async()=>{
+ const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
+ const keys=[];
+ const snapshot=order("ORDER",{status:"pending_review",workflowVersion:2});
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth,services:{
+  getStoreOrder:async()=>snapshot,
+  cancelStoreOrder:async(_id,key)=>{keys.push(key);if(keys.length===1)throw new ApiError(0);return order("ORDER",{status:"cancelled"})},
+ }});
+ const button=label=>nodes(r.tree).find(n=>n.type==="Button"&&text(n)===label);
+ try{
+  r.render("StoreOrderDetail",{id:"ORDER",locale:"vi",initialOrder:snapshot});await r.settle();
+  button("Hủy đơn").props.onClick();await r.settle();
+  assert.ok(button("Thử lại"));
+  assert.equal(keys.length,1);
+  Object.assign(auth,{status:"checking",session:null});r.render();await r.settle();
+  assert.equal(button("Thử lại"),undefined);
+  r.auth.status="error";r.render();await r.settle();
+  assert.doesNotMatch(text(r.tree),/ORDER/);
+  Object.assign(auth,{status:"authenticated",session:{subject:"A"}});r.render();await r.settle();
+  assert.equal(keys.length,1);
+  assert.equal(button("Thử lại")?.props.disabled,false);
+  button("Thử lại").props.onClick();await r.settle();
+  assert.equal(keys.length,2);
+  assert.equal(keys[1],keys[0]);
+ }finally{r.dispose()}
+});
+
+test("a cancellation response from the previous owner cannot publish or replace the next order's retry",async()=>{
+ const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
+ const pending=deferred(),keys=[];
+ const first=order("OLD-ORDER",{status:"pending_review",workflowVersion:2});
+ const next=order("NEXT-ORDER",{status:"pending_review",workflowVersion:2});
+ const r=runtime("src/screens/store/StoreOrderDetail.tsx",{auth,services:{
+  getStoreOrder:async()=>next,
+  cancelStoreOrder:(_id,key)=>{keys.push(key);return pending.promise},
+ }});
+ const button=label=>nodes(r.tree).find(n=>n.type==="Button"&&text(n)===label);
+ try{
+  r.render("StoreOrderDetail",{id:first.id,locale:"vi",initialOrder:first});await r.settle();
+  button("Hủy đơn").props.onClick();await r.settle();
+  assert.equal(keys.length,1);
+  Object.assign(auth,{status:"checking",session:null});r.render();r.flush();
+  assert.equal(nodes(r.tree).find(n=>n.type==="StorePageHeading"),undefined);
+  Object.assign(auth,{status:"authenticated",session:{subject:"B"},lastConfirmedSubject:"B"});
+  r.render("StoreOrderDetail",{id:next.id,locale:"vi"});await r.settle();
+  pending.reject(new ApiError(0));await r.settle();
+  assert.match(nodes(r.tree).find(n=>n.type==="StorePageHeading").props.title,/NEXT-ORDER/);
+  assert.equal(button("Thử lại"),undefined);
+  assert.equal(button("Hủy đơn")?.props.disabled,false);
+  assert.equal(keys.length,1);
+ }finally{r.dispose()}
+});
 
 for(const unlockAt of [30000,70000]){
  test(`calendar keeps its midnight deadline when checkout unlocks at ${unlockAt}ms`,async()=>{

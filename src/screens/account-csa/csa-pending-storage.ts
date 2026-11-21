@@ -1,99 +1,72 @@
 import type {CsaPurchaseConfirmation} from "@/account/csa-service";
+import {normalizeVietnamPhone} from "../../account/shipping-address-model.ts";
 
 export const CSA_PENDING_STORAGE_KEY="nfv:csa-pending:v1";
 
-type PendingOwner={email:string;phone:string};
+type PendingMember={subject:string;phone:string;email:string|null};
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
 type PendingStores={localStorage:StorageLike;sessionStorage:StorageLike};
-export type CsaPendingReference={requestCode:string};
-
-type PendingEnvelope={
-  version:2;
-  owner:{email:string;phone:string};
-  reference:CsaPendingReference;
-};
-
-function normalizedOwner(owner:PendingOwner){
-  const digits=owner.phone.replace(/\D/g,"");
-  return {
-    email:owner.email.trim().toLowerCase(),
-    phone:digits.startsWith("84")&&digits.length===11?`0${digits.slice(2)}`:digits,
-  };
-}
+type CsaPendingReference={requestCode:string;phone:string};
 
 export function csaPendingStorage(authenticated:boolean,stores:PendingStores):StorageLike|null{
   return authenticated?stores.localStorage:null;
 }
 
-function isConfirmation(value:unknown):value is CsaPurchaseConfirmation{
-  if(!value||typeof value!=="object"||Array.isArray(value))return false;
-  const item=value as Record<string,unknown>;
-  return ["id","requestCode","status","packageName","amount","initialPaymentAmount","expiresAt"].every(key=>typeof item[key]==="string"&&item[key])&&
-    Number.isInteger(item.durationMonths)&&Number(item.durationMonths)>0;
+export function csaPendingStorageKey(subject:string):string{
+  return `${CSA_PENDING_STORAGE_KEY}:${subject}`;
 }
 
-function requestCode(value:unknown):string|null{
-  if(!value||typeof value!=="object"||Array.isArray(value))return null;
-  const item=value as Record<string,unknown>;
-  return typeof item.requestCode==="string"&&item.requestCode.trim()?item.requestCode.trim():null;
+export function readCsaPendingSnapshot(storage:StorageLike,subject:string):string|null{
+  return storage.getItem(csaPendingStorageKey(subject))??storage.getItem(CSA_PENDING_STORAGE_KEY);
 }
 
-export function saveCsaPending(storage:StorageLike,owner:PendingOwner,confirmation:CsaPurchaseConfirmation):void{
-  const normalized=normalizedOwner(owner);
-  if(!normalized.phone||!isConfirmation(confirmation))return;
-  const envelope:PendingEnvelope={version:2,owner:normalized,reference:{requestCode:confirmation.requestCode}};
-  storage.setItem(CSA_PENDING_STORAGE_KEY,JSON.stringify(envelope));
+function isConfirmation(value:CsaPurchaseConfirmation):boolean{
+  return [value.id,value.requestCode,value.status,value.packageName,value.amount,value.initialPaymentAmount,value.expiresAt].every(item=>typeof item==="string"&&item)&&
+    Number.isInteger(value.durationMonths)&&value.durationMonths>0;
 }
 
-export function parseCsaPending(raw:string|null,owner:PendingOwner,now=Date.now()):CsaPendingReference|null{
-  void now;
-  const normalized=normalizedOwner(owner);
-  if(!normalized.phone)return null;
+function readCsaPending(raw:string|null){
   if(!raw)return null;
   try{
-    const value=JSON.parse(raw) as Record<string,unknown>;
-    const storedOwner=value.owner as Record<string,unknown>|undefined;
-    if(!storedOwner||storedOwner.email!==normalized.email||storedOwner.phone!==normalized.phone)return null;
-    const code=value.version===2?requestCode(value.reference):value.version===1?requestCode(value.confirmation):null;
-    return code?{requestCode:code}:null;
+    const {version,owner,confirmation,reference}=JSON.parse(raw) as {
+      version?:number;
+      owner?:{subject?:unknown;email?:unknown;phone?:unknown};
+      confirmation?:{requestCode?:unknown};
+      reference?:{requestCode?:unknown};
+    };
+    if(!owner||typeof owner.phone!=="string")return null;
+    const phone=normalizeVietnamPhone(owner.phone);
+    const requestCode=version===1?confirmation?.requestCode:version===2||version===3?reference?.requestCode:null;
+    if(!phone||typeof requestCode!=="string"||!requestCode.trim())return null;
+    return {version,subject:owner.subject,email:owner.email,reference:{requestCode:requestCode.trim(),phone}};
   }catch{return null;}
 }
 
-export function csaPendingGuestPhone(raw:string|null):string|null{
-  if(!raw)return null;
-  try{
-    const value=JSON.parse(raw) as Record<string,unknown>,storedOwner=value.owner as Record<string,unknown>|undefined;
-    if(value.version!==2||!storedOwner||storedOwner.email!==""||typeof storedOwner.phone!=="string"||!requestCode(value.reference))return null;
-    const phone=normalizedOwner({email:"",phone:storedOwner.phone}).phone;
-    return phone&&phone===storedOwner.phone?phone:null;
-  }catch{return null;}
+export function saveCsaPending(storage:StorageLike,subject:string,confirmation:CsaPurchaseConfirmation):void{
+  const phone=normalizeVietnamPhone(confirmation.recipientPhone??"");
+  if(!subject||!phone||!isConfirmation(confirmation))return;
+  const envelope={version:3,owner:{subject,phone},reference:{requestCode:confirmation.requestCode}};
+  storage.setItem(csaPendingStorageKey(subject),JSON.stringify(envelope));
 }
 
-export function csaPendingMemberPhone(raw:string|null,email:string):string|null{
-  if(!raw)return null;
-  try{
-    const value=JSON.parse(raw) as Record<string,unknown>,storedOwner=value.owner as Record<string,unknown>|undefined;
-    const normalizedEmail=email.trim().toLowerCase();
-    if(value.version!==2||!normalizedEmail||!storedOwner||storedOwner.email!==normalizedEmail||typeof storedOwner.phone!=="string"||!requestCode(value.reference))return null;
-    const phone=normalizedOwner({email:"",phone:storedOwner.phone}).phone;
-    return phone&&phone===storedOwner.phone?phone:null;
-  }catch{return null;}
+export function resolveCsaPendingMemberReference(raw:string|null,owner:PendingMember):CsaPendingReference|null{
+  const stored=readCsaPending(raw);
+  if(!stored||!owner.subject)return null;
+  if(stored.version===3)return stored.subject===owner.subject?stored.reference:null;
+  const email=owner.email?.trim().toLowerCase();
+  return email&&stored.email===email&&stored.reference.phone===normalizeVietnamPhone(owner.phone)?stored.reference:null;
 }
 
-export function resolveCsaPendingMemberReference(raw:string|null,email:string,profilePhone="",shippingPhone=""):{phone:string;reference:CsaPendingReference|null}{
-  const phone=csaPendingMemberPhone(raw,email)||shippingPhone||profilePhone;
-  return {phone,reference:parseCsaPending(raw,{email,phone})};
-}
-
-export function clearLegacyGuestCsaPending(storage:StorageLike):void{
-  if(csaPendingGuestPhone(storage.getItem(CSA_PENDING_STORAGE_KEY)))storage.removeItem(CSA_PENDING_STORAGE_KEY);
+export function discardCsaPending(storage:StorageLike,owner:PendingMember,requestCode:string):void{
+  if(!owner.subject||!requestCode)return;
+  for(const key of [csaPendingStorageKey(owner.subject),CSA_PENDING_STORAGE_KEY]){
+    const stored=resolveCsaPendingMemberReference(storage.getItem(key),owner);
+    if(stored?.requestCode===requestCode)storage.removeItem(key);
+  }
 }
 
 export function clearGuestCsaPending(stores:PendingStores):void{
   stores.sessionStorage.removeItem(CSA_PENDING_STORAGE_KEY);
-  clearLegacyGuestCsaPending(stores.localStorage);
-}
-
-export function loadCsaPending(storage:StorageLike,owner:PendingOwner,now=Date.now()):CsaPendingReference|null{
-  return parseCsaPending(storage.getItem(CSA_PENDING_STORAGE_KEY),owner,now);
+  const stored=readCsaPending(stores.localStorage.getItem(CSA_PENDING_STORAGE_KEY));
+  if(stored&&stored.version!==3&&stored.email==="")stores.localStorage.removeItem(CSA_PENDING_STORAGE_KEY);
 }

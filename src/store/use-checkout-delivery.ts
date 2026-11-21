@@ -15,6 +15,8 @@ export function useCheckoutDelivery(input:Input){
  const [calendar,setCalendar]=useState<{key:string;identity:string;session:unknown;value:StoreDeliveryCalendar;receivedAt:number}|null>(null);
  const [calendarError,setCalendarError]=useState<{key:string;session:unknown;error:unknown}|null>(null);
  const [result,setResult]=useState<{key:object;presentationKey:string;session:unknown;value:StoreCheckoutQuote}|null>(null);
+ const [quoteBuyer,setQuoteBuyer]=useState(buyer);
+ if(quoteBuyer!==buyer){setQuoteBuyer(buyer);setResult(null);}
  const [pending,setPending]=useState<object|null>(null);
  const sequence=useRef(0);
  const [quoteError,setQuoteError]=useState<{key:object;session:unknown;error:unknown}|null>(null);
@@ -25,7 +27,7 @@ export function useCheckoutDelivery(input:Input){
  const calendarFailure=calendarError?.key===calendarKey&&calendarError.session===session?calendarError.error:null;
  const validDate=!!date&&!!currentCalendar?.dates.some(day=>day.date===date)&&!(rejectedDate?.date===date&&rejectedDate.session===session);
  const body=JSON.stringify({...input.request,delivery_date:date});
- const presentationKey=JSON.stringify({identity,request:input.request,context:input.context});
+ const presentationKey=JSON.stringify({buyer,locale,request:input.request,context:input.context});
  const keyText=JSON.stringify({identity,body,context:input.context,version,calendarKey,calendar:currentCalendar,enabled,ready});
  const key=useMemo(()=>({text:keyText,session}),[keyText,session]);
  const currentKey=useRef<typeof key|null>(key);
@@ -79,6 +81,6 @@ export function useCheckoutDelivery(input:Input){
  const quote=enabled&&ready&&validDate&&result?.key===key&&result.session===session?result.value:null;
  const error=quoteError?.key===key&&quoteError.session===session?quoteError.error:null;
  // Reuse verified item/voucher amounts only for the same basket and identity; checkout always fetches again.
- const previousQuote=enabled&&ready&&validDate&&result?.presentationKey===presentationKey&&result.session===session?result.value:null;
+ const previousQuote=enabled&&ready&&validDate&&result?.presentationKey===presentationKey?result.value:null;
  return useMemo(()=>({date,calendar:currentCalendar,calendarLoading:enabled&&!currentCalendar&&!calendarFailure,calendarError:calendarFailure,quote,previousQuote,error,quoteLoading:pending===key,invalidDate:!!date&&!!currentCalendar&&!validDate,select:(value:string)=>{if(!locked&&(value!==date||!validDate)){setSelection({buyer,date:value});setRejectedDate(null);setVersion(v=>v+1)}},refresh,requestQuote}),[date,currentCalendar,enabled,calendarFailure,quote,previousQuote,error,validDate,locked,buyer,refresh,pending,key,requestQuote]);
 }

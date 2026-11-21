@@ -48,7 +48,7 @@ test("administrative resolver requests the active locale and falls back when a c
   assert.deepEqual(JSON.parse(JSON.stringify(await exports.resolveAdministrativeAddressNames("99","99999","vi"))),{provinceName:"99",wardName:"99999"});
 });
 
-function hooks(){let cursor=0,states=[];return {react:{useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value}]},useRef(initial){const index=cursor++;return states[index]??={current:initial}},useEffect(){cursor++}},render(component,props){cursor=0;return component(props)}}}
+function hooks(){let cursor=0,states=[];return {react:{useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value}]},useRef(initial){const index=cursor++;return states[index]??={current:initial}},useEffect(){cursor++},useLayoutEffect(){cursor++}},render(component,props){cursor=0;return component(props)}}}
 
 function detailModule(settings=null){
   const h=hooks(),presentationExports=(()=>{const value={};vm.runInNewContext(compile("src/store/store-order-presentation.ts"),{exports:value,URL,URLSearchParams,require:()=>({})});return value})(),exports={};

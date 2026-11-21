@@ -23,38 +23,43 @@ export function ProfileView(){
  const editHref=siteAccountHref(ui.locale,`/account/${ui.locale}?tab=profile`);
  const missing=copyText(ui.locale,"common.na");
  return <Section title={copyText(ui.locale,"profile.title")} description={copyText(ui.locale,"profile.description")} actions={<ActionLink small href={editHref}><Icon name="edit" size={14}/> {copyText(ui.locale,"profile.edit")}</ActionLink>}>
-   <div className="acc-profile-info"><div><span>{copyText(ui.locale,"profile.name")}</span><strong>{p.name||missing}</strong></div><div><span>{copyText(ui.locale,"profile.phone")}</span><strong>{p.phone||missing}</strong></div><div><span>{copyText(ui.locale,"profile.birthDate")}</span><strong>{profileBirthDate(p.dateOfBirth,ui.locale)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.email")}</span><strong>{p.email||copyText(ui.locale,"profile.noInformation")}</strong></div></div>
+   <div className="acc-profile-info"><div><span>{copyText(ui.locale,"profile.name")}</span><strong>{p.name||missing}</strong></div><div><span>{copyText(ui.locale,"profile.phone")}</span><strong>{p.phone||missing}</strong></div><div><span>{copyText(ui.locale,"profile.birthDate")}</span><strong>{profileBirthDate(p.dateOfBirth,ui.locale)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.email")}</span><strong>{p.email||copyText(ui.locale,"profile.noEmail")}</strong></div></div>
  </Section>;
 }
 
-export function AddressView(){
+export function AddressView({draft,onDraftChange}:{draft:ShippingAddressDraft|null;onDraftChange:(draft:ShippingAddressDraft|null)=>void}){
  const {data,ui,patch,setData,act,call,refreshResource}=useNFV();
  const copy=ADDRESS_COPY[ui.locale];
  const address=data.shippingAddress;
  const status=ui.accountFetchState.address;
- return <Section className="acc-single-address" title={ui.addressEditing?(address?copy.editTitle:copy.addTitle):copy.title}
-   actions={status!=="loading"&&status!=="error"&&!ui.addressEditing&&<Button small variant="outline" onClick={()=>patch({addressEditing:true,error:""})}><Icon name={address?"edit":"plus"} size={14}/> {address?copy.edit:copy.add}</Button>}>
-   {status==="loading"?<DataState kind="loading" title={copy.loadingAddress}/>:status==="error"?<DataState kind="error" title={copy.addressError} action={{label:copy.retry,onClick:()=>void refreshResource("address")}}/>:ui.addressEditing?<AddressEditor initial={address||{name:data.profile.name,phone:data.profile.phone,city:"",ward:"",detail:"",provinceCode:"",wardCode:"",isSupported:true,isDefault:true}}
-     isNew={!address} cancel={()=>patch({addressEditing:false,error:""})} busy={ui.busyKeys.includes("save:address")} save={async value=>{
-       const result=await act("save:address",()=>call<Address>("saveShippingAddress",value),copy.saved);
-       if(result){setData(s=>({...s,shippingAddress:{...value,...result,isDefault:true}}));patch({addressEditing:false});}
+ const initial:ShippingAddressDraft={
+   name:address?.name??data.profile.name,phone:address?.phone??data.profile.phone,
+   provinceCode:address?.isSupported===false?"":address?.provinceCode??"",
+   wardCode:address?.isSupported===false?"":address?.wardCode??"",address:address?.detail??"",
+ };
+ return <Section className="acc-single-address" title={draft?(address?copy.editTitle:copy.addTitle):copy.title}
+   actions={status!=="loading"&&status!=="error"&&!draft&&<Button small variant="outline" onClick={()=>{onDraftChange(initial);patch({error:""});}}><Icon name={address?"edit":"plus"} size={14}/> {address?copy.edit:copy.add}</Button>}>
+   {status==="loading"?<DataState kind="loading" title={copy.loadingAddress}/>:status==="error"?<DataState kind="error" title={copy.addressError} action={{label:copy.retry,onClick:()=>void refreshResource("address")}}/>:draft?<AddressEditor initial={initial} value={draft} onChange={onDraftChange}
+     isNew={!address} cancel={()=>{onDraftChange(null);patch({error:""});}} busy={ui.busyKeys.includes("save:address")} save={async value=>{
+       await act("save:address",()=>call<Address>("saveShippingAddress",value),copy.saved,result=>{
+         if(result){setData(s=>({...s,shippingAddress:{...value,...result,isDefault:true}}));onDraftChange(null);}
+       });
      }} saveError={ui.error?copy.saveError:""}/>:address?<div className="acc-one-address-display"><StoreRecipientSummary name={address.name} phone={address.phone} address={formatAddress(address)}/>
 {address.isSupported===false&&<p className="help-error" role="alert">{copy.unsupported}</p>}</div>:
     <DataState icon="pin" title={copy.empty} description={copy.emptyBody}/>}
  </Section>;
 }
 
-function AddressEditor({initial,isNew,cancel,save,busy,saveError}:{initial:Address;isNew:boolean;cancel:()=>void;save:(v:Address)=>Promise<void>;busy:boolean;saveError:string}){
+function AddressEditor({initial,value,onChange,isNew,cancel,save,busy,saveError}:{initial:ShippingAddressDraft;value:ShippingAddressDraft;onChange:(value:ShippingAddressDraft)=>void;isNew:boolean;cancel:()=>void;save:(v:Address)=>Promise<void>;busy:boolean;saveError:string}){
  const {ui}=useNFV();
  const copy=ADDRESS_COPY[ui.locale];
  const shipping=useSupportedShippingAreas(ui.locale);
- const initialDraft:ShippingAddressDraft={name:initial.name,phone:initial.phone,provinceCode:initial.isSupported===false?"":initial.provinceCode??"",wardCode:initial.isSupported===false?"":initial.wardCode??"",address:initial.detail};
- const [value,setValue]=useState(initialDraft),[submitted,setSubmitted]=useState(false);
+ const [submitted,setSubmitted]=useState(false);
  const review=reviewShippingAddress(value,shipping.areas);
- const changed=isNew||(Object.keys(initialDraft) as (keyof ShippingAddressDraft)[]).some(key=>value[key]!==initialDraft[key]);
+ const changed=isNew||(Object.keys(initial) as (keyof ShippingAddressDraft)[]).some(key=>value[key]!==initial[key]);
  const submit=()=>{setSubmitted(true);if(busy||shipping.loading||shipping.error||!review.value||!changed)return;const province=shipping.areas.find(item=>item.code===review.value?.provinceCode),ward=province?.wards.find(item=>item.code===review.value?.wardCode);if(!province||!ward)return;void save({name:review.value.name,phone:review.value.phone,city:province.name,ward:ward.name,detail:review.value.address,provinceCode:province.code,wardCode:ward.code,isSupported:true,isDefault:true});};
  return <form id="accountAddressForm" className="acc-editor acc-one-address-form" noValidate onSubmit={(event:FormEvent)=>{event.preventDefault();submit();}}>
-   <fieldset className="acc-form-grid" disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}><ShippingAddressFields locale={ui.locale} value={value} areas={shipping.areas} loading={shipping.loading} error={shipping.error} missing={submitted?review.missing:[]} onRetry={shipping.retry} onChange={setValue} copy={{name:copy.recipient,namePlaceholder:copy.namePlaceholder,phone:copy.phone,province:copy.province,chooseProvince:copy.chooseProvince,ward:copy.ward,chooseProvinceFirst:copy.chooseProvinceFirst,chooseWard:copy.chooseWard,address:copy.detail,addressPlaceholder:copy.detailPlaceholder,loading:copy.loadingAreas,loadError:copy.areasError,retry:copy.retry}}/></fieldset>
+   <fieldset className="acc-form-grid" disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}><ShippingAddressFields locale={ui.locale} value={value} areas={shipping.areas} loading={shipping.loading} error={shipping.error} missing={submitted?review.missing:[]} onRetry={shipping.retry} onChange={onChange} copy={{name:copy.recipient,namePlaceholder:copy.namePlaceholder,phone:copy.phone,province:copy.province,chooseProvince:copy.chooseProvince,ward:copy.ward,chooseProvinceFirst:copy.chooseProvinceFirst,chooseWard:copy.chooseWard,address:copy.detail,addressPlaceholder:copy.detailPlaceholder,loading:copy.loadingAreas,loadError:copy.areasError,retry:copy.retry}}/></fieldset>
    {submitted&&!review.complete&&<div className="help-error" role="alert">{copy.invalid}</div>}{saveError&&<div className="help-error" role="alert">{saveError}</div>}<div className="acc-form-actions"><Button type="submit" small loading={busy} disabled={busy||shipping.loading||shipping.error||!review.complete||!changed}>{copy.save}</Button><Button variant="outline" small disabled={busy} onClick={cancel}>{copy.cancel}</Button></div>
  </form>;
 }

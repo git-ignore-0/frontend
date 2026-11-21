@@ -6,8 +6,9 @@ import type {AuthSnapshot} from "./auth-types";
 import {retainBuyAgainOwner} from "@/store/buy-again-session";
 import {sameAuthSession} from "./session-equality";
 
-const initial:AuthSnapshot={status:"checking",session:null,error:""};
-type AuthContextValue=AuthSnapshot & {refresh:()=>Promise<void>;expire:()=>void};
+type AuthState=AuthSnapshot & {revision:number;lastConfirmedSubject:string|null};
+const initial:AuthState={status:"checking",session:null,error:"",revision:0,lastConfirmedSubject:null};
+type AuthContextValue=AuthSnapshot & {lastConfirmedSubject:string|null;refresh:()=>Promise<void>;expire:()=>void};
 const AuthContext=createContext<AuthContextValue|null>(null);
 
 export function useAuth():AuthContextValue {
@@ -18,27 +19,28 @@ export function useAuth():AuthContextValue {
 
 /** The same-origin BFF is the sole owner of the encrypted OAuth session. */
 export function AuthProvider({children}:{children:ReactNode}){
-  const [snapshot,setSnapshot]=useState<AuthSnapshot>(initial);
+  const [{status,session,error,revision:verifiedRevision,lastConfirmedSubject},setSnapshot]=useState(initial);
   const revision=useRef(0);
 
   const refresh=useCallback(async(showChecking=true)=>{
     const version=++revision.current;
-    if(showChecking)setSnapshot(previous=>({...previous,status:"checking",error:""}));
+    // Retain only the owner key for local drafts while the session is unverified.
+    setSnapshot(previous=>showChecking||previous.status==="authenticated"?{...previous,status:"checking",session:null,error:"",revision:version}:previous);
     try {
       const session=await service.getSession();
       if(version===revision.current)setSnapshot(previous=>{
         const status=session?"authenticated":"guest";
         if(!showChecking&&previous.status===status&&sameAuthSession(previous.session,session))return previous;
-        return {status,session,error:""};
+        return {status,session,error:"",revision:version,lastConfirmedSubject:session?.subject??null};
       });
     } catch(error){
       if(version!==revision.current)return;
       if(service.isUnauthorized(error)){
-        setSnapshot({status:"expired",session:null,error:"Phiên đăng nhập đã hết hạn."});
+        setSnapshot({...initial,status:"expired",error:"Phiên đăng nhập đã hết hạn.",revision:version});
         return;
       }
-      const failed:AuthSnapshot={status:"error",session:null,error:error instanceof Error?error.message:"Không thể kiểm tra phiên đăng nhập."};
-      setSnapshot(previous=>showChecking||previous.status==="checking"?failed:previous);
+      const message=error instanceof Error?error.message:"Không thể kiểm tra phiên đăng nhập.";
+      setSnapshot(previous=>showChecking||previous.status==="checking"?{...previous,status:"error",session:null,error:message,revision:version}:previous);
     }
   },[]);
 
@@ -55,15 +57,17 @@ export function AuthProvider({children}:{children:ReactNode}){
     document.addEventListener("visibilitychange",onVisible);
     return ()=>{window.removeEventListener("pageshow",onPageShow);document.removeEventListener("visibilitychange",onVisible);};
   },[refresh]);
+  const authenticatedRevision=status==="authenticated"?verifiedRevision:null;
   const expire=useCallback(()=>{
-    revision.current+=1;
-    setSnapshot(previous=>previous.status==="authenticated"?
-      {status:"expired",session:null,error:"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."}:previous);
-  },[]);
+    // A 401 from the previous account cannot cancel or expire a newer verification.
+    if(authenticatedRevision!==revision.current)return;
+    const version=++revision.current;
+    setSnapshot({...initial,status:"expired",error:"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",revision:version});
+  },[authenticatedRevision]);
   useEffect(()=>{
-    if(snapshot.status!=="authenticated"&&snapshot.status!=="guest")return;
-    try{retainBuyAgainOwner(window.sessionStorage,snapshot.status==="authenticated"?snapshot.session?.subject??null:null)}catch{}
-  },[snapshot.status,snapshot.session?.subject]);
-  const value=useMemo(()=>({...snapshot,refresh,expire}),[snapshot,refresh,expire]);
+    if(status!=="authenticated"&&status!=="guest")return;
+    try{retainBuyAgainOwner(window.sessionStorage,status==="authenticated"?session?.subject??null:null)}catch{}
+  },[status,session?.subject]);
+  const value=useMemo(()=>({status,session,error,lastConfirmedSubject,refresh,expire}),[status,session,error,lastConfirmedSubject,refresh,expire]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

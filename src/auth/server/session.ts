@@ -3,7 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { sessionSecret } from "@/auth/server/config";
-import type { CoreUser } from "@/auth/server/validation";
+import type { CoreUser } from "@/auth/core-user";
 import type { Locale } from "@/types";
 
 export const SESSION_COOKIE = "nfv_public_session";

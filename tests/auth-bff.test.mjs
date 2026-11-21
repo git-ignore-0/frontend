@@ -35,29 +35,56 @@ function load(path, requireStub, globals = {}) {
   return exports;
 }
 
+const verifiedEmailOnly = {
+  sub: "3f7d06cb-8d37-44d5-a5ab-1e284f9d37d9",
+  name: "NFV Member",
+  email: "member@example.com",
+  email_verified: true,
+  login_phone_number: null,
+  locale: "vi",
+  status: "active",
+  roles: ["member"],
+  phone_number: "",
+  date_of_birth: "1990-06-15",
+};
+const phoneOnly = {
+  ...verifiedEmailOnly,
+  email: null,
+  email_verified: false,
+  login_phone_number: "+84912345678",
+  phone_number: "+84 912 345 678",
+};
+const unverifiedEmail = { ...phoneOnly, email: "unverified@example.com" };
+const parseValidation = () => load("src/auth/server/validation.ts", (id) => {
+  if (id === "../core-user.ts") return load("src/auth/core-user.ts", () => ({}));
+  throw new Error(`Unexpected import ${id}`);
+});
+
 test("auth boundary validates Core payloads and rejects unsafe return targets", () => {
-  const validation = load("src/auth/server/validation.ts", () => ({}));
-  const user = {
-    sub: "3f7d06cb-8d37-44d5-a5ab-1e284f9d37d9",
-    name: "NFV Member",
-    email: "member@example.com",
-    email_verified: true,
-    locale: "vi",
-    status: "active",
-    roles: ["member"],
-    phone_number: "+84 912 345 678",
-    date_of_birth: "1990-06-15",
-  };
-  assert.deepEqual(JSON.parse(JSON.stringify(validation.parseMeResponse({ data: user }))), user);
-  assert.throws(() => validation.parseMeResponse({ data: { ...user, status: "suspended" } }));
-  assert.throws(() => validation.parseMeResponse({ data: { ...user, email_verified: false } }));
-  assert.throws(() => validation.parseMeResponse({ data: { ...user, phone_number: 84912345678 } }));
-  assert.throws(() => validation.parseMeResponse({ data: { ...user, date_of_birth: "1990-02-31" } }));
+  const validation = parseValidation();
+  for (const user of [phoneOnly, unverifiedEmail, verifiedEmailOnly]) {
+    assert.deepEqual(JSON.parse(JSON.stringify(validation.parseMeResponse({ data: user }))), user);
+  }
+  for (const invalid of [
+    { status: "suspended" },
+    { email: null },
+    { email: 1 },
+    { email_verified: "true" },
+    { login_phone_number: 84912345678 },
+    { login_phone_number: undefined },
+    { phone_number: 84912345678 },
+    { date_of_birth: "1990-02-31" },
+  ]) {
+    assert.throws(
+      () => validation.parseMeResponse({ data: { ...verifiedEmailOnly, ...invalid } }),
+      /invalid_me_response/,
+    );
+  }
   assert.deepEqual(
     JSON.parse(JSON.stringify(validation.parseMeResponse({
-      data: { ...user, phone_number: "", date_of_birth: null },
+      data: { ...verifiedEmailOnly, date_of_birth: null },
     }))),
-    { ...user, phone_number: "", date_of_birth: null },
+    { ...verifiedEmailOnly, date_of_birth: null },
   );
   assert.deepEqual(
     JSON.parse(JSON.stringify(validation.parseTokenResponse({
@@ -73,6 +100,137 @@ test("auth boundary validates Core payloads and rejects unsafe return targets", 
   assert.equal(validation.safeReturnTo("/account/vi?tab=profile", "/vi", "http://localhost:3000"), "/account/vi?tab=profile");
   for (const unsafe of ["https://evil.example", "//evil.example", "\\evil.example", "javascript:alert(1)"])
     assert.equal(validation.safeReturnTo(unsafe, "/vi", "http://localhost:3000"), "/vi", unsafe);
+});
+
+function authRoundTrip(coreUser) {
+  const cookieValues = new Map();
+  const store = {
+    get: (name) => cookieValues.has(name) ? { value: cookieValues.get(name) } : undefined,
+    getAll: () => [...cookieValues].map(([name, value]) => ({ name, value })),
+    set: (name, value) => cookieValues.set(name, value),
+    delete: (name) => cookieValues.delete(name),
+  };
+  const config = {
+    authOrigin: () => "https://auth.example.test",
+    publicSiteOrigin: () => "https://site.example.test",
+    oauthClientId: () => "public-client",
+    oauthClientSecret: () => "test-client-secret",
+    sessionSecret: () => "s".repeat(32),
+  };
+  const session = load("src/auth/server/session.ts", (id) => {
+    if (id === "server-only") return {};
+    if (id === "node:crypto") return { __esModule: true, default: crypto };
+    if (id === "next/headers") return { cookies: async () => store };
+    if (id === "@/auth/server/config") return config;
+    throw new Error(`Unexpected import ${id}`);
+  });
+  let now = Date.now();
+  let profileStatus = 200;
+  const authorizations = [];
+  const tokenRequests = [];
+  const oauth = load("src/auth/server/oauth.ts", (id) => {
+    if (id === "server-only") return {};
+    if (id === "node:crypto") return { __esModule: true, default: crypto };
+    if (id === "@/auth/server/config") return config;
+    if (id === "@/auth/server/validation") return parseValidation();
+    throw new Error(`Unexpected import ${id}`);
+  }, {
+    Date: { now: () => now },
+    fetch: async (url, init) => {
+      if (url === "https://auth.example.test/oauth/token") {
+        tokenRequests.push(init.body);
+        const rotated = init.body.get("grant_type") === "refresh_token";
+        return Response.json({
+          access_token: rotated ? "rotated-access" : "initial-access",
+          refresh_token: rotated ? "rotated-refresh" : "initial-refresh",
+          expires_in: 3600,
+          token_type: "Bearer",
+        });
+      }
+      assert.equal(url, "https://auth.example.test/api/v1/me");
+      authorizations.push(init.headers.Authorization);
+      return Response.json({ data: coreUser }, { status: profileStatus });
+    },
+  });
+  const nextServer = { NextResponse: {
+    redirect: (url) => new Response(null, { status: 307, headers: { Location: url } }),
+    json: Response.json,
+  } };
+  const routeImports = (id) => {
+    if (id === "next/server") return nextServer;
+    if (id === "@/auth/server/config") return config;
+    if (id === "@/auth/server/oauth") return oauth;
+    if (id === "@/auth/server/session") return session;
+    if (id === "@/auth/server/validation") return parseValidation();
+    throw new Error(`Unexpected import ${id}`);
+  };
+  const callback = load("app/api/auth/callback/route.ts", routeImports);
+  const sessionRoute = load("app/api/auth/session/route.ts", routeImports);
+  const accountRoute = load("app/api/auth/account/route.ts", routeImports);
+  return {
+    callback, sessionRoute, accountRoute, session, authorizations, tokenRequests,
+    expireAccessToken: () => { now += 3600_001; },
+    revokeAccountAccess: () => { profileStatus = 403; },
+  };
+}
+
+for (const [label, coreUser] of [
+  ["a phone-only account", phoneOnly],
+  ["an unverified email account", unverifiedEmail],
+  ["a verified legacy email-only account", verifiedEmailOnly],
+]) {
+  test(`OAuth callback and session refresh keep ${label} authenticated`, async () => {
+    const h = authRoundTrip(coreUser);
+    const returnTo = "/account/vi?tab=profile";
+    await h.session.writeOAuthFlow({ state: "expected", verifier: "test-verifier", returnTo, locale: "vi" });
+    const callback = await h.callback.GET({
+      nextUrl: new URL("https://site.example.test/api/auth/callback?code=code&state=expected"),
+    });
+    assert.equal(callback.headers.get("Location"), `https://site.example.test${returnTo}`);
+    assert.equal(h.tokenRequests[0].get("code_verifier"), "test-verifier");
+    assert.equal(h.tokenRequests[0].get("redirect_uri"), "https://site.example.test/api/auth/callback");
+    assert.deepEqual((await (await h.sessionRoute.GET()).json()).data.user, coreUser);
+
+    h.expireAccessToken();
+    assert.deepEqual((await (await h.sessionRoute.GET()).json()).data.user, coreUser);
+    assert.equal(h.tokenRequests[1].get("grant_type"), "refresh_token");
+    assert.equal(h.tokenRequests[1].get("scope"), "profile email");
+    assert.equal((await h.session.readSession()).accessToken, "rotated-access");
+    assert.deepEqual(h.authorizations, ["Bearer initial-access", "Bearer initial-access", "Bearer rotated-access"]);
+  });
+}
+
+test("the session route reads a legacy cookie, verifies /me, and expires it if locked", async () => {
+  const h = authRoundTrip(verifiedEmailOnly);
+  const legacyUser = { ...verifiedEmailOnly };
+  delete legacyUser.login_phone_number;
+  await h.session.writeSession({
+    accessToken: "legacy-access",
+    refreshToken: "legacy-refresh",
+    expiresAt: Date.now() + 3600_000,
+    user: legacyUser,
+  });
+  const current = await h.sessionRoute.GET();
+  assert.deepEqual((await current.json()).data.user, verifiedEmailOnly);
+  assert.deepEqual(h.authorizations, ["Bearer legacy-access"]);
+
+  h.revokeAccountAccess();
+  const expired = await h.sessionRoute.GET();
+  assert.equal(expired.status, 401);
+  assert.deepEqual(await expired.json(), { error: "session_expired" });
+  assert.equal(await h.session.readSession(), null);
+});
+
+test("account edit redirects to Core with the matching locale and profile tab in return_to", () => {
+  const h = authRoundTrip(verifiedEmailOnly);
+  for (const locale of ["vi", "en"]) {
+    const requestUrl = new URL("https://site.example.test/api/auth/account");
+    requestUrl.searchParams.set("returnTo", `/account/${locale}?tab=profile`);
+    const target = new URL(h.accountRoute.GET({ nextUrl: requestUrl }).headers.get("Location"));
+    assert.equal(target.origin, "https://auth.example.test");
+    assert.equal(target.pathname, "/account");
+    assert.equal(target.searchParams.get("return_to"), `https://site.example.test/account/${locale}?tab=profile`);
+  }
 });
 
 test("sealed auth cookies are confidential, tamper-evident and HttpOnly", async () => {

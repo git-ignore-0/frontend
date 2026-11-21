@@ -26,9 +26,21 @@ test("CSA service preserves upcoming items when there is no active membership",(
 
 test("CSA purchase service binds the payment quote to the terms the buyer accepted",()=>run(`
   import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});const calls=[];
-  globalThis.fetch=async (path,options)=>{calls.push({path,body:JSON.parse(options.body)});const data=path.endsWith('csa-payment-quotes')?{quote_token:'signed',expires_at:'2026-10-25T01:00:00Z',request_code:'CSA-1',payment:{amount:'500000',bank_code:'970436',bank_name:'VCB',account_number:'123',account_name:'NFV',transfer_content:'CSA-1'},payment_summary:{payment_type:'installment',total_amount:'3000000',initial_payment_amount:'500000',installment_count:2,installments:[{sequence:1,amount:'500000',cycle_count:1},{sequence:2,amount:'2500000',cycle_count:5}]},terms:{version:'v1',locale:'vi',hash:'abc'},qr_payload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:'500000',addInfo:'CSA-1',format:'text',template:'compact2'}}:{id:'purchase-1',request_code:'CSA-1',status:'payment_confirmed',package_snapshot:{name:'Gói Rau'},price_option_snapshot:{duration_months:6},amount:'3000000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z'};return new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}})};
+  globalThis.fetch=async (path,options)=>{calls.push({path,body:JSON.parse(options.body)});const data=path.endsWith('csa-payment-quotes')?{quote_token:'signed',expires_at:'2026-10-25T01:00:00Z',request_code:'CSA-1',shipping_address_updated_at:'2026-10-24T01:00:00.123456+00:00',payment:{amount:'500000',bank_code:'970436',bank_name:'VCB',account_number:'123',account_name:'NFV',transfer_content:'CSA-1'},payment_summary:{payment_type:'installment',total_amount:'3000000',initial_payment_amount:'500000',installment_count:2,installments:[{sequence:1,amount:'500000',cycle_count:1},{sequence:2,amount:'2500000',cycle_count:5}]},terms:{version:'v1',locale:'vi',hash:'abc'},qr_payload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:'500000',addInfo:'CSA-1',format:'text',template:'compact2'}}:{id:'purchase-1',request_code:'CSA-1',status:'payment_confirmed',package_snapshot:{name:'Gói Rau'},price_option_snapshot:{duration_months:6},amount:'3000000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z'};return new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}})};
   const quote=await service.createCsaPaymentQuote({packageId:'p',priceOptionId:'o',paymentPlanId:'plan',locale:'vi',termsVersion:'CSA_TERMS_V3',termsHash:'${"a".repeat(64)}'});assert.equal(quote.payment.amount,'500000');assert.deepEqual(quote.summary.installments,[{sequence:1,amount:'500000',cycleCount:1},{sequence:2,amount:'2500000',cycleCount:5}]);assert.deepEqual(calls[0].body,{package_id:'p',price_option_id:'o',payment_plan_id:'plan',terms_accepted:true,terms_locale:'vi',terms_version:'CSA_TERMS_V3',terms_hash:'${"a".repeat(64)}'});
+  assert.equal(quote.shippingAddressUpdatedAt,'2026-10-24T01:00:00.123456+00:00');
   const confirmed=await service.confirmCsaTransfer(quote.quoteToken);assert.equal(confirmed.status,'payment_confirmed');assert.equal(confirmed.expiresAt,'2026-11-01T00:00:00Z');assert.deepEqual(calls[1].body,{quote_token:'signed'});
+`));
+
+test("CSA confirmation reads the saved recipient phone and supports older responses without it",()=>run(`
+  import assert from 'node:assert/strict';const service=await import(${JSON.stringify(serviceUrl)});
+  const confirmed={id:'purchase-1',request_code:'CSA-1',status:'payment_confirmed',package_snapshot:{name:'Gói Rau'},price_option_snapshot:{duration_months:1},amount:'500000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z'};
+  for(const recipient_phone of ['+84922222222',undefined]){
+    globalThis.fetch=async()=>Response.json({data:{...confirmed,recipient_phone}});
+    const result=await service.confirmCsaTransfer('signed');
+    assert.equal(result.status,'payment_confirmed');
+    assert.equal(result.recipientPhone,recipient_phone);
+  }
 `));
 
 test("CSA purchase service includes the same validated guest identity in quote and confirmation",()=>run(`
@@ -36,6 +48,7 @@ test("CSA purchase service includes the same validated guest identity in quote a
   globalThis.fetch=async (path,options)=>{calls.push({path,body:JSON.parse(options.body)});const data=path.endsWith('csa-payment-quotes')?{quote_token:'signed',expires_at:'2026-10-25T01:00:00Z',request_code:'CSA-1',payment:{amount:'500000',bank_code:'970436',bank_name:'VCB',account_number:'123',account_name:'NFV',transfer_content:'CSA-1'},payment_summary:{payment_type:'full',total_amount:'500000',initial_payment_amount:'500000',installment_count:1,installments:[{sequence:1,amount:'500000',cycle_count:1}]},terms:{version:'v1',locale:'vi',hash:'abc'},qr_payload:{acqId:'970436',accountNo:'123',accountName:'NFV',amount:'500000',addInfo:'CSA-1',format:'text',template:'compact2'}}:{id:'purchase-1',request_code:'CSA-1',status:'payment_confirmed',package_snapshot:{name:'Gói Rau'},price_option_snapshot:{duration_months:1},amount:'500000',initial_payment_amount:'500000',expires_at:'2026-11-01T00:00:00Z'};return new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}})};
   const guestIdentity={name:'Nguyễn Văn An',phone:'+84901234567',province_code:'66',ward_code:'22015',address:'Số 12, ngõ 5'};
   const quote=await service.createCsaPaymentQuote({packageId:'p',priceOptionId:'o',paymentPlanId:null,locale:'vi',termsVersion:'CSA_TERMS_V3',termsHash:'${"b".repeat(64)}',guestIdentity});
+  assert.equal(quote.shippingAddressUpdatedAt,undefined);
   await service.confirmCsaTransfer(quote.quoteToken,guestIdentity);
   assert.deepEqual(calls[0].body.guest_identity,guestIdentity);
   assert.deepEqual(calls[1].body,{quote_token:'signed',guest_identity:guestIdentity});

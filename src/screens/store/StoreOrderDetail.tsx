@@ -3,7 +3,7 @@ import {deliveryDateLabel} from "@/store/store-delivery";
 import {storeOrderActions,storeOrderStatusSummary,storeOrderDeadlineLabel,storeOrderHasDeadline,storeShippingDiscountReason} from "@/store/store-order-presentation";
 
 import {ResponsiveDialog} from "@/components/overlays/OverlayPrimitives";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useLayoutEffect,useRef,useState} from "react";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
 import {useStoreSession} from "@/store/use-store-session";
@@ -43,7 +43,8 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const {copyToClipboard}=useNFV();
  const copy=COPY[locale],settings=useSiteSettings(locale),contact=contactPresentation(settings),auth=useAuth();
  const buyAgain=useBuyAgain(locale,!readOnly);
- const owner=auth.status==="authenticated"?auth.session?.subject??"":auth.status,key=`${owner}:${id}`;
+ const authPending=auth.status==="checking"||auth.status==="error";
+ const owner=auth.status==="authenticated"?auth.session?.subject??"":authPending?auth.lastConfirmedSubject??auth.status:auth.status,key=`${owner}:${id}`;
  const [initialOwner]=useState(owner),[orderKey,setOrderKey]=useState(key);
  const [order,setOrder]=useState(initialOrder),[state,setState]=useState(initialOrder?"ready":"loading"),[error,setError]=useState(""),[busy,setBusy]=useState(""),[now,setNow]=useState(0),[receivedAt,setReceivedAt]=useState(0),[addressNames,setAddressNames]=useState<{key:string;value:StoreOrderAddressNames|null}|null>(null);
  const initialSnapshot=useRef(initialOrder),expiredRefresh=useRef<string|null>(null),requestSeq=useRef(0),mutationSeq=useRef(0),activeRequest=useRef<"load"|"mutation"|null>(null);
@@ -51,11 +52,27 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const [dialog,setDialog]=useState<"cancel"|"claim"|"request"|null>(null),[unresolved,setUnresolved]=useState(false);
  const [retryIntent,setRetryIntent]=useState<{kind:"report"|"cancel"|"request";refund:boolean}|null>(null);
  const intent=useRef<{kind:"report"|"cancel"|"request";refund:boolean;key:string}|null>(null);
+ const intentOwner=useRef(key);
  const accept=(value:StoreOrder)=>{const time=clock();setReceivedAt(time);setNow(time);setOrder(value);setOrderKey(key);onLoaded?.(value);setState("ready");setError("")};
  const load=async(background=false)=>{if(activeRequest.current==="mutation"||background&&activeRequest.current)return;const seq=++requestSeq.current;activeRequest.current="load";if(!background)setState("loading");try{const value=await storeRequest(()=>loadOrder(id));if(seq===requestSeq.current)accept(value)}catch{if(seq===requestSeq.current)setState("error")}finally{if(seq===requestSeq.current)activeRequest.current=null}};
- // Order identity starts one sequenced load; stale completions are rejected by requestSeq.
+ // Pause during verification. A same-owner check keeps any unfinished mutation's exact key.
+ useLayoutEffect(()=>{
+  if(intentOwner.current!==key){intentOwner.current=key;intent.current=null;setDialog(null);}
+  expiredRefresh.current=null;
+  activeRequest.current=null;
+  // Reset mutation controls before the newly verified identity is painted.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  setBusy("");
+  setRetryIntent(intent.current);
+  setUnresolved(!!intent.current);
+  if(!authPending){
+   if(initialSnapshot.current?.id===id&&owner===initialOwner){accept(initialSnapshot.current);initialSnapshot.current=undefined;}
+   else{setOrder(undefined);setOrderKey(key);void load();}
+  }
+  return()=>{requestSeq.current+=1;mutationSeq.current+=1};
+ // The key and authenticated session identify this order load and its async work.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- useEffect(()=>{expiredRefresh.current=null;intent.current=null;requestSeq.current+=1;mutationSeq.current+=1;activeRequest.current=null;if(auth.status!=="checking"){if(initialSnapshot.current?.id===id&&owner===initialOwner){accept(initialSnapshot.current);initialSnapshot.current=undefined}else{setOrder(undefined);setOrderKey(key);setState("loading");setBusy("");void load()}}const identitySeq=requestSeq.current;Promise.resolve().then(()=>{if(identitySeq===requestSeq.current){setRetryIntent(null);setUnresolved(false);setDialog(null)}});return()=>{requestSeq.current+=1;mutationSeq.current+=1}},[id,owner]);
+ },[key,authPending,auth.session]);
  useEffect(()=>{if(!order||!(storeOrderHasDeadline(order)||order.csa?.selection.state==="reselecting"))return;const timer=window.setInterval(()=>setNow(clock()),1000);return()=>window.clearInterval(timer)},[order]);
  const addressKey=order?`${locale}:${order.shippingAddress.provinceCode}:${order.shippingAddress.wardCode}`:"";
  // addressKey captures locale and both snapshot codes; the async result is keyed before display.
@@ -64,10 +81,10 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const left=order&&orderKey===key?remaining(order,receivedAt,now):null;
  // Crossing the server deadline triggers one refresh; requestSeq still owns stale protection.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- useEffect(()=>{if(order&&left===0&&expiredRefresh.current!==deadlineKey(order)&&!busy&&activeRequest.current===null&&(["payment_pending","pending_review","payment_review"].includes(order.status))){expiredRefresh.current=deadlineKey(order);void load()}},[left,order,busy]);
+ useEffect(()=>{if(!authPending&&order&&left===0&&expiredRefresh.current!==deadlineKey(order)&&!busy&&activeRequest.current===null&&(["payment_pending","pending_review","payment_review"].includes(order.status))){expiredRefresh.current=deadlineKey(order);void load()}},[authPending,left,order,busy]);
  // Keep the snapshot visible while tracking remote progress; mutations take priority over reads.
  useEffect(()=>{
-  if(!order||orderKey!==key||auth.status==="checking")return;
+  if(!order||orderKey!==key||authPending)return;
   const refresh=()=>{if(document.visibilityState!=="hidden")void load(true)};
   const polling=["payment_pending","pending_review","payment_review","pending_delivery"].includes(order.status)||order.refundStatus==="pending";
   const timer=polling?window.setInterval(refresh,30000):null;
@@ -75,8 +92,8 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
   return()=>{if(timer!==null)window.clearInterval(timer);window.removeEventListener("focus",refresh)};
  // Restart for identity/status changes, not the snapshot rerendered by each clock tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[id,owner,orderKey,key,auth.status,order?.status,order?.paymentStatus,order?.refundStatus]);
- const mutationReady=state==="ready"&&orderKey===key&&auth.status!=="checking"&&!!order;
+ },[id,owner,orderKey,key,authPending,order?.status,order?.paymentStatus,order?.refundStatus]);
+ const mutationReady=state==="ready"&&orderKey===key&&!authPending&&!!order;
  const mutate=async(kind:"report"|"cancel"|"request",refund=false)=>{
   if(!order||readOnly||order.csa||busy||!mutationReady||activeRequest.current==="mutation")return;
   if(intent.current&&(intent.current.kind!==kind||intent.current.refund!==refund))return;
@@ -113,6 +130,7 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
   });
   return()=>cleanups.forEach(cleanup=>cleanup());
  },[key,initialLoading,hasPaymentArea]);
+ if(auth.status==="error")return <div className="container order-detail-page store-commerce"><DataState kind="error" title={locale==="vi"?"Không thể kiểm tra phiên đăng nhập":"Could not verify your session"} description={auth.error} action={{label:copy.retry,onClick:()=>void auth.refresh()}}/></div>;
  if(initialLoading)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="loading" title={copy.loading}/></div></div>;
  if(!order)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/></div></div>;
  const actions=storeOrderActions(order),qr=storePaymentQrUrl(order),totals=storeOrderTotals(order),events=[{label:copy.created,time:order.createdAt},{label:copy.transfer,time:order.transferReportedAt},{label:copy.approved,time:order.approvedAt},{label:locale==="vi"?"Đã nhận tiền":"Payment received",time:order.paymentReceivedAt},{label:order.workflowVersion===2?(locale==="vi"?"Mở đối soát":"Reconciliation opened"):(locale==="vi"?"Yêu cầu hoàn tiền":"Refund requested"),time:order.refundRequestedAt},{label:locale==="vi"?"Kết thúc yêu cầu hoàn":"Refund request closed",time:order.refundRequestClosedAt},{label:locale==="vi"?"Đã hoàn tiền":"Refunded",time:order.refundedAt},{label:copy.delivered,time:order.deliveredAt},{label:copy.cancelled,time:order.cancelledAt}].filter(item=>item.time).sort((a,b)=>Date.parse(a.time!)-Date.parse(b.time!));

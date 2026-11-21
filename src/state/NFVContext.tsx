@@ -1,5 +1,5 @@
 "use client";
-import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction} from "react";
+import {createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction} from "react";
 import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen, Order} from "@/types";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
@@ -42,11 +42,13 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountTab:initialAccountTab,accountHubOpen:initialPage==="account"&&initialAccountHubOpen,referrerDraft:initialReferrerCode}));
   const [cartReady,setCartReady]=useState(false);
   const [accountSessionKey,setAccountSessionKey]=useState("checking");
+  const [addressSession,setAddressSession]=useState<typeof auth.session>(null);
   // Synchronous guards prevent double submits before React has committed the pending state.
   const activeActions=useRef(new Map<string,number>());
   const wardRequests=useRef(new Map<string,Promise<void>>());
   const loadedWards=useRef(new Set<string>());
   const authEpoch=useRef(0);
+  useLayoutEffect(()=>()=>{authEpoch.current+=1},[auth.status,auth.session]);
   const giftIntentOwner=useRef<string|null>(null);
   const resourceSequences=useRef(new Map<Resource,number>());
   const beginResourceRequest=useCallback((resource:Resource)=>{
@@ -306,6 +308,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       return ()=>{active=false;};
     }
     setAccountSessionKey(auth.session?.subject??"");
+    setAddressSession(auth.session);
     setData(s=>({...s,authenticated:true,hasCSA:!!auth.session?.hasCSA,
       profile:{name:"",phone:"",email:"",dateOfBirth:null,...auth.session?.profile},
       addresses:[],shippingAddress:null,orders:[],csa:null,rewards:null,referrals:null}));
@@ -336,7 +339,10 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     ]);
     return ()=>{active=false;};
   },[auth.status,auth.session,beginResourceRequest,call,ui.locale]);
-  const value=useMemo(()=>({cartHydrated:cartReady,accountSessionKey,data,setData,ui,setUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource}),
-    [cartReady,accountSessionKey,data,ui,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource]);
+  // The old address can still be in React state before the new session effect runs.
+  const visibleUI=useMemo(()=>auth.status==="authenticated"&&addressSession!==auth.session
+    ? {...ui,accountFetchState:{...ui.accountFetchState,address:"loading" as const}} : ui,[ui,auth.status,auth.session,addressSession]);
+  const value=useMemo(()=>({cartHydrated:cartReady,accountSessionKey,data,setData,ui:visibleUI,setUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource}),
+    [cartReady,accountSessionKey,data,visibleUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

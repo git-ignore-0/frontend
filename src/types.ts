@@ -6,7 +6,7 @@ export type FetchStatus = "loading" | "ready" | "error";
 export interface Product { id: string; name: string; en: string; price: number; cat: string; categoryId: string; unit: string; farm: string; image: string; description: string; note: string; csa: boolean }
 export interface Category { id: string; name: string; parentId?: string | null; children?: Category[] }
 export interface Address { id?: string; name: string; phone: string; city: string; ward: string; detail: string; provinceCode?: string; wardCode?: string; isSupported?: boolean; shippingFeeVnd?: string|null; updatedAt?:string; address?: string; isDefault?: boolean }
-export interface Profile { name: string; phone: string; email: string; dateOfBirth: string | null }
+export interface Profile { name: string; phone: string; email: string | null; dateOfBirth: string | null }
 export interface Recipient extends Address { note: string }
 export interface OrderLine { id?: string; name: string; qty: number; price: number; unit: string }
 export interface Order { id: string; date: string; status: string; count: number; lines: OrderLine[]; subtotal: number; saved: number; credits: number; total: number; name: string; phone: string; address: string; shipping: string }

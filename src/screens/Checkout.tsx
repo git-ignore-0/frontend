@@ -76,15 +76,19 @@ function sameAddressVersion(left:string,right:string){
 export function Checkout(){
  const storeRequest=useStoreSession(),searchParams=useSearchParams(),buyAgainRequested=searchParams.get("source")==="buy-again";
  const {data,ui,patch,setUI,cacheStoreProducts,refreshResource,cartHydrated,accountSessionKey,retryCartProduct,markCartProductsUnavailable,acknowledgeCartProduct,updateCart}=useNFV(),router=useRouter(),copy=COPY[ui.locale],auth=useAuth();
- const authenticated=auth.status==="authenticated",owner=authenticated?auth.session?.subject??"":"guest",authReady=auth.status==="guest"||authenticated;
+ const authenticated=auth.status==="authenticated",authReady=auth.status==="guest"||authenticated;
+ const authPending=auth.status==="checking"||auth.status==="error";
+ const owner=authPending?auth.lastConfirmedSubject??"guest":authenticated?auth.session?.subject??"":"guest";
  const [areas,setAreas]=useState<SupportedShippingProvince[]>([]),[guest,setGuest]=useState<Guest>(EMPTY),[quota,setQuota]=useState<{active:boolean;products:{productId:string;availableUnits:number}[]}>({active:false,products:[]});
  const [shipping,setShipping]=useState<number|null>(null),[supported,setSupported]=useState(false),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false),[shippingError,setShippingError]=useState(false),[error,setError]=useState(""),[requote,setRequote]=useState(false),[busy,setBusy]=useState(false);
- const [discountCode,setDiscountCode]=useState("");
- const [quoteKey,setQuoteKey]=useState(""),[shippingKey,setShippingKey]=useState(""),[requoteState,setRequoteState]=useState<"idle"|"loading"|"ready"|"error">("idle");
+ const [discountDraft,setDiscountDraft]=useState({owner,code:""});
+ const discountCode=discountDraft.owner===owner?discountDraft.code:"";
+ const [quoteLoad,setQuoteLoad]=useState({key:"",session:auth.session});
+ const [shippingKey,setShippingKey]=useState(""),[requoteState,setRequoteState]=useState<"idle"|"loading"|"ready"|"error">("idle");
  const previousOwner=useRef(owner),lifecycle=useRef(0),requoteRequest=useRef(0),requoteReason=useRef<unknown>(null);
  const [loadVersion,setLoadVersion]=useState(0),[shippingVersion,setShippingVersion]=useState(0);
  const checkoutCompleted=useRef(false),submitting=useRef(false),intent=useRef<StoreCheckoutIntent|null>(null),guestLoaded=useRef(false),address=authenticated?data.shippingAddress:null,addressState=ui.accountFetchState.address,provinceCode=authenticated?address?.provinceCode:guest.provinceCode,wardCode=authenticated?address?.wardCode:guest.wardCode;
- const loadKey=`${owner}:${ui.locale}:${loadVersion}`,expectedShippingKey=`${owner}:${provinceCode??""}:${wardCode??""}:${shippingVersion}`,quotePending=loading||quoteKey!==loadKey,shippingResolved=shippingKey===expectedShippingKey,shippingKnown=shippingResolved&&shipping!==null;
+ const loadKey=`${owner}:${ui.locale}:${loadVersion}`,expectedShippingKey=`${owner}:${provinceCode??""}:${wardCode??""}:${shippingVersion}`,quotePending=loading||quoteLoad.key!==loadKey||quoteLoad.session!==auth.session,shippingResolved=shippingKey===expectedShippingKey,shippingKnown=shippingResolved&&shipping!==null;
 
  const [guestSubmitted,setGuestSubmitted]=useState(false);
  const [intentOwner,setIntentOwner]=useState(""),[recovering,setRecovering]=useState(false),[intentError,setIntentError]=useState(false),[intentVersion,setIntentVersion]=useState(0);
@@ -96,10 +100,20 @@ export function Checkout(){
  const [buyAgainSession,setBuyAgainSession]=useState<BuyAgainSession|null>(null),[buyAgainRows,setBuyAgainRows]=useState<BuyAgainLine[]>([]),[sourceKey,setSourceKey]=useState(""),[sourceError,setSourceError]=useState(""),[sourceVersion,setSourceVersion]=useState(0);
  const [sourceMissing,setSourceMissing]=useState(false);
  const [buyAgainCSA,setBuyAgainCSA]=useState<Record<string,boolean>>({});
+ const buyAgainScope=useRef("");
  const sourceCurrent=buyAgainSession?.owner===owner&&sourceKey===`${owner}:${ui.locale}:${sourceVersion}`;
  const sourceRows=sourceCurrent?buyAgainRows:[];
  const quantities=buyAgainMode?Object.fromEntries(sourceRows.map(line=>[line.productId,line.quantity])):ui.cart;
  const useQuota=buyAgainMode?buyAgainCSA:ui.applyCSA;
+ const heldQuota=useRef<{owner:string;selection:typeof ui.applyCSA}|null>(null);
+ useLayoutEffect(()=>{
+  // NFV clears account data on an error. Keep this checkout's draft until the owner is known.
+  if(auth.status==="error"&&owner!=="guest"&&!heldQuota.current)heldQuota.current={owner,selection:ui.applyCSA};
+  if(authPending)return;
+  const draft=heldQuota.current;
+  heldQuota.current=null;
+  if(authenticated&&draft?.owner===owner&&draft.selection!==ui.applyCSA)patch({applyCSA:draft.selection});
+ },[auth.status,authPending,authenticated,owner,ui.applyCSA,patch]);
  const products=buyAgainMode?sourceRows.flatMap(line=>line.product?[line.product]:[]):Object.keys(ui.cart).map(id=>data.storeProducts[id]).filter(Boolean);
  const rememberSignIn=useCallback((attempt:StoreCheckoutIntent|null)=>{
   if(!attempt||attempt.owner==="guest")return;
@@ -109,15 +123,17 @@ export function Checkout(){
 
  useEffect(()=>{queueMicrotask(()=>{try{const saved=window.sessionStorage.getItem(GUEST_DRAFT);guestLoaded.current=true;if(saved)setGuest({...EMPTY,...JSON.parse(saved)})}catch{guestLoaded.current=true}})},[]);
  useEffect(()=>{if(!guestLoaded.current)return;try{window.sessionStorage.setItem(GUEST_DRAFT,JSON.stringify(guest))}catch{}},[guest]);
- useEffect(()=>{let live=true;queueMicrotask(()=>{if(live){setLoading(true);setLoadError(false)}});Promise.all([getSupportedShippingAreas(ui.locale),authenticated?storeRequest(()=>getStoreQuota(ui.locale),()=>rememberSignIn(intent.current)):Promise.resolve({active:false,products:[]})]).then(([nextAreas,nextQuota])=>{if(live){setAreas(nextAreas);setQuota(nextQuota)}}).catch(()=>{if(live)setLoadError(true)}).finally(()=>{if(live){setQuoteKey(loadKey);setLoading(false)}});return()=>{live=false}},[authenticated,owner,ui.locale,loadVersion,loadKey,storeRequest,rememberSignIn]);
- useEffect(()=>{let live=true;if(!provinceCode||!wardCode){queueMicrotask(()=>{if(live){setSupported(false);setShipping(null);setShippingError(false)}});return()=>{live=false}}queueMicrotask(()=>{if(live){setShipping(null);setShippingError(false)}});getShippingQuote(provinceCode,wardCode).then(result=>{if(live){setSupported(result.supported);setShipping(result.shippingFeeVnd);setShippingKey(expectedShippingKey)}}).catch(()=>{if(live){setSupported(false);setShipping(null);setShippingError(true)}});return()=>{live=false}},[provinceCode,wardCode,shippingVersion,expectedShippingKey]);
+ useEffect(()=>{if(authPending)return;const session=auth.session;let live=true;queueMicrotask(()=>{if(live){setLoading(true);setLoadError(false)}});Promise.all([getSupportedShippingAreas(ui.locale),authenticated?storeRequest(()=>getStoreQuota(ui.locale),()=>rememberSignIn(intent.current)):Promise.resolve({active:false,products:[]})]).then(([nextAreas,nextQuota])=>{if(live){setAreas(nextAreas);setQuota(nextQuota)}}).catch(()=>{if(live)setLoadError(true)}).finally(()=>{if(live){setQuoteLoad({key:loadKey,session});setLoading(false)}});return()=>{live=false}},[authPending,authenticated,auth.session,ui.locale,loadKey,storeRequest,rememberSignIn]);
+ useEffect(()=>{if(authPending)return;let live=true;if(!provinceCode||!wardCode){queueMicrotask(()=>{if(live){setSupported(false);setShipping(null);setShippingError(false)}});return()=>{live=false}}queueMicrotask(()=>{if(live){setShipping(null);setShippingError(false)}});getShippingQuote(provinceCode,wardCode).then(result=>{if(live){setSupported(result.supported);setShipping(result.shippingFeeVnd);setShippingKey(expectedShippingKey)}}).catch(()=>{if(live){setSupported(false);setShipping(null);setShippingError(true)}});return()=>{live=false}},[authPending,provinceCode,wardCode,shippingVersion,expectedShippingKey]);
 
  // Session/locale changes invalidate pending work but never reopen a completed checkout.
- useEffect(()=>{if(previousOwner.current!==owner){previousOwner.current=owner;if(!buyAgainMode)patch({applyCSA:{}})}lifecycle.current+=1;submitting.current=checkoutCompleted.current;setBusy(checkoutCompleted.current);setRequote(false);setRequoteState("idle");setError("");setRecovering(!!intent.current);setRecoveryDate(intent.current?.payload.delivery_date??null);setRecoveryTotal(intent.current?.payload.expected_total_vnd??null);return()=>{lifecycle.current+=1}},[owner,auth.status,ui.locale,patch,buyAgainMode]);
+ useLayoutEffect(()=>()=>{lifecycle.current+=1},[owner,auth.status,auth.session,ui.locale,buyAgainMode]);
+ useEffect(()=>{if(!authPending&&previousOwner.current!==owner){previousOwner.current=owner;if(!buyAgainMode)patch({applyCSA:{}})}submitting.current=checkoutCompleted.current;setBusy(checkoutCompleted.current);setRequote(false);setRequoteState("idle");setError("");setRecovering(!!intent.current);setRecoveryDate(intent.current?.payload.delivery_date??null);setRecoveryTotal(intent.current?.payload.expected_total_vnd??null)},[owner,authPending,auth.status,auth.session,ui.locale,patch,buyAgainMode]);
  // Replaying the exact saved request also works when prices, address or cart changed after reload.
  // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{intent.current=null;setRecovering(false);setRecoveryDate(null);setRecoveryTotal(null);setIntentError(false);setPendingOwner(null);setReauthOwner(null);try{const pending=pendingCheckoutOwner(window.sessionStorage,owner);setPendingOwner(pending);setReauthOwner(checkoutSignInOwner(window.sessionStorage));intent.current=pending!==null&&pending!==owner?null:readCheckoutIntent(window.sessionStorage,owner);setRecovering(!!intent.current);setRecoveryDate(intent.current?.payload.delivery_date??null);setRecoveryTotal(intent.current?.payload.expected_total_vnd??null)}catch{setIntentError(true)}setIntentOwner(owner)},[owner,intentVersion]);
+ useEffect(()=>{if(authPending)return;intent.current=null;setRecovering(false);setRecoveryDate(null);setRecoveryTotal(null);setIntentError(false);setPendingOwner(null);setReauthOwner(null);try{const pending=pendingCheckoutOwner(window.sessionStorage,owner);setPendingOwner(pending);setReauthOwner(checkoutSignInOwner(window.sessionStorage));intent.current=pending!==null&&pending!==owner?null:readCheckoutIntent(window.sessionStorage,owner);setRecovering(!!intent.current);setRecoveryDate(intent.current?.payload.delivery_date??null);setRecoveryTotal(intent.current?.payload.expected_total_vnd??null)}catch{setIntentError(true)}setIntentOwner(owner)},[authPending,owner,intentVersion]);
  useEffect(()=>{
+  if(authPending)return;
   let live=true;
   const load=async()=>{
    if(live)setSourceInitialized(true);
@@ -125,9 +141,11 @@ export function Checkout(){
     const saved=readCheckoutIntent(window.sessionStorage,owner);
     const mode=saved?!!saved.buyAgain:buyAgainRequested;
     if(!live)return;
-    setBuyAgainMode(mode);setSourceMissing(false);setSourceError("");setBuyAgainCSA({});
+    setBuyAgainMode(mode);setSourceMissing(false);setSourceError("");
+    const session=mode?(saved?.buyAgain?{owner,...saved.buyAgain}:readBuyAgain(window.sessionStorage,owner)):null;
+    const scope=JSON.stringify([owner,ui.locale,sourceVersion,intentVersion,session?.sessionId]);
+    if(scope!==buyAgainScope.current){buyAgainScope.current=scope;setBuyAgainCSA({});}
     if(!mode)return;
-    const session=saved?.buyAgain?{owner,...saved.buyAgain}:readBuyAgain(window.sessionStorage,owner);
     setBuyAgainSession(session);setBuyAgainRows([]);setSourceKey("");
     if(!authenticated||!session){setSourceMissing(true);return;}
     const rows=await storeRequest(()=>prepareBuyAgain(session.orderId,ui.locale));
@@ -136,7 +154,7 @@ export function Checkout(){
    }catch{if(live)setSourceError(ui.locale==="vi"?"Chưa thể kiểm tra sản phẩm. Vui lòng thử lại.":"Products could not be checked. Please try again.")}
   };
   void load();return()=>{live=false};
- },[owner,authenticated,ui.locale,sourceVersion,storeRequest,buyAgainRequested,intentVersion]);
+ },[authPending,owner,authenticated,ui.locale,sourceVersion,storeRequest,buyAgainRequested,intentVersion]);
  const quote=useMemo(()=>buildStoreQuote({products,quantities,useQuota,quota:quota.products,hasActiveCsa:authenticated&&quota.active&&!quotePending}),[products,quota,useQuota,quantities,authenticated,quotePending]);
  const guestReview=reviewGuestBuyer(guest,areas),guestValid=guestReview.complete;
  const tooManyProducts=Object.keys(quantities).length>STORE_MAX_ORDER_LINES;
@@ -146,29 +164,35 @@ export function Checkout(){
  const voucherCopy=VOUCHER_COPY[ui.locale];
 
  const couponScopeKey=JSON.stringify({owner,locale:ui.locale,products,quantities,useQuota,address,quota,sourceKey,source:buyAgainSession});
- const couponScope=useMemo(()=>({key:couponScopeKey,session:auth.session}),[couponScopeKey,auth.session]);
- const [applied,setAppliedCoupon]=useState({owner,code:"",scope:null as typeof couponScope|null,session:auth.session}),[voucherVersion,setVoucherVersion]=useState(0);
- const appliedCoupon=applied.owner===owner&&applied.scope===couponScope&&applied.session===auth.session?applied.code:"";
+ const [applied,setAppliedCoupon]=useState<{code:string;scope:string}|null>(null),[voucherVersion,setVoucherVersion]=useState(0);
+ const appliedCoupon=authenticated&&applied?.scope===couponScopeKey?applied.code:"";
  const applyingCoupon=useRef<{started:boolean}|null>(null);
 
  const [voucherError,setVoucherError]=useState<string|null>(null);
+ const voucherScopeReady=authenticated&&accountSessionKey===owner&&!quotePending&&addressState==="ready"&&(!buyAgainMode||sourceCurrent);
+ if(!authPending&&discountDraft.owner!==owner){
+  setDiscountDraft({owner,code:""});setAppliedCoupon(null);setVoucherError(null);
+ }else if(applied&&voucherScopeReady&&applied.scope!==couponScopeKey){
+  setAppliedCoupon(null);
+ }
+ useLayoutEffect(()=>{if(authPending)applyingCoupon.current=null},[authPending]);
  const guestAddress=guestReview.value?{recipient_name:guestReview.value.name,phone_number:guestReview.value.phone,province_code:guestReview.value.provinceCode,ward_code:guestReview.value.wardCode,address:guestReview.value.address}:undefined;
  const delivery=useCheckoutDelivery({buyer:owner,session:auth.session,locale:ui.locale,enabled:authReady&&intentOwner===owner&&accountSessionKey===owner&&!recovering&&!intentError&&(pendingOwner===null||pendingOwner===owner),ready,locked:busy||recovering||pendingOwner!==null,request:{locale:ui.locale,lines:quote.lines.map(line=>({product_id:line.product.id,quantity:line.quantity,use_quota:line.useQuota})),...(authenticated?{}:{guest:guestAddress}),...(authenticated&&appliedCoupon?{coupon_code:appliedCoupon}:{})},context:JSON.stringify({address,quota,products,source:buyAgainSession,sourceKey,voucherVersion}),run:storeRequest});
  const requestDeliveryQuote=delivery.requestQuote;
  // This effect consumes only an explicit Apply action, never ordinary date/quota edits.
  useEffect(()=>{
   const attempt=applyingCoupon.current;
-  if(!attempt||attempt.started||!appliedCoupon)return;
+  if(!attempt||attempt.started||!appliedCoupon||!authReady)return;
   attempt.started=true;
   void requestDeliveryQuote().catch(()=>{}).finally(()=>{if(applyingCoupon.current===attempt)applyingCoupon.current=null});
- },[voucherVersion,appliedCoupon,requestDeliveryQuote]);
+ },[voucherVersion,appliedCoupon,requestDeliveryQuote,authReady]);
  const serverQuote=delivery.quote&&(!authenticated||!!address?.updatedAt&&!!delivery.quote.shippingAddressUpdatedAt&&sameAddressVersion(delivery.quote.shippingAddressUpdatedAt,address.updatedAt))?delivery.quote:null;
  useEffect(()=>{
   if(!delivery.quote||!authenticated||!address?.updatedAt||!delivery.quote.shippingAddressUpdatedAt||sameAddressVersion(delivery.quote.shippingAddressUpdatedAt,address.updatedAt))return;
   let active=true;
-  queueMicrotask(()=>{if(active){setAppliedCoupon({owner,code:"",scope:couponScope,session:auth.session});setRequote(true);setRequoteState("ready");setError(copy.addressRequote);void refreshResource("address")}});
+  queueMicrotask(()=>{if(active){setAppliedCoupon(null);setRequote(true);setRequoteState("ready");setError(copy.addressRequote);void refreshResource("address")}});
   return()=>{active=false};
- },[delivery.quote,authenticated,address?.updatedAt,refreshResource,owner,couponScope,auth.session,copy.addressRequote]);
+ },[delivery.quote,authenticated,address?.updatedAt,refreshResource,copy.addressRequote]);
  const voucherWanted=authenticated&&!!discountCode.trim();
  const voucherLoading=!!appliedCoupon&&delivery.quoteLoading;
  const previousQuote=delivery.previousQuote&&(!authenticated||!!address?.updatedAt&&!!delivery.previousQuote.shippingAddressUpdatedAt&&sameAddressVersion(delivery.previousQuote.shippingAddressUpdatedAt,address.updatedAt))?delivery.previousQuote:null;
@@ -191,9 +215,9 @@ export function Checkout(){
  const applyVoucher=()=>{
   if(!authenticated||!ready||!selectedDay||delivery.invalidDate||delivery.calendarError||busy||intent.current||checkoutCompleted.current||applyingCoupon.current)return;
   if(!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(discountCode.trim().toUpperCase())){setVoucherError(voucherCopy.invalid);return;}
-  applyingCoupon.current={started:false};setVoucherError(null);setAppliedCoupon({owner,code:discountCode.trim().toUpperCase(),scope:couponScope,session:auth.session});setVoucherVersion(value=>value+1);
+  applyingCoupon.current={started:false};setVoucherError(null);setAppliedCoupon({code:discountCode.trim().toUpperCase(),scope:couponScopeKey});setVoucherVersion(value=>value+1);
  };
- const removeVoucher=()=>{if(busy||intent.current||checkoutCompleted.current)return;applyingCoupon.current=null;setDiscountCode('');setAppliedCoupon({owner,code:"",scope:couponScope,session:auth.session});setVoucherError(null);setVoucherVersion(value=>value+1)};
+ const removeVoucher=()=>{if(busy||intent.current||checkoutCompleted.current)return;applyingCoupon.current=null;setDiscountDraft({owner,code:""});setAppliedCoupon(null);setVoucherError(null);setVoucherVersion(value=>value+1)};
  const refreshRequote=async()=>{
   const request=lifecycle.current,sequence=++requoteRequest.current;setRequoteState("loading");setShippingVersion(value=>value+1);
   try{
@@ -234,7 +258,7 @@ export function Checkout(){
   if(failure instanceof AccountApiError){
    const reason=checkoutRequoteReason(failure);
    if(reason&&reason!=="voucher_changed"&&reason!=="delivery_date_invalid"){
-    setAppliedCoupon({owner,code:"",scope:couponScope,session:auth.session});
+    setAppliedCoupon(null);
     requoteReason.current=reason;setRequote(true);setError(requoteMessage(reason));void refreshRequote();
    }
   }
@@ -284,7 +308,7 @@ export function Checkout(){
     try{clearCheckoutIntent(window.sessionStorage,attempt.owner);clearCheckoutSignIn(window.sessionStorage,attempt.owner);setReauthOwner(null);setPendingOwner(null);intent.current=null;setRecovering(false)}catch{setIntentError(true);return;}
     const refreshReason=checkoutRequoteReason(reason);
     setVoucherVersion(value=>value+1);delivery.refresh();
-    if(refreshReason==="voucher_changed"){setAppliedCoupon({owner,code:"",scope:couponScope,session:auth.session});setVoucherError(null);setRequote(true);setRequoteState("ready");setError(reason.code.startsWith("coupon_")?voucherMessage(reason,ui.locale):voucherCopy.changed)}
+    if(refreshReason==="voucher_changed"){setAppliedCoupon(null);setVoucherError(null);setRequote(true);setRequoteState("ready");setError(reason.code.startsWith("coupon_")?voucherMessage(reason,ui.locale):voucherCopy.changed)}
     else if(refreshReason){requoteReason.current=refreshReason;setRequote(true);setError(requoteMessage(requoteReason.current));await refreshRequote()}else setError(reason.code==="store_membership_frozen"?storeMembershipFrozenMessage(ui.locale):reason.code==="store_payment_unavailable"?copy.paymentUnavailable:copy.failed);
    }else{setRecoveryDate(attempt.payload.delivery_date);setRecoveryTotal(attempt.payload.expected_total_vnd);setRecovering(true);setError("");}
   }finally{if(request===lifecycle.current&&!checkoutCompleted.current){submitting.current=false;setBusy(false)}}
@@ -308,9 +332,9 @@ export function Checkout(){
 
  const intentProblem=intentError&&<div><DataState kind="error" title={ui.locale==="vi"?"Không thể khôi phục lần đặt hàng. Hãy kiểm tra đơn hàng hoặc liên hệ cửa hàng trước khi đặt lại.":"The checkout attempt could not be restored. Check your orders or contact the store before placing another order."} action={{label:copy.retry,onClick:()=>setIntentVersion(value=>value+1)}}/><a className="btn btn-outline" href={`/account/${ui.locale}?tab=orders`}>{ui.locale==="vi"?"Kiểm tra đơn hàng":"Check orders"}</a> <a className="btn btn-plain" href="#site-contact">{ui.locale==="vi"?"Liên hệ cửa hàng":"Contact the store"}</a></div>;
  const requiredMemberOwner=pendingOwner!=="guest"?pendingOwner??reauthOwner:reauthOwner;
+ if(auth.status==="error")return <main className="main-content"><div className="container"><DataState kind="error" title={ui.locale==="vi"?"Chưa thể xác minh phiên truy cập. Vui lòng thử lại.":"Could not verify your session. Please try again."} action={{label:copy.retry,onClick:()=>void auth.refresh()}}/></div></main>;
  if(auth.status!=="checking"&&auth.status!=="guest"&&intentOwner===owner&&pendingOwner==="guest")return <main className="main-content"><div className="container"><DataState kind="error" title={ui.locale==="vi"?"Lần đặt hàng khi chưa đăng nhập vẫn chưa rõ kết quả. Hãy đăng xuất, rồi mở lại giỏ hàng để kiểm tra đơn đã gửi.":"Your earlier guest checkout is still unresolved. Sign out, then reopen your cart to check that order."}/><form method="post" action={siteLogoutHref(ui.locale)}><Button type="submit">{ui.locale==="vi"?"Đăng xuất để kiểm tra đơn":"Sign out to check the order"}</Button></form></div></main>;
  if(auth.status==="expired"||(auth.status!=="checking"&&requiredMemberOwner!==null&&owner!==requiredMemberOwner))return <main className="main-content"><div className="container"><DataState kind="error" title={requiredMemberOwner!==null?(ui.locale==="vi"?"Đăng nhập bằng tài khoản đã gửi đơn để tiếp tục.":"Sign in with the account that submitted this order to continue."):(ui.locale==="vi"?"Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục.":"Your session expired. Sign in again to continue.")}/><a className="btn" href={siteAuthHref("login",ui.locale,`/store/checkout/${ui.locale}${buyAgainMode||buyAgainRequested?"?source=buy-again":""}`)}>{ui.locale==="vi"?"Đăng nhập":"Sign in"}</a></div></main>;
- if(!authReady&&auth.status!=="checking")return <main className="main-content"><div className="container"><DataState kind="error" title={ui.locale==="vi"?"Chưa thể xác minh phiên truy cập. Vui lòng thử lại.":"Could not verify your session. Please try again."} action={{label:copy.retry,onClick:()=>void auth.refresh()}}/></div></main>;
  if(basePending)return loadingScreen;
  if(!buyAgainMode&&!Object.keys(ui.cart).length&&!recovering&&intentOwner===owner&&!intentError)return <main className="main-content"><div className="container"><DataState title={copy.empty} action={{label:copy.explore,onClick:()=>router.push(`/store/${ui.locale}`)}}/></div></main>;
  if(recovering)return <main className="main-content"><div className="container store-commerce"><StorePageHeading title={copy.title} locale={ui.locale}/><StoreSection title={ui.locale==="vi"?"Kiểm tra đơn đã gửi":"Check submitted order"}>{intentProblem}<p>{ui.locale==="vi"?"Chưa xác định được kết quả lần đặt hàng trước. Kiểm tra lại để tiếp tục với đúng đơn đã gửi.":"The previous checkout result is unknown. Check again to continue with the original order."}</p><p>{DELIVERY_COPY[ui.locale].title}: {deliveryDateLabel(recoveryDate)}</p><MoneyLine label={copy.total} value={recoveryTotal===null?"—":money(recoveryTotal)} large/><Button loading={busy} disabled={busy||intentError||intentOwner!==owner} onClick={()=>submit()}>{ui.locale==="vi"?"Kiểm tra lại đơn":"Check previous order"}</Button></StoreSection></div></main>;
@@ -351,7 +375,7 @@ export function Checkout(){
    <StoreSection as="aside" className="store-summary" title={ui.locale==="vi"?"Đơn hàng của bạn":"Your order"}>
     <StoreSummaryAmounts totalLabel={ui.locale==="vi"?"Tổng đơn hàng":"Order total"} locale={ui.locale} goods={money(displayQuote.goodsValueVnd)} shipping={displayShipping===null?"—":freeCompanion?copy.freeShipping:displayShipping===0?(ui.locale==="vi"?"Miễn phí":"Free"):money(displayShipping)} benefit={authenticated&&displayQuote.quotaValueVnd>0?`−${money(displayQuote.quotaValueVnd)}`:undefined} reserveBenefit={authenticated&&quota.active&&displayQuote.lines.some(line=>!!line.product.csa_quota_group)} total={displayTotal===null?"—":money(displayTotal)} voucher={voucherSummary?.coupon?{code:voucherSummary.coupon.code,discount:`−${money(voucherSummary.discountAmountVnd)}`}:undefined} cashSubtotal={voucherSummary?money(voucherSummary.subtotalVnd):undefined} discounts={
     <div className="store-discount-code">
-     <DiscountCodeField id="storeDiscountCode" locale={ui.locale} value={authenticated?discountCode:""} disabled={!authenticated||busy} loading={voucherLoading} applyDisabled={!ready||!selectedDay||delivery.invalidDate||!!delivery.calendarError} error={voucherError??(appliedCoupon&&delivery.error?voucherMessage(delivery.error,ui.locale):undefined)} signInHref={!authenticated?siteAuthHref("login",ui.locale,`/store/checkout/${ui.locale}${buyAgainMode||buyAgainRequested?"?source=buy-again":""}`):undefined} onChange={value=>{if(busy||intent.current)return;applyingCoupon.current=null;setDiscountCode(value);setAppliedCoupon({owner,code:"",scope:couponScope,session:auth.session});setVoucherError(null)}} onClear={removeVoucher} onApply={()=>void applyVoucher()}/>
+     <DiscountCodeField id="storeDiscountCode" locale={ui.locale} value={authenticated?discountCode:""} disabled={!authenticated||busy} loading={voucherLoading} applyDisabled={!ready||!selectedDay||delivery.invalidDate||!!delivery.calendarError} error={voucherError??(appliedCoupon&&delivery.error?voucherMessage(delivery.error,ui.locale):undefined)} signInHref={!authenticated?siteAuthHref("login",ui.locale,`/store/checkout/${ui.locale}${buyAgainMode||buyAgainRequested?"?source=buy-again":""}`):undefined} onChange={value=>{if(busy||intent.current)return;applyingCoupon.current=null;setDiscountDraft({owner,code:value});setAppliedCoupon(null);setVoucherError(null)}} onClear={removeVoucher} onApply={()=>void applyVoucher()}/>
     </div>}/>
    <div className="checkout-flow-actions store-checkout-actions">
     {requote&&<Button variant="outline" disabled={busy||requoteState!=="ready"||!ready} onClick={()=>{setRequote(false);setError("")}}>{copy.acceptQuote}</Button>}

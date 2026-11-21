@@ -79,7 +79,8 @@ test("Account and guest CSA use the same supported-area address fields without s
   assert.doesNotMatch(context,/if\(method==="getAddress"\)return await shippingService/);
   assert.match(types,/shippingAddress: Address \| null/);
   assert.match(account,/const address=data\.shippingAddress/);
-  assert.match(csa,/address=\{data\.shippingAddress\?\?undefined\}/);
+  assert.match(csa,/const address=data\.shippingAddress\?\?undefined/);
+  assert.match(csa,/AccountCsaAccountStep[^>]+address=\{address\}/);
   assert.match(account,/accountFetchState\.address/);
   assert.match(account,/isSupported===false/);
   assert.match(accountCss,/\.acc-form-grid \.acc-wide\{grid-column:1\/-1\}/);

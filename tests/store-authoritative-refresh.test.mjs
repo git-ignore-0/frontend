@@ -9,9 +9,10 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{r
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
 function providerHarness({authenticated=false,initialResources=[]}={}){
- let cursor=0,states=[],memos=[],deps=[],effects=[];
+ let cursor=0,states=[],memos=[],deps=[],effects=[],layoutEffects=[];
  const jsx={jsx:(type,props)=>({type,props})};
  const react={createContext:()=>({Provider:"Provider"}),useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],value=>{states[i]=typeof value==="function"?value(states[i]):value}]},useRef(initial){const i=cursor++;return states[i]??={current:initial}},useEffect(fn){cursor++;effects.push(fn)},useMemo(fn,next){const i=cursor++;if(!deps[i]||next.some((value,j)=>value!==deps[i][j])){deps[i]=next;memos[i]=fn()}return memos[i]},useCallback(fn,next){return react.useMemo(()=>fn,next)}};
+ react.useLayoutEffect=(fn,next)=>{const i=cursor++;if(!deps[i]||next.some((value,j)=>value!==deps[i][j])){deps[i]=next;layoutEffects.push(()=>{memos[i]?.();memos[i]=fn()})}};
  const original={id:"p",slug:"rau",retail_price_vnd:40000,available_quantity:10};
  const responses=[],resourceRequests=[],redemptions=[];
  const auth={status:authenticated?"authenticated":"guest",session:authenticated?{subject:"owner"}:null};
@@ -33,7 +34,7 @@ function providerHarness({authenticated=false,initialResources=[]}={}){
   if(name==="@/store/cart-product-refresh")return coordinator;
   return {};
  });
- const render=()=>{cursor=0;effects=[];return provider.NFVProvider({children:null}).props.value};
+ const render=()=>{cursor=0;effects=[];const value=provider.NFVProvider({children:null}).props.value;for(const effect of layoutEffects.splice(0))effect();return value};
  return {auth,render,responses,original,resourceRequests,redemptions,startAccountLoad:()=>effects.at(-1)()};
 }
 
@@ -107,7 +108,7 @@ test("an old failed action cannot place its error in the new account",async()=>{
 test("AddressView ignores a save response after its account owner changes",async()=>{
  const h=providerHarness({authenticated:true});h.render();h.startAccountLoad();await tick();let context=h.render();
  const addressA={name:"Private recipient A",phone:"+84901111111",detail:"Address A"},addressB={name:"Recipient B",phone:"+84902222222",detail:"Address B"};
- context.setData(state=>({...state,shippingAddress:addressA}));context.patch({addressEditing:true});context=h.render();
+ context.setData(state=>({...state,shippingAddress:addressA}));context=h.render();
  const result=deferred(),exports={};
  const jsx=(type,props)=>({type,props});
  vm.runInNewContext(compile("src/screens/AccountProfile.tsx"),{exports,require:name=>{
@@ -117,11 +118,12 @@ test("AddressView ignores a save response after its account owner changes",async
   return {};
  }});
  const all=tree=>Array.isArray(tree)?tree.flatMap(all):!tree||typeof tree!=="object"?[]:[tree,...all(tree.props?.children)];
- const editor=all(exports.AddressView()).find(node=>typeof node.props?.save==="function"),save=editor.props.save(addressA);
+ const onDraftChange=()=>assert.fail("The previous owner's response cannot clear the active draft");
+ const editor=all(exports.AddressView({draft:{name:addressA.name,phone:addressA.phone,provinceCode:"66",wardCode:"22015",address:addressA.detail},onDraftChange})).find(node=>typeof node.props?.save==="function"),save=editor.props.save(addressA);
  h.auth.session={subject:"new-owner"};h.render();h.startAccountLoad();await tick();context=h.render();
- context.setData(state=>({...state,shippingAddress:addressB}));context.patch({addressEditing:true});
+ context.setData(state=>({...state,shippingAddress:addressB}));
  result.resolve(addressA);await save;context=h.render();
- assert.equal(context.data.shippingAddress.name,"Recipient B");assert.equal(context.ui.addressEditing,true);
+ assert.equal(context.data.shippingAddress.name,"Recipient B");
  assert.notEqual(context.ui.toast,"Đã cập nhật địa chỉ giao hàng");
 });
 

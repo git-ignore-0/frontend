@@ -2,6 +2,8 @@ import {STORE_MAX_LINE_QUANTITY} from "../store/store-limits";
 
 export const CART_STORAGE_KEY="nfv-cart-v1";
 export const CART_PRODUCT_STORAGE_KEY="nfv-cart-products-v1";
+const BLOCKED_STORE_STORAGE_KEY="nfv-store-blocked-v1";
+const CART_PRODUCT_ID=/^[A-Za-z0-9_-]{1,100}$/;
 
 type CartStorage=Pick<Storage,"getItem"|"setItem"|"removeItem">;
 
@@ -9,7 +11,7 @@ function validCart(value:unknown):Record<string,number>{
   if(!value||typeof value!=="object"||Array.isArray(value))return {};
   const cart:Record<string,number>={};
   for(const [id,count] of Object.entries(value)){
-    if(!/^[A-Za-z0-9_-]{1,100}$/.test(id)||!Number.isInteger(count)||Number(count)<=0)continue;
+    if(!CART_PRODUCT_ID.test(id)||!Number.isInteger(count)||Number(count)<=0)continue;
     cart[id]=Math.min(STORE_MAX_LINE_QUANTITY,Number(count));
   }
   return cart;
@@ -37,4 +39,21 @@ export function loadCartProducts(storage:CartStorage):Record<string,unknown>{
 }
 export function saveCartProducts(storage:CartStorage,products:Record<string,unknown>):void{
  try{if(Object.keys(products).length)storage.setItem(CART_PRODUCT_STORAGE_KEY,JSON.stringify(products));else storage.removeItem(CART_PRODUCT_STORAGE_KEY)}catch{}
+}
+
+function blockedStoreProducts(value:unknown):Record<string,0|null>{
+  if(!value||typeof value!=="object"||Array.isArray(value))return {};
+  return Object.fromEntries(Object.entries(value).filter(([id,stock])=>CART_PRODUCT_ID.test(id)&&(stock===0||stock===null)));
+}
+
+export function loadBlockedStoreProducts(storage:CartStorage):Record<string,0|null>{
+  try{return blockedStoreProducts(JSON.parse(storage.getItem(BLOCKED_STORE_STORAGE_KEY)??"{}"))}catch{return {}}
+}
+
+export function saveBlockedStoreProducts(storage:CartStorage,availability:Record<string,number|null|undefined>):void{
+  try{
+    const blocked=blockedStoreProducts(availability);
+    if(Object.keys(blocked).length)storage.setItem(BLOCKED_STORE_STORAGE_KEY,JSON.stringify(blocked));
+    else storage.removeItem(BLOCKED_STORE_STORAGE_KEY);
+  }catch{}
 }

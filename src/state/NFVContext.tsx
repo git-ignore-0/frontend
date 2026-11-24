@@ -11,27 +11,33 @@ import * as referralsService from "@/account/referrals-service";
 import * as csaService from "@/account/csa-service";
 import * as shippingService from "@/account/shipping-service";
 import {ACCOUNT_SERVICE_RESOURCES,initialData,initialUI,recipientEmpty,type UIState} from "./initial-state";
-import {loadCart,saveCart} from "./cart-persistence";
-import {loadCartProducts,saveCartProducts} from "./cart-persistence";
+import {loadBlockedStoreProducts,loadCart,loadCartProducts,saveBlockedStoreProducts,saveCart,saveCartProducts} from "./cart-persistence";
 import type {StoreProductCard} from "@/store/store-model";
 import {copyWithFeedback,type ToastTone} from "@/lib/copy-feedback";
-import {mergeStoreProductSnapshots} from "@/store/store-product-snapshots";
+import {mergeStoreProductSnapshots,type StoreProductSnapshot} from "@/store/store-product-snapshots";
 import {createCartProductRefreshCoordinator} from "@/store/cart-product-refresh";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
   cartHydrated:boolean; accountSessionKey:string;
+  storeAvailability:Readonly<Record<string,number|null|undefined>>;
   data: CatalogData; setData: Dispatch<SetStateAction<CatalogData>>;
   ui: UIState; setUI: Dispatch<SetStateAction<UIState>>;
   patch: (update:Partial<UIState>)=>void; navigate:(page:Screen,opts?:{tab?:AccountTab;productId?:string;hub?:boolean;replace?:boolean})=>void;
   call: <T=unknown>(method:keyof Backend, arg?:unknown)=>Promise<T>;
   act: <T>(key:string, task:()=>Promise<T>, success?:string,onCurrentResult?:(result:T|undefined)=>void)=>Promise<T|undefined>;
-  toast: (message:string,tone?:ToastTone)=>void; copyToClipboard:(value:string)=>Promise<boolean>; addCart:(product:StoreProductCard,quantity?:number)=>void; cacheStoreProducts:(products:StoreProductCard[],source?:"catalog"|"verified")=>void;
+  toast: (message:string,tone?:ToastTone)=>void; copyToClipboard:(value:string)=>Promise<boolean>; addCart:(product:StoreProductCard,quantity?:number,options?:{openCart?:boolean})=>void; cacheStoreProducts:(products:StoreProductCard[],source?:"catalog"|"verified")=>void;
+  recheckStoreProducts:(products:StoreProductCard[])=>void;
   updateCart:(id:string,delta:number)=>void; acknowledgeCartProduct:(id:string)=>void; retryCartProduct:(id:string)=>void; markCartProductsUnavailable:(ids:readonly string[])=>void; beginCheckout:()=>void;
   loadWards:(province:string,force?:boolean)=>Promise<void>; refreshResource:(resource:Resource)=>Promise<void>;
 };
 const Context=createContext<Ctx|null>(null);
+const CATALOG_RECHECK_INTERVAL_MS=30_000;
+function openCartForValidation(state:UIState):UIState {
+  const loading=Object.keys(state.cart).map(id=>[id,"loading"] as const);
+  return {...state,cartOpen:true,cartProductState:{...state.cartProductState,...Object.fromEntries(loading)}};
+}
 export function useNFV():Ctx {
   const ctx=useContext(Context);if(!ctx)throw Error("NFVProvider is required");return ctx;
 }
@@ -41,6 +47,9 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   const [data,setData]=useState(initialData);
   const [ui,setUI]=useState<UIState>(()=>({...initialUI,page:initialPage,locale:initialLocale,accountTab:initialAccountTab,accountHubOpen:initialPage==="account"&&initialAccountHubOpen,referrerDraft:initialReferrerCode}));
   const [cartReady,setCartReady]=useState(false);
+  const [storeAvailability,setStoreAvailability]=useState<Record<string,number|null|undefined>>({});
+  const catalogRechecks=useRef(new Map<string,{stock:number;slug:string;time:number}>());
+  const cartValidation=useRef<{locale:Locale;drawerOpen:boolean;slugs:Map<string,string|null>}|null>(null);
   const [accountSessionKey,setAccountSessionKey]=useState("checking");
   const [addressSession,setAddressSession]=useState<typeof auth.session>(null);
   // Synchronous guards prevent double submits before React has committed the pending state.
@@ -56,14 +65,21 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     resourceSequences.current.set(resource,sequence);
     return ()=>epoch===authEpoch.current&&resourceSequences.current.get(resource)===sequence;
   },[]);
-  const patch=useCallback((change:Partial<UIState>)=>setUI(s=>({...s,...change})),[]);
+  const patch=useCallback((change:Partial<UIState>)=>setUI(s=>{
+    const next={...s,...change};
+    return change.cartOpen&&!s.cartOpen?openCartForValidation(next):next;
+  }),[]);
   const toast=useCallback((message:string,tone:ToastTone="success")=>setUI(s=>({...s,toast:message,toastTone:tone,toastSequence:s.toastSequence+1})),[]);
   const copyToClipboard=useCallback((value:string)=>copyWithFeedback(value,ui.locale,toast),[ui.locale,toast]);
   const cartRefresh=useMemo(()=>createCartProductRefreshCoordinator({
-    onState:(id,state)=>setUI(current=>current.cart[id]
-      ? {...current,cartProductState:{...current.cartProductState,[id]:state}}
-      : current),
+    onState:(id,state)=>{
+      if(state==="unavailable")setStoreAvailability(current=>({...current,[id]:null}));
+      setUI(current=>current.cart[id]?{...current,cartProductState:{...current.cartProductState,[id]:state}}:current);
+    },
     onReady:(id,product,notice)=>{
+      const validation=cartValidation.current;
+      if(validation?.slugs.has(id))validation.slugs.set(id,product.slug);
+      setStoreAvailability(current=>({...current,[id]:product.available_quantity}));
       setData(current=>({...current,storeProducts:{...current.storeProducts,[id]:product}}));
       setUI(current=>{
         if(!current.cart[id])return current;
@@ -74,29 +90,42 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     },
   }),[]);
   useEffect(()=>{
-    const cart=loadCart(window.sessionStorage),cached=loadCartProducts(window.sessionStorage) as Record<string,StoreProductCard>;
+    const cart=loadCart(window.sessionStorage),cached=loadCartProducts(window.sessionStorage) as Record<string,StoreProductSnapshot>;
     setData(state=>({...state,storeProducts:cached}));setUI(state=>({...state,cart,cartProductState:Object.fromEntries(Object.keys(cart).map(id=>[id,"loading"]))}));
+    setStoreAvailability(loadBlockedStoreProducts(window.sessionStorage));
     setCartReady(true);
   },[]);
   useEffect(()=>{
     if(cartReady)saveCart(window.sessionStorage,ui.cart);
   },[cartReady,ui.cart]);
   useEffect(()=>{if(cartReady)saveCartProducts(window.sessionStorage,data.storeProducts)},[cartReady,data.storeProducts]);
-  // Revalidate only when cart ownership or locale changes; retries use the coordinator directly.
+  const wantsCartValidation=ui.cartOpen||ui.page==="checkout";
   useEffect(()=>{
-    if(!cartReady)return;
+    if(!cartReady||!wantsCartValidation){cartValidation.current=null;return}
+    let validation=cartValidation.current;
+    if(!validation||validation.locale!==ui.locale||ui.cartOpen&&!validation.drawerOpen){
+      validation={locale:ui.locale,drawerOpen:ui.cartOpen,slugs:new Map()};
+      cartValidation.current=validation;
+    }
+    validation.drawerOpen=ui.cartOpen;
+    for(const id of validation.slugs.keys())if(!ui.cart[id])validation.slugs.delete(id);
     for(const id of Object.keys(ui.cart)){
       const cached=data.storeProducts[id];
+      const slug=cached?.catalogSlug??cached?.slug??null;
+      if(validation.slugs.get(id)===slug)continue;
+      validation.slugs.set(id,slug);
       if(!cached){
         setUI(state=>({...state,cartProductState:{...state.cartProductState,[id]:"unavailable"}}));
         continue;
       }
-      void cartRefresh.refresh({id,cached,locale:ui.locale});
+      void cartRefresh.refresh({id,cached,locale:ui.locale},{reusePending:true});
     }
-    return()=>cartRefresh.cancelAll();
-  // cart ID membership is the ownership trigger; cached metadata is refreshed by this effect.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[cartReady,ui.locale,Object.keys(ui.cart).join(",")]);
+  },[cartReady,wantsCartValidation,ui.cartOpen,ui.locale,ui.cart,data.storeProducts,cartRefresh]);
+  useEffect(()=>()=>{
+    cartValidation.current=null;
+    cartRefresh.cancelAll();
+  },[cartRefresh]);
+  useEffect(()=>{if(cartReady)saveBlockedStoreProducts(window.sessionStorage,storeAvailability)},[cartReady,storeAvailability]);
   useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,ui.toastSequence,patch]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
     const epoch=authEpoch.current;
@@ -169,32 +198,79 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     window.addEventListener("popstate",handlePopState);
     return ()=>window.removeEventListener("popstate",handlePopState);
   },[]);
+  const recheckStoreProducts=useCallback((products:StoreProductCard[])=>{
+    if(wantsCartValidation)return;
+    const now=Date.now();
+    for(const product of products){
+      const stock=storeAvailability[product.id];
+      if(stock===undefined||stock===product.available_quantity)continue;
+      const previous=catalogRechecks.current.get(product.id);
+      if(previous?.stock===product.available_quantity&&previous.slug===product.slug&&now-previous.time<CATALOG_RECHECK_INTERVAL_MS)continue;
+      catalogRechecks.current.set(product.id,{stock:product.available_quantity,slug:product.slug,time:now});
+      const snapshot=data.storeProducts[product.id];
+      const cached=snapshot&&snapshot.slug!==product.slug?{...snapshot,catalogSlug:product.slug}:snapshot??product;
+      void cartRefresh.refresh({id:product.id,cached,locale:ui.locale},{reusePending:true});
+    }
+  },[cartRefresh,data.storeProducts,storeAvailability,ui.locale,wantsCartValidation]);
   const cacheStoreProducts=useCallback((products:StoreProductCard[],source:"catalog"|"verified"="catalog")=>{
     if(source==="verified"){
       for(const product of products)cartRefresh.cancel(product.id);
+      setStoreAvailability(current=>({...current,...Object.fromEntries(products.map(product=>[product.id,product.available_quantity]))}));
       setUI(current=>({...current,cartProductState:{...current.cartProductState,...Object.fromEntries(products.filter(product=>current.cart[product.id]).map(product=>[product.id,"ready" as const]))}}));
+    }else{
+      const renamed=products.filter(product=>{
+        const cached=data.storeProducts[product.id];
+        return ui.cart[product.id]&&cached&&cached.slug!==product.slug&&cached.catalogSlug!==product.slug;
+      });
+      if(renamed.length){
+        for(const product of renamed)cartRefresh.cancel(product.id);
+        setUI(current=>({...current,cartProductState:{...current.cartProductState,...Object.fromEntries(renamed.map(product=>[product.id,"loading" as const]))}}));
+      }
+      recheckStoreProducts(products);
     }
     setData(state=>({...state,storeProducts:mergeStoreProductSnapshots(state.storeProducts,products,ui.cart,source)}));
-  },[cartRefresh,ui.cart]);
+  },[cartRefresh,data.storeProducts,recheckStoreProducts,ui.cart]);
   const markCartProductsUnavailable=useCallback((ids:readonly string[])=>{
     for(const id of ids)cartRefresh.cancel(id);
+    setStoreAvailability(current=>({...current,...Object.fromEntries(ids.map(id=>[id,null]))}));
     setUI(state=>{
       const cartProductState={...state.cartProductState},cartProductNotice={...state.cartProductNotice};
       for(const id of ids)if(state.cart[id]){cartProductState[id]="unavailable";delete cartProductNotice[id]}
       return {...state,cartProductState,cartProductNotice};
     });
   },[cartRefresh]);
-  const addCart=useCallback((product:StoreProductCard,quantity=1)=>{
-    const snapshot=ui.cart[product.id]?data.storeProducts[product.id]??product:product;
-    if(snapshot.available_quantity<=0){toast(ui.locale==="en"?"This product is out of stock.":"Sản phẩm hiện đã hết hàng.");return}
-    cacheStoreProducts([product]);setUI(s=>{if(!s.cart[product.id]&&Object.keys(s.cart).length>=STORE_MAX_ORDER_LINES)return {...s,cartOpen:true,toastTone:"error",toastSequence:s.toastSequence+1,toast:ui.locale==="en"?`Your cart can contain up to ${STORE_MAX_ORDER_LINES} different products.`:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau.`};const cartProductNotice={...s.cartProductNotice};if(!s.cart[product.id])delete cartProductNotice[product.id];return {...s,cart:{...s.cart,[product.id]:Math.min(STORE_MAX_LINE_QUANTITY,snapshot.available_quantity,(s.cart[product.id]||0)+quantity)},cartProductState:{...s.cartProductState,[product.id]:s.cart[product.id]?s.cartProductState[product.id]:"ready"},cartProductNotice,cartOpen:true,toastTone:"success",toastSequence:s.toastSequence+1,toast:ui.locale==="en"?"Added to cart":"Đã thêm vào giỏ"}});
-  },[cacheStoreProducts,data.storeProducts,ui.cart,toast,ui.locale]);
+  const addCart=useCallback((product:StoreProductCard,quantity=1,{openCart=true}:{openCart?:boolean}={})=>{
+    const verified=storeAvailability[product.id];
+    if(verified===null){toast(ui.locale==="en"?"Product is no longer available":"Sản phẩm không còn bán","error");return}
+    const available=verified??product.available_quantity;
+    if(available<=0){toast(ui.locale==="en"?"This product is out of stock.":"Sản phẩm hiện đã hết hàng.","error");return}
+    setData(state=>({...state,storeProducts:mergeStoreProductSnapshots(state.storeProducts,[product],ui.cart)}));
+    setUI(s=>{
+      const toastSequence=s.toastSequence+1,count=s.cart[product.id]??0;
+      if(!count&&Object.keys(s.cart).length>=STORE_MAX_ORDER_LINES){
+        const next={...s,toastSequence,toastTone:"error" as const,toast:ui.locale==="en"?`Your cart can contain up to ${STORE_MAX_ORDER_LINES} different products.`:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau.`};
+        return openCart&&!s.cartOpen?openCartForValidation(next):next;
+      }
+      const nextCount=Math.min(STORE_MAX_LINE_QUANTITY,available,count+quantity);
+      if(nextCount<=count)return openCart&&!s.cartOpen?openCartForValidation(s):s;
+      const cartProductNotice={...s.cartProductNotice};
+      if(!count)delete cartProductNotice[product.id];
+      const next:UIState={...s,
+        cart:{...s.cart,[product.id]:nextCount},
+        cartProductState:{...s.cartProductState,[product.id]:count?s.cartProductState[product.id]:"loading"},
+        cartProductNotice,toastSequence,toastTone:"success",toast:ui.locale==="en"?"Added to cart":"Đã thêm vào giỏ",
+      };
+      return openCart&&!s.cartOpen?openCartForValidation(next):next;
+    });
+  },[storeAvailability,ui.cart,toast,ui.locale]);
   const updateCart=useCallback((id:string,delta:number)=>{
+    const count=ui.cart[id];
+    if(count&&count+delta<=0)cartRefresh.cancel(id);
     setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},limit=Math.min(STORE_MAX_LINE_QUANTITY,data.storeProducts[id]?.available_quantity??STORE_MAX_LINE_QUANTITY);cart[id]=Math.max(0,Math.min(limit,(cart[id]||0)+delta));
       if(cart[id]===0){delete cart[id];delete applyCSA[id];delete cartProductNotice[id];}
       return {...s,cart,applyCSA,cartProductNotice};
     });
-  },[data.storeProducts]);
+  },[cartRefresh,data.storeProducts,ui.cart]);
   const acknowledgeCartProduct=useCallback((id:string)=>setUI(s=>{const cartProductNotice={...s.cartProductNotice};delete cartProductNotice[id];return {...s,cartProductNotice}}),[]);
   const retryCartProduct=useCallback((id:string)=>{
     const cached=data.storeProducts[id];
@@ -342,7 +418,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   // The old address can still be in React state before the new session effect runs.
   const visibleUI=useMemo(()=>auth.status==="authenticated"&&addressSession!==auth.session
     ? {...ui,accountFetchState:{...ui.accountFetchState,address:"loading" as const}} : ui,[ui,auth.status,auth.session,addressSession]);
-  const value=useMemo(()=>({cartHydrated:cartReady,accountSessionKey,data,setData,ui:visibleUI,setUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource}),
-    [cartReady,accountSessionKey,data,visibleUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource]);
+  const value=useMemo(()=>({cartHydrated:cartReady,accountSessionKey,storeAvailability,data,setData,ui:visibleUI,setUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,recheckStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource}),
+    [cartReady,accountSessionKey,storeAvailability,data,visibleUI,patch,navigate,call,act,toast,copyToClipboard,addCart,cacheStoreProducts,recheckStoreProducts,updateCart,acknowledgeCartProduct,retryCartProduct,markCartProductsUnavailable,beginCheckout,loadWards,refreshResource]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

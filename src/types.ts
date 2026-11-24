@@ -25,7 +25,7 @@ export interface CSA {id?:string;planName: string; planNameEn?: string; descript
 export interface CSAUpcoming {kind:"membership"|"purchase_request";id:string;requestCode?:string;planName:string;status:"scheduled"|"pending"|"payment_confirmed";durationMonths:number;amount:string;currency:string;startDate?:string;endDate?:string;createdAt?:string;expiresAt?:string}
 export interface CSAOverview {active:CSA|null;frozen?:CSA|null;upcoming:CSAUpcoming[]}
 export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
-export interface CatalogData {products: Product[]; storeProducts:Record<string,import("./store/store-model").StoreProductCard>; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
+export interface CatalogData {products: Product[]; storeProducts:Record<string,import("./store/store-product-snapshots").StoreProductSnapshot>; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;
  getAddress?(): Promise<Address | null>; getShippingAddress?(): Promise<Address | null>; getOrders?(): Promise<Order[]>;

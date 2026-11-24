@@ -7,7 +7,8 @@ import vm from "node:vm";
 const require=createRequire(import.meta.url),ts=require("typescript");
 const root=new URL("../",import.meta.url);
 const compile=path=>ts.transpileModule(readFileSync(new URL(path,root),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-const product=(overrides={})=>({id:"11111111-1111-4111-8111-111111111111",slug:"rau",sku:"RAU",name:"Rau",alternate_name:null,short_description:"",description:"",retail_price_vnd:30000,available_quantity:3,unit_size:"1.000",unit_label:"kg",category:{id:"22222222-2222-4222-8222-222222222222",slug:"rau",name:"Rau"},primary_image:null,csa_quota_group:null,suppliers:[],requested_locale:"vi",content_locale:"vi",available_locales:["vi"],is_fallback:false,...overrides});
+const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
+const product=(overrides={})=>({id:PRODUCT_ID,slug:"rau",sku:"RAU",name:"Rau",alternate_name:null,short_description:"",description:"",retail_price_vnd:30000,available_quantity:3,unit_size:"1.000",unit_label:"kg",category:{id:"22222222-2222-4222-8222-222222222222",slug:"rau",name:"Rau"},primary_image:null,csa_quota_group:null,suppliers:[],requested_locale:"vi",content_locale:"vi",available_locales:["vi"],is_fallback:false,...overrides});
 const envelope=value=>({data:value});
 
 function loadCoordinator(fetcher,events){
@@ -23,9 +24,9 @@ function loadCoordinator(fetcher,events){
 test("cart refresh can recover from network error without removing cart-owned state",async()=>{
   const events=[],cart={p:2},applyCSA={p:true};let attempts=0;
   const coordinator=loadCoordinator(async()=>{attempts++;if(attempts===1)throw Error("offline");return new Response(JSON.stringify(envelope(product({retail_price_vnd:35000}))),{status:200})},events);
-  await coordinator.refresh({id:"p",cached:product({id:"p"}),locale:"vi"});
+  await coordinator.refresh({id:PRODUCT_ID,cached:product(),locale:"vi"});
   assert.deepEqual(events.map(event=>event.state),["loading","error"]);
-  await coordinator.refresh({id:"p",cached:product({id:"p"}),locale:"vi"});
+  await coordinator.refresh({id:PRODUCT_ID,cached:product(),locale:"vi"});
   assert.equal(events.at(-1).type,"ready");
   assert.equal(events.at(-1).notice,"price_changed");
   assert.deepEqual(cart,{p:2});
@@ -38,7 +39,7 @@ test("cart refresh distinguishes repeated errors and 404 unavailable responses",
     {fetcher:async()=>new Response("{}",{status:404}),expected:"unavailable"},
   ]){
     const events=[],coordinator=loadCoordinator(fixture.fetcher,events);
-    await coordinator.refresh({id:"p",cached:product({id:"p"}),locale:"en"});
+    await coordinator.refresh({id:PRODUCT_ID,cached:product(),locale:"en"});
     assert.deepEqual(events.map(event=>event.state),["loading",fixture.expected]);
     assert.equal(events.some(event=>event.type==="ready"),false);
   }
@@ -46,7 +47,7 @@ test("cart refresh distinguishes repeated errors and 404 unavailable responses",
 
 test("successful retry reports stock changes for acknowledgement",async()=>{
   const events=[],coordinator=loadCoordinator(async()=>new Response(JSON.stringify(envelope(product({available_quantity:1}))),{status:200}),events);
-  await coordinator.refresh({id:"p",cached:product({id:"p",available_quantity:3}),locale:"vi"});
+  await coordinator.refresh({id:PRODUCT_ID,cached:product({available_quantity:3}),locale:"vi"});
   assert.equal(events.at(-1).type,"ready");
   assert.equal(events.at(-1).notice,"stock_changed");
   assert.equal(events.at(-1).product.available_quantity,1);
@@ -54,14 +55,41 @@ test("successful retry reports stock changes for acknowledgement",async()=>{
 
 test("a stale refresh response cannot overwrite the latest retry",async()=>{
   const pending=[],events=[],coordinator=loadCoordinator((_url,{signal})=>new Promise(resolve=>pending.push({resolve,signal})),events);
-  const first=coordinator.refresh({id:"p",cached:product({id:"p"}),locale:"vi"});
-  const second=coordinator.refresh({id:"p",cached:product({id:"p"}),locale:"vi"});
+  const first=coordinator.refresh({id:PRODUCT_ID,cached:product(),locale:"vi"});
+  const second=coordinator.refresh({id:PRODUCT_ID,cached:product(),locale:"vi"});
   pending[1].resolve(new Response(JSON.stringify(envelope(product({retail_price_vnd:32000}))),{status:200}));await second;
   pending[0].resolve(new Response(JSON.stringify(envelope(product({retail_price_vnd:99000}))),{status:200}));await first;
   const ready=events.filter(event=>event.type==="ready");
   assert.equal(ready.length,1);
   assert.equal(ready[0].product.retail_price_vnd,32000);
   assert.equal(pending[0].signal.aborted,true);
+});
+
+test("reopening can share a pending refresh only when its price and stock baseline match",async()=>{
+  const pending=[],events=[],coordinator=loadCoordinator((_url,{signal})=>new Promise(resolve=>pending.push({resolve,signal})),events);
+  const old=coordinator.refresh({id:PRODUCT_ID,cached:product({retail_price_vnd:40000}),locale:"vi"});
+  const current={id:PRODUCT_ID,cached:product({retail_price_vnd:30000}),locale:"vi"};
+  const restarted=coordinator.refresh(current,{reusePending:true});
+  await coordinator.refresh(current,{reusePending:true});
+  assert.equal(pending.length,2);
+  assert.equal(pending[0].signal.aborted,true);
+  for(const request of pending)request.resolve(new Response(JSON.stringify(envelope(product({retail_price_vnd:40000}))),{status:200}));
+  await Promise.all([old,restarted]);
+  assert.deepEqual(events.filter(event=>event.type==="ready").map(event=>event.notice),["price_changed"]);
+});
+
+test("a catalog slug that now belongs to another product cannot replace the cart item",async()=>{
+  const original=product({slug:"rau-moi"}),other=product({id:"33333333-3333-4333-8333-333333333333",slug:"rau-cu"});
+  const events=[],calls=[];
+  const coordinator=loadCoordinator(async url=>{
+    calls.push(url);
+    return new Response(JSON.stringify(envelope(url.includes("/rau-cu?")?other:original)),{status:200});
+  },events);
+  await coordinator.refresh({id:original.id,cached:{...original,catalogSlug:"rau-cu"},locale:"vi"});
+  assert.deepEqual(calls.map(url=>url.split("?")[0]),["/api/store/products/rau-cu","/api/store/products/rau-moi"]);
+  assert.equal(events.filter(event=>event.type==="ready").length,1);
+  assert.equal(events.at(-1).product.id,original.id);
+  assert.equal(events.at(-1).notice,undefined);
 });
 
 test("cart drawer retry handler targets the failed row and keeps checkout blocked while loading",()=>{

@@ -69,7 +69,6 @@ test("Store UI uses localized API states, native detail links and server paginat
  assert.match(store,/meta\.total/);
  assert.match(store,/catalog\.loadingMore/);
  assert.match(store,/catalog\.moreError/);
- assert.doesNotMatch(store,/addCart|className="add-mini"/);
 });
 
 test("Store cards and product details format selling-unit quantities",()=>{

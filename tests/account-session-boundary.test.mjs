@@ -106,7 +106,7 @@ function tabHarness({getShippingAddress=async()=>null}={}){
   '@/auth/auth-service':service,
   './initial-state':initial,
   '@/store/cart-product-refresh':{createCartProductRefreshCoordinator:()=>({})},
-  './cart-persistence':{loadCart:()=>({}),loadCartProducts:()=>({}),saveCart(){},saveCartProducts(){}},
+  './cart-persistence':{loadCart:()=>({}),loadCartProducts:()=>({}),loadBlockedStoreProducts:()=>({}),saveCart(){},saveCartProducts(){},saveBlockedStoreProducts(){}},
   '@/account/shipping-service':{getShippingAddress},
   '@/account/csa-service':{getCSA:async()=>null},
   '@/account/rewards-service':{getRewards:async()=>null},

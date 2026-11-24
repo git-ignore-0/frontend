@@ -8,6 +8,7 @@ import {STORE_COPY} from "@/data/store-copy";
 import {money} from "@/lib/format";
 import {useNFV} from "@/state/NFVContext";
 import {formatCsaQuotaBadge,formatUnitSize} from "@/store/store-format";
+import {STORE_MAX_LINE_QUANTITY} from "@/store/store-limits";
 import type {StoreCategory,StoreProductCard} from "@/store/store-model";
 import {DEFAULT_STORE_PAGE_SIZE,type StorePriceBand,type StoreSort} from "@/store/store-request";
 import {useStoreCatalog} from "@/store/useStoreCatalog";
@@ -27,17 +28,27 @@ function categoryTree(categories:StoreCategory[]):CategoryNode[]{
 }
 
 export const ProductCard=memo(function ProductCard({product,locale}:{product:StoreProductCard;locale:"vi"|"en"}){
+ const {ui,storeAvailability,addCart}=useNFV(),copy=STORE_COPY[locale];
+ const count=ui.cart[product.id]??0;
+ const verifiedStock=storeAvailability[product.id];
+ const max=Math.min(STORE_MAX_LINE_QUANTITY,verifiedStock??product.available_quantity);
  const image=product.primary_image?.variants.find(variant=>variant.width>=400)?.url??product.primary_image?.url;
  return <article className="product-card">
-  <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${STORE_COPY[locale].view} ${product.name}`}>{product.csa_quota_group&&<span className="corner-tag">{formatCsaQuotaBadge(product.csa_quota_group,locale)}</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>
+  <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${copy.view} ${product.name}`}>{product.csa_quota_group&&<span className="corner-tag">{formatCsaQuotaBadge(product.csa_quota_group,locale)}</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>
   <div className="card-copy"><a className="card-title" href={`/store/${product.slug}/${locale}`}>{product.name}</a>
    <div className="card-bottom"><div className="card-price-line"><div className="price">{money(product.retail_price_vnd)}</div><div className="unit">/ {formatUnitSize(product.unit_size)} {product.unit_label}</div></div></div>
+   <div className="card-cart-action">
+    {verifiedStock===null||max===0?<span className="status neutral">{verifiedStock===null?copy.unavailable:copy.outOfStock}</span>:
+     <Button small variant="outline" disabled={count>=max} aria-label={`${copy.addToCart} – ${product.name}`} onClick={()=>addCart(product,1,{openCart:false})}>
+      <Icon name="plus" size={14}/>{copy.addToCart}
+     </Button>}
+   </div>
   </div>
  </article>;
 });
 
 function CatalogSkeleton({label}:{label:string}){
- return <div role="status" aria-label={label} aria-busy="true"><div className="products-grid" aria-hidden="true">{Array.from({length:DEFAULT_STORE_PAGE_SIZE},(_,index)=><div className="product-card catalog-skeleton" key={index}><div className="product-img"/><div className="card-copy"><span className="catalog-skeleton-title"/><span className="catalog-skeleton-price"/></div></div>)}</div></div>;
+ return <div role="status" aria-label={label} aria-busy="true"><div className="products-grid" aria-hidden="true">{Array.from({length:DEFAULT_STORE_PAGE_SIZE},(_,index)=><div className="product-card catalog-skeleton" key={index}><div className="product-img"/><div className="card-copy"><span className="catalog-skeleton-title"/><span className="catalog-skeleton-price"/><div className="card-cart-action"><span className="catalog-skeleton-action"/></div></div></div>)}</div></div>;
 }
 
 function CategoryTree({tree,selectedId,expanded,allLabel,onSelect,onToggle}:{tree:CategoryNode[];selectedId?:string;expanded:string[];allLabel:string;onSelect:(id?:string)=>void;onToggle:(id:string)=>void}){

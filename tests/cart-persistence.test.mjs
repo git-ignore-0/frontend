@@ -41,3 +41,12 @@ test("empty carts remove stale session data",async()=>{
   saveCart(storage,{});
   assert.equal(storage.getItem(CART_STORAGE_KEY),null);
 });
+
+test("confirmed unavailability survives a document reload for items outside the cart",async()=>{
+  const {loadBlockedStoreProducts,saveBlockedStoreProducts}=await loadCartPersistence();
+  const storage=memoryStorage();
+  saveBlockedStoreProducts(storage,{soldOut:0,unpublished:null,available:5,"bad id":null});
+  assert.deepEqual(loadBlockedStoreProducts(storage),{soldOut:0,unpublished:null});
+  saveBlockedStoreProducts(storage,{soldOut:3,unpublished:2});
+  assert.deepEqual(loadBlockedStoreProducts(storage),{});
+});

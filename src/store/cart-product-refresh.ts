@@ -1,9 +1,10 @@
 import {parseStoreProductDetail,type StoreLocale,type StoreProductCard} from "./store-model";
+import type {StoreProductSnapshot} from "./store-product-snapshots";
 
 export type CartProductRefreshState="loading"|"error"|"unavailable";
 export type CartProductNotice="price_changed"|"stock_changed"|undefined;
 
-type RefreshInput={id:string;cached:StoreProductCard;locale:StoreLocale};
+type RefreshInput={id:string;cached:StoreProductSnapshot;locale:StoreLocale};
 type RefreshOptions={
   fetcher?:typeof fetch;
   onState:(id:string,state:CartProductRefreshState)=>void;
@@ -11,32 +12,48 @@ type RefreshOptions={
 };
 
 export function createCartProductRefreshCoordinator({fetcher=fetch,onState,onReady}:RefreshOptions){
-  const active=new Map<string,{sequence:number;controller:AbortController}>();
-  let sequence=0;
-  const current=(id:string,value:{sequence:number;controller:AbortController})=>active.get(id)===value;
+  type Request={locale:StoreLocale;cached:StoreProductSnapshot;controller:AbortController};
+  const active=new Map<string,Request>();
+  const current=(id:string,value:Request)=>active.get(id)===value;
 
   return {
-    async refresh({id,cached,locale}:RefreshInput){
-      active.get(id)?.controller.abort();
-      const request={sequence:++sequence,controller:new AbortController()};
+    async refresh({id,cached,locale}:RefreshInput,{reusePending=false}={}){
+      const pending=active.get(id);
+      if(reusePending&&pending?.locale===locale
+        &&pending.cached.slug===cached.slug
+        &&pending.cached.catalogSlug===cached.catalogSlug
+        &&pending.cached.retail_price_vnd===cached.retail_price_vnd
+        &&pending.cached.available_quantity===cached.available_quantity)return;
+      pending?.controller.abort();
+      const request={locale,cached,controller:new AbortController()};
       active.set(id,request);
       onState(id,"loading");
       try{
-        const response=await fetcher(`/api/store/products/${encodeURIComponent(cached.slug)}?locale=${locale}&retry=1`,{cache:"no-store",signal:request.controller.signal});
-        if(!current(id,request))return;
-        if(response.status===404){onState(id,"unavailable");return}
-        if(!response.ok)throw Error("refresh_failed");
-        const product=parseStoreProductDetail(await response.json());
-        if(!current(id,request))return;
-        const notice=cached.retail_price_vnd!==product.retail_price_vnd
-          ? "price_changed"
-          : cached.available_quantity!==product.available_quantity
-            ? "stock_changed"
-            : undefined;
-        onReady(id,product,notice);
-      }catch(error){
-        const aborted=!!error&&typeof error==="object"&&"name" in error&&error.name==="AbortError";
-        if(current(id,request)&&!aborted)onState(id,"error");
+        const slugs=cached.catalogSlug&&cached.catalogSlug!==cached.slug?[cached.catalogSlug,cached.slug]:[cached.slug];
+        let failed=false;
+        for(const slug of slugs){
+          try{
+            const response=await fetcher(`/api/store/products/${encodeURIComponent(slug)}?locale=${locale}&retry=1`,{cache:"no-store",signal:request.controller.signal});
+            if(!current(id,request))return;
+            if(response.status===404)continue;
+            if(!response.ok)throw Error("refresh_failed");
+            const product=parseStoreProductDetail(await response.json());
+            if(!current(id,request))return;
+            if(product.id!==id)continue;
+            const notice=cached.retail_price_vnd!==product.retail_price_vnd
+              ? "price_changed"
+              : cached.available_quantity!==product.available_quantity
+                ? "stock_changed"
+                : undefined;
+            onReady(id,product,notice);
+            return;
+          }catch(error){
+            const aborted=!!error&&typeof error==="object"&&"name" in error&&error.name==="AbortError";
+            if(!current(id,request)||aborted)return;
+            failed=true;
+          }
+        }
+        onState(id,failed?"error":"unavailable");
       }finally{
         if(current(id,request))active.delete(id);
       }

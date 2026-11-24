@@ -7,13 +7,13 @@ const require=createRequire(import.meta.url),React=require("react"),jsx=require(
 const root=new URL("../",import.meta.url);
 const read=path=>readFileSync(new URL(path,root),"utf8");
 const product={id:"p",name:"Rau cải",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,primary_image:null,csa_quota_group:{id:"g",cost:1,name:"Rau"}};
-export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false,quotaCost=1,pending=null,presented=false,failed=false}={}){
+export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false,quotaCost=1,pending=null,presented=false,failed=false,cartState="ready",availableQuantity=10}={}){
  let hook=0;
  const session=authenticated?{subject:"test-user"}:null;
  // Render the settled checkout, after quote, shipping and pending-intent ownership hydrate.
  const seeds=[[],{name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"},{active,products:[{productId:"g",availableUnits:2}]},30000,true,pending==="quote"];
- const data={authenticated,storeProducts:{p:{...product,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01",shippingAddressVersion:"a".repeat(64)}:null};
- const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:pending==="product"?"loading":"ready"},cartProductNotice:{},accountFetchState:{address:pending==="address"?"loading":failed?"error":"ready"}};
+ const data={authenticated,storeProducts:{p:{...product,available_quantity:availableQuantity,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01",shippingAddressVersion:"a".repeat(64)}:null};
+ const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:pending==="product"?"loading":cartState},cartProductNotice:{},accountFetchState:{address:pending==="address"?"loading":failed?"error":"ready"}};
  const cache=new Map();
  function load(path){
   if(cache.has(path))return cache.get(path);
@@ -75,6 +75,22 @@ test("cart uses the same compact selling unit as product list and detail",()=>{
  assert.match(html,/1 kg/);
  assert.doesNotMatch(html,/1\.000/);
 });
+
+test("the proceed button shows its shared loading state while cart products are checked",()=>{
+ const html=renderStoreFixture({cart:true,pending:"product"});
+ assert.match(html,/<button[^>]+disabled=""[^>]+aria-busy="true"[^>]*>.*?Tiến hành đặt hàng/);
+ assert.match(html,/nfv-button-spinner/);
+});
+
+for(const [cartState,availableQuantity,message] of [["unavailable",10,"Sản phẩm không còn bán"],["ready",0,"Hết hàng"],["error",10,"Chưa thể làm mới sản phẩm"]]){
+ test(`cart locks both quantity controls for ${message} and keeps removal available`,()=>{
+  const html=renderStoreFixture({cart:true,cartState,availableQuantity});
+  assert.match(html,new RegExp(message));
+  assert.match(html,/aria-label="Giảm số lượng Rau cải" disabled=""/);
+  assert.match(html,/aria-label="Tăng số lượng Rau cải" disabled=""/);
+  assert.match(html,/<button class="remove-link">Xóa<\/button>/);
+ });
+}
 
 test("CSA summary reserves the same benefit row before and after applying points",()=>{
  const selected=renderStoreFixture({authenticated:true,active:true,useQuota:true});

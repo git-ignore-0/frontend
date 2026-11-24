@@ -45,17 +45,16 @@ test("another Core account sharing a recipient phone cannot resolve member pendi
   assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:"",email:null,phone}),null);
 `));
 
-test("legacy member references require the current email and delivery phone to match",()=>runPending(`
+test("legacy member references provide a request code for owner lookup without a phone",()=>runPending(`
   for (const raw of [
     JSON.stringify({version:1,owner:{email:"member@example.test",phone:"0901234567"},confirmation}),
     JSON.stringify({version:2,owner:{email:"member@example.test",phone:"0901234567"},reference:{requestCode:"CSA-001"}}),
   ]) {
-    const owner={subject:member,email:" MEMBER@example.test ",phone};
-    assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,owner),{requestCode:"CSA-001",phone});
+    const owner={subject:member,email:" MEMBER@example.test ",phone:"+84911111111"};
+    assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,owner),{requestCode:"CSA-001",phone:null});
     assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,email:"other@example.test"}),null);
     assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,email:null}),null);
-    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,phone:""}),null);
-    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,phone:"+84911111111"}),null);
+    assert.equal(pending.resolveCsaPendingMemberReference(raw,{...owner,subject:""}),null);
   }
 `));
 
@@ -100,9 +99,11 @@ test("discard only removes the matching owner's request from scoped or legacy st
   assert.equal(pending.resolveCsaPendingMemberReference(pending.readCsaPendingSnapshot(storage,member),owner).requestCode,'CSA-001');
   pending.discardCsaPending(storage,owner,'CSA-001');
   assert.equal(pending.readCsaPendingSnapshot(storage,member),legacy);
-  pending.discardCsaPending(storage,{...owner,subject:other,email:'b@example.test'},'CSA-LEGACY');
+  pending.discardCsaPending(storage,{...owner,subject:other,email:'b@example.test'},'CSA-LEGACY',legacy);
   assert.equal(storage.getItem(key),legacy);
   pending.discardCsaPending(storage,owner,'CSA-LEGACY');
+  assert.equal(storage.getItem(key),legacy);
+  pending.discardCsaPending(storage,owner,'CSA-LEGACY',legacy);
   assert.equal(pending.readCsaPendingSnapshot(storage,member),null);
   assert.equal(pending.resolveCsaPendingMemberReference(pending.readCsaPendingSnapshot(storage,other),{...owner,subject:other}).requestCode,'CSA-OTHER');
 `));

@@ -14,6 +14,7 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve
 const uiNames=["Button","DataState","FormInput","FormSelect","Icon","MoneyLine","Photo","Quantity","Tabs","Status"];
 const primitives=Object.fromEntries(["StoreSection","StorePageHeading","StoreProductRow"].map(k=>[k,k]));
 class ApiError extends Error{constructor(status,context){super("request_failed");this.status=status;this.context=context;this.code=status===409?"store_requote_required":"request_failed"}}
+const ADDRESS_VERSION="a".repeat(64);
 const DELIVERY_DATE="2026-11-01";
 const guest={name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"};
 const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
@@ -38,6 +39,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/account/orders-view-state")return load("src/account/orders-view-state.ts");
   if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
   if(name==="@/lib/date-format")return load("src/lib/date-format.ts");
+  if(name==="@/data/account-copy")return load("src/data/account-copy.ts");
   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
   if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
@@ -113,7 +115,7 @@ function checkout(options={}){
   });
   const subtotal=lines.reduce((sum,line)=>sum+(line.quantity-line.expected_quota_quantity)*line.expected_unit_price_vnd,0);
   const fee=serverFee;
-  return {deliveryDate:input.delivery_date,shippingDiscountReason:null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:0,shippingFeeVnd:fee,totalVnd:subtotal+fee,coupon:null,voucherQuote:null,shippingAddressUpdatedAt:input.guest?null:context.data.shippingAddress?.updatedAt,lines};
+  return {deliveryDate:input.delivery_date,shippingDiscountReason:null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:0,shippingFeeVnd:fee,totalVnd:subtotal+fee,coupon:null,voucherQuote:null,shippingAddressUpdatedAt:input.guest?null:context.data.shippingAddress?.updatedAt,shippingAddressVersion:input.guest?undefined:context.data.shippingAddress?.shippingAddressVersion,lines};
  };
  const r=runtime("src/screens/Checkout.tsx",{...options,context,services:{getStoreDeliveryDates:async()=>({serverTime:"2026-11-01T00:00:00Z",dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:false}))}),getStoreQuote:defaultQuote,getShippingQuote:async()=>({supported:true,shippingFeeVnd:30000}),getStoreQuota:async()=>({active:false,products:[]}),...options.services,getShippingQuote:async(...args)=>{const result=await (options.services?.getShippingQuote??(async()=>({supported:true,shippingFeeVnd:30000})))(...args);serverFee=result.shippingFeeVnd;return result},...(options.services?.prepareBuyAgain?{prepareBuyAgain:async(...args)=>{const rows=await options.services.prepareBuyAgain(...args);buyAgainProducts=rows.map(row=>row.product);return rows}}:{})}});
  const settle=r.settle;
@@ -172,7 +174,7 @@ test("checkout does not publish a previous session's completed order or clear it
 
 test("changing checkout owner hides the old address and waits for the new owner's quota",async()=>{
  const pending=deferred(),auth={status:"authenticated",session:{subject:"A"}};let requests=0;
- const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
+ const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true};
  const r=checkout({auth,context:{accountSessionKey:"A",data:{authenticated:true,shippingAddress:address,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}}}},services:{getStoreQuota:()=>++requests===1?Promise.resolve({active:true,products:[{productId:"g",availableUnits:1}]}):pending.promise}});
  r.context.ui.accountFetchState.address="ready";r.context.ui.applyCSA={[PRODUCT_ID]:true};r.render("Checkout");await r.settle();
  assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"30000");
@@ -185,7 +187,7 @@ test("changing checkout owner hides the old address and waits for the new owner'
 
 test("returning to Store Checkout with the same account keeps the selected CSA quota",async()=>{
  const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
- const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
+ const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true};
  const sent=[];
  const r=checkout({auth,context:{accountSessionKey:"A",data:{authenticated:true,shippingAddress:address,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}}}},services:{getStoreQuota:async()=>({active:true,products:[{productId:"g",availableUnits:1}]}),createStoreCheckout:async payload=>{sent.push(payload);return order()}}});
  const quotaCheckbox=()=>nodes(nodes(r.tree).find(node=>node.type==="StoreProductRow")?.props.actions).find(node=>node.type==="input"&&node.props.type==="checkbox");
@@ -223,9 +225,52 @@ test("returning to Store Checkout with the same account keeps the selected CSA q
 
 function addressCheckout(options={}){
  const auth={status:"authenticated",session:{subject:"A"}};
- const r=checkout({...options,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product}},shippingAddress:{name:"Khách thử",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}}});
+ const r=checkout({...options,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product}},shippingAddress:{name:"Khách thử",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}}});
  r.context.ui.accountFetchState.address="ready";return r;
 }
+
+for(const field of ["phone","name"]){
+ test(`a saved address without a ${field} opens account settings before checkout`,async()=>{
+  const r=addressCheckout();
+  r.context.data.shippingAddress[field]="";
+  try{
+   r.render("Checkout");await r.settle();
+   assert.equal(confirm(r).props.disabled,true);
+   assert.ok(nodes(r.tree).some(node=>node.type==="a"&&node.props.href?.startsWith("/api/auth/account?")));
+  }finally{r.dispose()}
+ });
+}
+
+test("checkout refreshes and reconfirms changed contact with the same saved address timestamp",async()=>{
+ const sent=[],refresh=deferred(),newVersion="b".repeat(64);let refreshes=0;
+ const r=addressCheckout({services:{
+  getStoreQuote:async input=>({...authoritativeQuote(input,{fee:30000}),shippingAddressVersion:newVersion}),
+  createStoreCheckout:async payload=>{sent.push(payload);return order()},
+ }});
+ r.context.refreshResource=async resource=>{
+  assert.equal(resource,"address");refreshes++;
+  await refresh.promise;
+  r.context.data.shippingAddress={...r.context.data.shippingAddress,name:"Tên đã đổi",shippingAddressVersion:newVersion};
+ };
+ try{
+  r.render("Checkout");await r.settle();
+  const confirmOrder=confirm(r).props.onClick();
+  await r.settle();
+  assert.equal(sent.length,0);
+  assert.equal(refreshes,1);
+  assert.equal(confirm(r).props.disabled,true);
+  const accept=()=>nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));
+  assert.equal(accept().props.disabled,true);
+  refresh.resolve();
+  await confirmOrder;await r.settle();
+  assert.match(text(r.tree),/Tên đã đổi/);
+  assert.equal(accept().props.disabled,false);
+  accept().props.onClick();r.render();
+  await confirm(r).props.onClick();
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].shipping_address_version,newVersion);
+ }finally{r.dispose()}
+});
 
 test("a slow requote cannot overwrite shipping resolved for the updated saved address",async()=>{
  const products=deferred();const r=addressCheckout({fetcher:()=>products.promise,services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"shipping_address_changed"})},getShippingQuote:async province=>({supported:true,shippingFeeVnd:province==="77"?50000:30000})}});
@@ -433,7 +478,7 @@ test("resuming an unknown checkout keeps items added after the saved request",as
 test("CSA unavailable rejection requotes and allows a new cash request",async()=>{
  const payloads=[],failure=new ApiError(400);failure.code="store_quota_unavailable";let quotaCalls=0;
  const auth={status:"authenticated",session:{subject:"A"}};
- const r=checkout({auth,fetcher:async()=>({ok:true,json:async()=>({...product,csa_quota_group:{id:"g",cost:1}})}),context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}},services:{getStoreQuota:async()=>++quotaCalls===1?{active:true,products:[{productId:"g",availableUnits:1}]}:{active:false,products:[]},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
+ const r=checkout({auth,fetcher:async()=>({ok:true,json:async()=>({...product,csa_quota_group:{id:"g",cost:1}})}),context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{getStoreQuota:async()=>++quotaCalls===1?{active:true,products:[{productId:"g",availableUnits:1}]}:{active:false,products:[]},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
  r.context.ui.accountFetchState.address="ready";r.context.ui.applyCSA={[PRODUCT_ID]:true};r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();
  assert.equal(payloads[0].lines[0].use_quota,true);assert.ok(!text(r.tree).includes("Chưa xác định được kết quả"));
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.ok(accept);assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();await confirm(r).props.onClick();
@@ -560,7 +605,7 @@ test("expired QR is hidden while the expiry verification request is still pendin
 test("Store checkout expires the current session on 401 and preserves its owner-scoped intent for sign-in",async()=>{
  const storage=new Map();let expired=0;
  const auth={status:"authenticated",session:{subject:"A"},expire(){expired++;auth.status="expired";auth.session=null;r.render();r.flush()}};
- const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}},services:{createStoreCheckout:async()=>{throw new ApiError(401)}}});
+ const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{createStoreCheckout:async()=>{throw new ApiError(401)}}});
  r.context.ui.accountFetchState.address="ready";
  r.render("Checkout");await r.settle();await confirm(r).props.onClick();await r.settle();
  assert.equal(expired,1);assert.ok(storage.has("nfv_store_checkout_intent_v1:A"));
@@ -593,7 +638,7 @@ test("a current Store order-list 401 expires its owner",async()=>{
 
 test("an expired checkout stays blocked after guest reload and resumes only for its original account",async()=>{
  const storage=new Map();const auth={status:"authenticated",session:{subject:"A"},expire(){auth.status="expired";auth.session=null}};
- const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}},services:{createStoreCheckout:async()=>{throw new ApiError(401)}}});
+ const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{createStoreCheckout:async()=>{throw new ApiError(401)}}});
  r.context.ui.accountFetchState.address="ready";r.render("Checkout");await r.settle();await confirm(r).props.onClick();await r.settle();r.dispose();
  let calls=0;const restored=checkout({storage,services:{createStoreCheckout:async()=>{calls++;return order()}}});
  restored.render("Checkout");await restored.settle();assert.ok(!confirm(restored));assert.ok(nodes(restored.tree).some(n=>n.type==="a"&&n.props.href?.startsWith("/api/auth/login")));
@@ -604,7 +649,7 @@ test("an expired checkout stays blocked after guest reload and resumes only for 
 test("a failed session check offers retry while a member checkout is unresolved",async()=>{
  const storage=new Map();let posts=0,retries=0;
  const auth={status:"authenticated",session:{subject:"A"},refresh(){retries++}};
- const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}}},services:{createStoreCheckout:async()=>{posts++;throw new ApiError(0)}}});
+ const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{createStoreCheckout:async()=>{posts++;throw new ApiError(0)}}});
  r.context.ui.accountFetchState.address="ready";
  r.render("Checkout");await r.settle();await confirm(r).props.onClick();await r.settle();
  auth.status="error";auth.session=null;r.context.accountSessionKey="error";r.render();await r.settle();
@@ -684,7 +729,7 @@ test("unresolved guest checkout blocks a fresh member checkout across login and 
 
 test("unresolved member checkout survives logout and account switching without a 401",async()=>{
  const storage=new Map(),payloads=[],auth={status:"authenticated",session:{subject:"A"}};
- const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true};
+ const address={name:"Owner A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true};
  const r=checkout({storage,auth,context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:address}},services:{createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw new ApiError(0);return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
  r.context.ui.accountFetchState.address="ready";r.render("Checkout");await r.settle();await confirm(r).props.onClick();await r.settle();
  for(const next of [null,"B"]){auth.status=next?"authenticated":"guest";auth.session=next?{subject:next}:null;r.context.accountSessionKey=next??"guest";r.render();await r.settle();assert.equal(confirm(r),undefined);assert.ok(!text(r.tree).includes("Owner A"));}
@@ -705,7 +750,7 @@ test("legacy unresolved member attempt is discovered after reload under another 
 const SOURCE_ORDER="22222222-2222-4222-8222-222222222222",SOURCE_SESSION="33333333-3333-4333-8333-333333333333";
 function buyAgainCheckout(options={}){
  const storage=options.storage??new Map([["nfv_store_buy_again_v1",JSON.stringify({owner:"A",orderId:SOURCE_ORDER,sessionId:SOURCE_SESSION})]]);
- return checkout({...options,storage,search:"?source=buy-again",auth:options.auth??{status:"authenticated",session:{subject:"A"}},context:{accountSessionKey:"A",data:{shippingAddress:{...guest,detail:guest.address,updatedAt:"2026-11-01T00:00:00Z"},storeProducts:{[PRODUCT_ID]:product}},ui:{locale:"vi",cart:{[PRODUCT_ID]:7},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},...options.context},services:{prepareBuyAgain:async()=>[{productId:PRODUCT_ID,quantity:2,name:"Old name",reason:null,product:{...product,name:"Fresh name",retail_price_vnd:50000}}],...options.services}});
+ return checkout({...options,storage,search:"?source=buy-again",auth:options.auth??{status:"authenticated",session:{subject:"A"}},context:{accountSessionKey:"A",data:{shippingAddress:{...guest,detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION},storeProducts:{[PRODUCT_ID]:product}},ui:{locale:"vi",cart:{[PRODUCT_ID]:7},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},...options.context},services:{prepareBuyAgain:async()=>[{productId:PRODUCT_ID,quantity:2,name:"Old name",reason:null,product:{...product,name:"Fresh name",retail_price_vnd:50000}}],...options.services}});
 }
 
 test("buy again reload prepares current data; completion leaves cart and CSA choices untouched",async()=>{
@@ -893,9 +938,9 @@ test("successful buy again recovery cannot submit a new order before navigation"
 
 function voucherCheckout(options={}){
  const auth=options.auth??{status:"authenticated",session:{subject:"A"}};
- return checkout({...options,auth,context:{accountSessionKey:auth.session?.subject??"guest",ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",isSupported:true}},...options.context}});
+ return checkout({...options,auth,context:{accountSessionKey:auth.session?.subject??"guest",ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}},data:{authenticated:true,storeProducts:{[PRODUCT_ID]:product},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}},...options.context}});
 }
-const voucherResponse=(code="SAVE",overrides={})=>({subtotalVnd:42000,eligibleSubtotalVnd:42000,discountAmountVnd:12000,shippingFeeVnd:30000,totalVnd:60000,voucherQuote:"a".repeat(40),shippingAddressUpdatedAt:"2026-11-01T00:00:00Z",coupon:{id:SOURCE_ORDER,code},lines:[{product_id:PRODUCT_ID,quantity:1,use_quota:false,expected_unit_price_vnd:42000,expected_available_quantity:8,expected_quota_quantity:0}],...overrides});
+const voucherResponse=(code="SAVE",overrides={})=>({subtotalVnd:42000,eligibleSubtotalVnd:42000,discountAmountVnd:12000,shippingFeeVnd:30000,totalVnd:60000,voucherQuote:"a".repeat(40),shippingAddressUpdatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,coupon:{id:SOURCE_ORDER,code},lines:[{product_id:PRODUCT_ID,quantity:1,use_quota:false,expected_unit_price_vnd:42000,expected_available_quantity:8,expected_quota_quantity:0}],...overrides});
 const voucherInput=r=>nodes(r.tree).find(n=>n.type==="FormInput"&&n.props.id==="storeDiscountCode");
 const applyVoucher=r=>nodes(r.tree).find(n=>n.type==="Button"&&/^(Áp dụng|Apply)$/.test(text(n).trim()));
 async function applyCode(r,code="SAVE"){
@@ -984,7 +1029,7 @@ test("a replacement session for the same UUID cannot reuse an earlier applied qu
 
 test("voucher checkout mixed quota uses BE quantities once and allows a zero total",async()=>{
  const p={...product,csa_quota_group:{id:"g",cost:.75}},preview=voucherResponse("SAVE",{subtotalVnd:84000,eligibleSubtotalVnd:84000,discountAmountVnd:84000,shippingFeeVnd:0,totalVnd:0,lines:[{product_id:PRODUCT_ID,quantity:3,use_quota:true,expected_unit_price_vnd:42000,expected_available_quantity:8,expected_quota_quantity:1}]});
- const r=voucherCheckout({services:{getStoreQuota:async()=>({active:true,products:[{productId:"g",availableUnits:2}]}),previewStoreVoucher:async()=>preview},context:{accountSessionKey:"A",data:{storeProducts:{[PRODUCT_ID]:p},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z"}},ui:{locale:"vi",cart:{[PRODUCT_ID]:3},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}}}});
+ const r=voucherCheckout({services:{getStoreQuota:async()=>({active:true,products:[{productId:"g",availableUnits:2}]}),previewStoreVoucher:async()=>preview},context:{accountSessionKey:"A",data:{storeProducts:{[PRODUCT_ID]:p},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION}},ui:{locale:"vi",cart:{[PRODUCT_ID]:3},applyCSA:{[PRODUCT_ID]:true},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{address:"ready"}}}});
  r.render("Checkout");await r.settle();await applyCode(r);
  const values=nodes(r.tree).filter(n=>n.type==="MoneyLine");
  assert.equal(values.find(n=>n.props.label==="Tiền hàng").props.value,"126000");
@@ -1071,7 +1116,7 @@ const dateInputs=r=>nodes(r.tree).filter(n=>n.type==='input'&&n.props.name==='st
 const chooseDate=async(r,index)=>{dateInputs(r)[index].props.onChange();r.render();await r.settle();};
 const checkoutTotal=r=>nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label==='Tổng đơn hàng')?.props.value;
 function authoritativeQuote(input,{fee=17000,token=null,code=null,subtotal=40000}={}){
- return {deliveryDate:input.delivery_date,shippingDiscountReason:fee===0?'csa_companion_delivery':null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:code?1000:0,shippingFeeVnd:fee,totalVnd:subtotal+fee-(code?1000:0),coupon:code?{id:SOURCE_ORDER,code}:null,voucherQuote:token,shippingAddressUpdatedAt:input.guest?null:'2026-11-01T00:00:00Z',lines:input.lines.map(line=>({product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}))};
+ return {deliveryDate:input.delivery_date,shippingDiscountReason:fee===0?'csa_companion_delivery':null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:code?1000:0,shippingFeeVnd:fee,totalVnd:subtotal+fee-(code?1000:0),coupon:code?{id:SOURCE_ORDER,code}:null,voucherQuote:token,shippingAddressUpdatedAt:input.guest?null:'2026-11-01T00:00:00Z',shippingAddressVersion:input.guest?undefined:ADDRESS_VERSION,lines:input.lines.map(line=>({product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}))};
 }
 test('new checkout selects days locally and only Continue quotes the chosen day',async()=>{
  const requests=[],sent=[];const r=checkout({autoSelect:false,services:{

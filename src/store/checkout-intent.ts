@@ -18,7 +18,8 @@ const exactKeys=(value:RecordValue,keys:string[])=>Object.keys(value).every(key=
 
 /** Validate the full strict Backend request contract before replaying any stored request. */
 export function isCheckoutPayload(value:unknown,guest:boolean):value is StoreCheckoutPayload{
- if(!record(value)||!exactKeys(value,["delivery_date","idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at","coupon_code","expected_voucher_quote"]))return false;
+ if(!record(value)||!exactKeys(value,["delivery_date","idempotency_key","locale","lines","guest","expected_shipping_fee_vnd","expected_total_vnd","shipping_address_updated_at","shipping_address_version","coupon_code","expected_voucher_quote"]))return false;
+ if(Object.hasOwn(value,"shipping_address_version")&&(guest||typeof value.shipping_address_version!=="string"||!/^[a-f0-9]{64}$/.test(value.shipping_address_version)))return false;
  const hasVoucher=Object.hasOwn(value,"coupon_code")||Object.hasOwn(value,"expected_voucher_quote");
  if(hasVoucher&&(guest||typeof value.coupon_code!=="string"||!/^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(value.coupon_code)||typeof value.expected_voucher_quote!=="string"||!/^[a-f0-9]{40}$/.test(value.expected_voucher_quote)))return false;
  if(!isStoreDeliveryDate(value.delivery_date))return false;

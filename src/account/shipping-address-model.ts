@@ -47,7 +47,7 @@ export function normalizeVietnamPhone(value:string):string{
   return /^[1-9]\d{8,9}$/.test(national)?`+84${national}`:"";
 }
 
-export function reviewShippingAddress(draft:ShippingAddressDraft,areas:ReadonlyArray<SupportedShippingProvince>,{nameMaxLength=SHIPPING_NAME_MAX_LENGTH}:{nameMaxLength?:number}={}):{
+export function reviewShippingAddress(draft:ShippingAddressDraft,areas:ReadonlyArray<SupportedShippingProvince>,{nameMaxLength=SHIPPING_NAME_MAX_LENGTH,requireContact=true}:{nameMaxLength?:number;requireContact?:boolean}={}):{
   complete:boolean;
   missing:ShippingAddressField[];
   value:ShippingAddressDraft|null;
@@ -61,8 +61,8 @@ export function reviewShippingAddress(draft:ShippingAddressDraft,areas:ReadonlyA
     address:draft.address.trim(),
   };
   const province=areas.find(item=>item.code===value.provinceCode);
-  if(!value.name||value.name.length>nameMaxLength)missing.push("name");
-  if(!value.phone)missing.push("phone");
+  if(requireContact&&(!value.name||value.name.length>nameMaxLength))missing.push("name");
+  if(requireContact&&!value.phone)missing.push("phone");
   if(!province)missing.push("provinceCode");
   if(!value.wardCode||!province?.wards.some(item=>item.code===value.wardCode))missing.push("wardCode");
   if(!value.address)missing.push("address");

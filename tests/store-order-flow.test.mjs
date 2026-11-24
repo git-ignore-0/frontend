@@ -39,14 +39,16 @@ test("local membership and CSA products never waive delivery fees",()=>{
 
 test("checkout payload carries exact expected values and user address version only",()=>{
   const {checkoutPayload}=load("src/store/store-quote.ts");
-  const quote={deliveryDate:"2026-11-14",coupon:null,voucherQuote:null,shippingAddressUpdatedAt:"2026-10-31T08:00:00Z",lines:[{product_id:"a",quantity:2,use_quota:false,expected_quota_quantity:0,expected_unit_price_vnd:45000,expected_available_quantity:7}],shippingFeeVnd:30000,totalVnd:120000};
+  const quote={deliveryDate:"2026-11-14",coupon:null,voucherQuote:null,shippingAddressUpdatedAt:"2026-10-31T08:00:00Z",shippingAddressVersion:"a".repeat(64),lines:[{product_id:"a",quantity:2,use_quota:false,expected_quota_quantity:0,expected_unit_price_vnd:45000,expected_available_quantity:7}],shippingFeeVnd:30000,totalVnd:120000};
   const common={quote,locale:"vi",idempotencyKey:"22222222-2222-4222-8222-222222222222"};
   const user=checkoutPayload({...common,shippingAddressUpdatedAt:"2026-10-31T08:00:00Z"});
   assert.equal(user.shipping_address_updated_at,"2026-10-31T08:00:00Z");
+  assert.equal(user.shipping_address_version,quote.shippingAddressVersion);
   assert.equal(user.guest,undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(user.lines[0])),{product_id:"a",quantity:2,use_quota:false,expected_unit_price_vnd:45000,expected_available_quantity:7,expected_quota_quantity:0});
-  const guest=checkoutPayload({...common,quote:{...quote,shippingAddressUpdatedAt:null},guest:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"22015",address:"12 Nguyen Hue"}});
+  const guest=checkoutPayload({...common,quote:{...quote,shippingAddressUpdatedAt:null,shippingAddressVersion:undefined},guest:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"22015",address:"12 Nguyen Hue"}});
   assert.equal(guest.shipping_address_updated_at,undefined);
+  assert.equal(guest.shipping_address_version,undefined);
   assert.equal(guest.guest.ward_code,"22015");
 });
 

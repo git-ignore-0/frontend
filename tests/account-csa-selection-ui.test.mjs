@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const require=createRequire(import.meta.url),ts=require('typescript'),root=resolve(new URL('..',import.meta.url).pathname);
 const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})};
-function load(file){const exports={};const source=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(source,{exports,Date,require(name){if(name==='react/jsx-runtime')return jsx;if(name.endsWith('.css'))return {default:new Proxy({},{get:(_,key)=>key})};if(name==='@/components/UI')return {Photo:'Photo',Quantity:'Quantity',Button:'Button',DataState:'DataState',Icon:'Icon'};if(name.startsWith('.')||name.startsWith('@/')){let target=name.startsWith('@/')?resolve(root,'src',name.slice(2)):resolve(dirname(file),name);if(!existsSync(target))target+=existsSync(target+'.ts')?'.ts':'.tsx';return load(target)}return require(name)}});return exports}
+function load(file){const exports={};const source=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(source,{exports,Date,URLSearchParams,require(name){if(name==='react/jsx-runtime')return jsx;if(name.endsWith('.css'))return {default:new Proxy({},{get:(_,key)=>key})};if(name==='@/components/UI')return {Photo:'Photo',Quantity:'Quantity',Button:'Button',DataState:'DataState',Icon:'Icon'};if(name.startsWith('.')||name.startsWith('@/')){let target=name.startsWith('@/')?resolve(root,'src',name.slice(2)):resolve(dirname(file),name);if(!existsSync(target))target+=existsSync(target+'.ts')?'.ts':'.tsx';return load(target)}return require(name)}});return exports}
 const nodes=t=>!t||typeof t!=='object'?[]:[t,...(typeof t.type==='function'?nodes(t.type(t.props)):[t.props?.children,t.props?.actions].flat(Infinity).flatMap(nodes))];
 const p={id:'p',name:'Cải ngọt',quotaGroupId:'g',quotaGroupName:'Rau',quotaCost:1,availableQuantity:10,unitSize:'500',unitLabel:'g',imageUrl:null};
 test('produce groups show allowance once without per-product quota warnings',()=>{
@@ -25,13 +25,15 @@ test('review shows only chosen products without repeating quota or quantity cont
 test('selection keeps schedule, quota and review visible in the shared page layout',()=>{
  const file=resolve(root,'src/screens/account-csa/CsaRoundSelectionPage.tsx');
  const bundle={round:{id:'r',name:'Round',status:'open',opensAt:'2026-11-20T00:00:00Z',closesAt:'2026-11-21T00:00:00Z',deliveryDate:'2026-11-22',serverTime:'2026-11-20T12:00:00Z'},products:[],quota:[],selection:null};
- let current=bundle,dirty=false,busy=false,error=null;
- const state=()=>({current,dirty,busy,error,draft:{p:1},draftProducts:[],access:{mode:current?.round.status==='cancelled'?'readonly':'select'},setDraft(){},load(){},submit(){}});
+ let current=bundle,dirty=false,busy=false,error=null,shippingAddress=null;
+ const accountApi=load(resolve(root,'src/account/account-api.ts'));
+ const state=()=>({current,dirty,busy,error,shippingAddress,draft:{p:1},draftProducts:[],access:{mode:current?.round.status==='cancelled'?'readonly':'select'},setDraft(){},load(){},submit(){}});
  const out={};
  vm.runInNewContext(ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText,{exports:out,require(name){
   if(name==='react')return {useState:v=>[v,()=>{}],useRef:v=>({current:v}),useEffect(){}};
   if(name==='react/jsx-runtime')return jsx;
   if(name==='./useCsaRoundSelection')return {useCsaRoundSelection:state};
+  if(name==='@/account/account-api')return accountApi;
   if(name==='@/components/auth/AuthGate')return {AuthGate:'AuthGate'};
   if(name==='@/components/overlays/OverlayPrimitives')return {ResponsiveDialog:'Dialog'};
   if(name==='@/components/UI')return {ActionLink:'Link',Button:'Button',Status:'Status',DataState:'DataState'};
@@ -55,6 +57,13 @@ test('selection keeps schedule, quota and review visible in the shared page layo
   assert.equal(save.props.disabled,scenario.disabled);
   assert.equal(JSON.stringify(screen).includes('Đã lưu'),false);
  }
+
+ shippingAddress={name:'Tài khoản',phone:''};
+ error=new accountApi.AccountApiError('store_shipping_address_required',409);
+ const missingContactWrapper=out.CsaRoundSelectionPage({roundId:'r',locale:'vi'});
+ const missingContact=missingContactWrapper.props.children.type(missingContactWrapper.props.children.props);
+ const fixContact=nodes(missingContact).find(n=>n.type==='Link'&&n.props.children==='Thêm số điện thoại');
+ assert.equal(fixContact?.props.href,'/api/auth/account?returnTo=%2Faccount%2Fcsa-rounds%2Fr%2Fvi');
 
  error={status:404};
  current={...bundle,round:{...bundle.round,name:'Đợt đã hủy',status:'cancelled',cancellationReason:'Mưa lớn'},catalogError:error};

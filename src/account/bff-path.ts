@@ -41,6 +41,9 @@ export function accountUpstreamTarget(
   if(path.length===3&&path[0]==="csa-contract-tracker"&&path[1]==="contract"&&path[2]==="pdf"&&method==="GET"){
     return {path:"/api/v1/public/csa-contract-tracker/contract/pdf",session:"none",query:"tracker-pdf",trackerCookie:true};
   }
+  if(path.length===2&&path[0]==="csa-purchase-requests"&&/^[a-z0-9-]{1,20}$/i.test(path[1])&&method==="GET"){
+    return {path:`/api/v1/csa-purchase-requests/${path[1]}`,session:"required",query:"none"};
+  }
   if (path.length !== 1) return null;
   if (path[0] === "csa-overview" && method === "GET") {
     return {path:"/api/v1/memberships/overview",session:"required",query:"localized"};

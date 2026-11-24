@@ -9,7 +9,7 @@ function load(path,globals={}){const exports={};vm.runInNewContext(ts.transpileM
 const plain=value=>JSON.parse(JSON.stringify(value));
 const coupon={id:'11111111-1111-4111-8111-111111111111',code:'STORE30',discount_type:'fixed',discount_value:'30000.00',maximum_discount_amount:null,subtotal_vnd:90000,eligible_subtotal_vnd:90000,discount_amount_vnd:30000,total_vnd:90000};
 const line={product_id:'22222222-2222-4222-8222-222222222222',quantity:2,use_quota:false,expected_unit_price_vnd:45000,expected_available_quantity:10,expected_quota_quantity:0};
-const preview=()=>({delivery_date:'2026-11-14',shipping_discount_reason:null,subtotal_vnd:'90000',eligible_subtotal_vnd:'90000',discount_amount_vnd:'30000',shipping_fee_vnd:'30000',total_vnd:'90000',coupon:{...coupon},voucher_quote:'a'.repeat(40),shipping_address_updated_at:'2026-11-03T00:00:00Z',lines:[{...line}]});
+const preview=()=>({delivery_date:'2026-11-14',shipping_discount_reason:null,subtotal_vnd:'90000',eligible_subtotal_vnd:'90000',discount_amount_vnd:'30000',shipping_fee_vnd:'30000',total_vnd:'90000',coupon:{...coupon},voucher_quote:'a'.repeat(40),shipping_address_updated_at:'2026-11-03T00:00:00Z',shipping_address_version:'b'.repeat(64),lines:[{...line}]});
 const order=()=>({id:'order',workflow_version:1,refund_status:null,transfer_reported_by:null,approved_by:null,payment_received_at:null,payment_received_by:null,refund_requested_at:null,refund_requested_by:null,refund_request_closed_at:null,refund_request_closed_by:null,refund_request_closed_reason:null,refunded_at:null,refunded_by:null,refund_amount_vnd:null,refund_note:"",cancelled_by:null,delivered_by:null,reference_code:'S1',status:'pending_review',payment_status:'not_required',locale:'vi',lines:[],shipping_address:{recipient_name:'A',phone_number:'1',province_code:'66',ward_code:'1',address:'Street'},subtotal_vnd:'90000',shipping_fee_vnd:'30000',shipping_discount_reason:null,total_vnd:'90000',payment:null,expires_at:null,server_time:'2026-11-01T01:00:00Z',transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:'',created_at:'2026-11-01T01:00:00Z',updated_at:'2026-11-01T01:00:00Z'});
 test('voucher preview posts through existing same-origin API and parses BE snapshot and expected lines',async()=>{
  let request;const service=load('src/store/store-order-service.ts',{fetch:async(path,init)=>{request={path,init};return new Response(JSON.stringify({data:preview()}));}});
@@ -17,6 +17,7 @@ test('voucher preview posts through existing same-origin API and parses BE snaps
  const result=await service.getStoreQuote(input);
  assert.equal(request.path,'/api/store-orders/quote');assert.equal(request.init.method,'POST');assert.equal(request.init.credentials,'same-origin');assert.equal(request.init.headers['X-NFV-Public-Request'],'1');assert.deepEqual(JSON.parse(request.init.body),input);
  assert.equal(result.discountAmountVnd,30000);assert.equal(result.totalVnd,90000);assert.equal(result.coupon.code,'STORE30');assert.equal(result.coupon.discountValue,'30000.00');assert.equal(result.shippingAddressUpdatedAt,'2026-11-03T00:00:00Z');assert.deepEqual(plain(result.lines),[line]);
+ assert.equal(result.shippingAddressVersion,'b'.repeat(64));
 });
 test('preview rejects malformed money, snapshots, quote, and line expected fields as contract errors',async()=>{
  const malformed=[null,[],{...preview(),discount_amount_vnd:'1.5'},{...preview(),total_vnd:'9007199254740992'},{...preview(),voucher_quote:''},{...preview(),coupon:null},{...preview(),coupon:{...coupon,discount_type:'other'}},{...preview(),coupon:{...coupon,discount_value:30000}},{...preview(),coupon:{...coupon,discount_amount_vnd:'30000'}},{...preview(),lines:[]},{...preview(),lines:[{...line,use_quota:'false'}]},{...preview(),lines:[{...line,expected_unit_price_vnd:'45000'}]},{...preview(),lines:[{...line,quantity:0}]},{...preview(),lines:[{...line,expected_quota_quantity:3}]}];
@@ -42,6 +43,7 @@ test('preview rejects invalid HMAC, address timestamps, UUIDs, duplicate lines a
  const malformed=[
   ...['opaque','A'.repeat(40),'a'.repeat(39)].map(voucher_quote=>({...preview(),voucher_quote})),
   ...[null,'today','2026-99-03T00:00:00Z'].map(shipping_address_updated_at=>({...preview(),shipping_address_updated_at})),
+  ...['opaque','B'.repeat(64),'b'.repeat(63)].map(shipping_address_version=>({...preview(),shipping_address_version})),
   {...preview(),coupon:{...coupon,id:'invalid'}},
   ...['x'.repeat(65),'store30','BAD SPACE'].map(code=>({...preview(),coupon:{...coupon,code}})),
   {...preview(),lines:[{...line,product_id:'invalid'}]},

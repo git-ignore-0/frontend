@@ -3,10 +3,13 @@
 import {ActionLink, Button, DataState, Status} from '@/components/UI';
 import {StorePageHeading, StoreSection} from '@/components/store/StorePrimitives';
 import {AuthGate} from '@/components/auth/AuthGate';
+import {siteAccountHref} from '@/auth/site-auth';
+import {csaRoundHref} from '@/lib/csa-navigation';
 import {formatDate,formatDateTime} from '@/lib/date-format';
 import {CSA_SELECTION_MAX_LINES,pointHundredths} from '@/account/csa-rounds-model';
 import {AccountApiError} from '@/account/account-api';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
+import {copyText} from '@/data/account-copy';
 import type {Locale} from '@/types';
 import {useCsaRoundSelection} from './useCsaRoundSelection';
 import {CsaRoundProductList} from './CsaRoundProductList';
@@ -47,6 +50,8 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   }) || Object.entries(used).some(([group, amount]) => amount > (availablePoints.get(group) ?? 0));
   const code = error instanceof AccountApiError ? error.code : '';
   const addressError = code.includes('address') || code.includes('shipping');
+  const address = code === 'store_shipping_address_required' ? state.shippingAddress : null;
+  const missingContact = address ? (!address.phone.trim() ? 'phone' : !address.name.trim() ? 'name' : null) : null;
   const label = delivered ? 'delivered' : cancelled ? 'cancelled' : selection?.state
     ?? (Date.parse(round.serverTime) < Date.parse(round.opensAt) ? 'scheduled' : 'unselected');
   const reselect = access.mode === 'reselect';
@@ -72,8 +77,10 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
     {!readonly && lines.length >= CSA_SELECTION_MAX_LINES && <p role="status">{copy.lineLimit.replace("{max}", String(CSA_SELECTION_MAX_LINES))}</p>}
     {reselect && <p className={styles.reselectionNotice}>{copy.reselectHint}</p>}
     {Boolean(displayError) && <div className={styles.feedbackError} role="alert">
-      <p>{csaRoundError(displayError, locale)}</p>
-      {addressError && <ActionLink variant="plain" href={`/account/${locale}?tab=address`}>{c.address}</ActionLink>}
+      <p>{missingContact ? copyText(locale, missingContact === 'phone' ? 'profile.phoneMissing' : 'profile.nameMissing') : csaRoundError(displayError, locale)}</p>
+      {missingContact ? <ActionLink variant="plain" href={siteAccountHref(locale, csaRoundHref(roundId, locale))}>
+        {copyText(locale, missingContact === 'phone' ? 'profile.addPhone' : 'profile.addName')}
+      </ActionLink> : addressError && <ActionLink variant="plain" href={`/account/${locale}?tab=address`}>{c.address}</ActionLink>}
     </div>}
     {needsReload && <div className={styles.feedbackError} role="status">
       <p>{c.refreshNeeded}</p>

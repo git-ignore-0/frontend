@@ -12,7 +12,7 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
  const session=authenticated?{subject:"test-user"}:null;
  // Render the settled checkout, after quote, shipping and pending-intent ownership hydrate.
  const seeds=[[],{name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"},{active,products:[{productId:"g",availableUnits:2}]},30000,true,pending==="quote"];
- const data={authenticated,storeProducts:{p:{...product,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01"}:null};
+ const data={authenticated,storeProducts:{p:{...product,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01",shippingAddressVersion:"a".repeat(64)}:null};
  const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:pending==="product"?"loading":"ready"},cartProductNotice:{},accountFetchState:{address:pending==="address"?"loading":failed?"error":"ready"}};
  const cache=new Map();
  function load(path){

@@ -13,10 +13,11 @@ const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
 const defaultCsaVoucher={ready:true,loading:false,code:"",change:()=>{},clear:()=>{},apply:async()=>{}};
-const shippingAddress={name:"Recipient",phone:"+84901234567",provinceCode:"66",wardCode:"22015",detail:"12 Láng",city:"Hà Nội",ward:"Phường Láng",isSupported:true,updatedAt:"2026-11-21T01:23:45.123456+00:00"};
-const memberQuote={quoteToken:"A",expiresAt:"2099-01-01",shippingAddressUpdatedAt:shippingAddress.updatedAt};
+const shippingAddress={name:"Recipient",phone:"+84901234567",provinceCode:"66",wardCode:"22015",detail:"12 Láng",city:"Hà Nội",ward:"Phường Láng",isSupported:true,updatedAt:"2026-11-21T01:23:45.123456+00:00",shippingAddressVersion:"a".repeat(64)};
+const memberQuote={quoteToken:"A",expiresAt:"2099-01-01",shippingAddressUpdatedAt:shippingAddress.updatedAt,shippingAddressVersion:shippingAddress.shippingAddressVersion};
 const shippingAddressModel=module("src/account/shipping-address-model.ts");
 const csaAccountReview=module("src/screens/account-csa/csa-account-review.ts",()=>shippingAddressModel);
+const csaNavigation=module("src/lib/csa-navigation.ts",undefined,{URLSearchParams});
 const pendingStorage=module("src/screens/account-csa/csa-pending-storage.ts",()=>shippingAddressModel);
 
 function csaRuntime(voucher=defaultCsaVoucher,localValues=new Map()){
@@ -42,6 +43,7 @@ function csaRuntime(voucher=defaultCsaVoucher,localValues=new Map()){
   if(name==="@/state/NFVContext")return {useNFV:()=>context};
   if(name==="@/components/UI")return {DataState:"DataState"};
   if(name==="@/lib/voucher-copy")return {VOUCHER_COPY:{vi:{changed:"changed"}},couponErrorMessage:code=>code};
+  if(name==="@/lib/csa-navigation")return csaNavigation;
   if(name==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(name==="@/screens/csa/useCsaPackages")return {useCsaPackages:()=>({status:"ready",page:{data:[{id:"p"}]}})};
   if(name==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false})};
@@ -174,14 +176,14 @@ test("CSA hides the transfer until the verified owner's address matches the quot
  r.context.data.shippingAddress={...shippingAddress};
  assert.equal(r.render().props.quote.quoteToken,"A");
 
- r.context.data.shippingAddress={...shippingAddress,phone:"+84933333333",updatedAt:"2026-11-21T01:23:45.123457+00:00"};
+ r.context.data.shippingAddress={...shippingAddress,phone:"+84933333333",updatedAt:"2026-11-21T01:23:45.123457+00:00",shippingAddressVersion:"b".repeat(64)};
  assert.equal(r.render().props.quote,undefined);
  assert.equal(r.tree.props.onConfirm,undefined);
  nodes(r.tree).find(node=>typeof node.props?.action?.onClick==="function").props.action.onClick();
  assert.equal(r.render().props.address.phone,"+84933333333");
  assert.equal(r.quoteInputs.length,1);
  r.tree.props.onContinue();r.render().props.onCreatePayment();
- r.nextQuoteRequest.resolve({...memberQuote,quoteToken:"new-quote",shippingAddressUpdatedAt:r.context.data.shippingAddress.updatedAt});await tick();
+ r.nextQuoteRequest.resolve({...memberQuote,quoteToken:"new-quote",shippingAddressUpdatedAt:r.context.data.shippingAddress.updatedAt,shippingAddressVersion:r.context.data.shippingAddress.shippingAddressVersion});await tick();
  assert.equal(r.quoteInputs.length,2);
  assert.equal(r.render().props.quote.quoteToken,"new-quote");
  r.dispose();
@@ -190,7 +192,7 @@ test("CSA hides the transfer until the verified owner's address matches the quot
 test("CSA never shows transfer details for a quote without a verified address binding",async()=>{
  const r=csaRuntime();
  await r.toTerms();r.tree.props.onCreatePayment();
- r.quoteRequest.resolve({quoteToken:"unbound",expiresAt:"2099-01-01"});await tick();
+ r.quoteRequest.resolve({...memberQuote,shippingAddressVersion:undefined});await tick();
  assert.equal(r.render().props.quote,undefined);
  assert.equal(r.tree.props.onConfirm,undefined);
  r.dispose();
@@ -269,17 +271,18 @@ test("stored checkout validation rejects incomplete or malformed strict contract
  assert.equal(checkoutDefinitelyRejected({status:422}),false);
 });
 
-test("Account recipient controls keep 200 characters while guest controls use 150",()=>{
+test("guest recipient fields require a phone and limit the name to 150 characters",()=>{
  const model=module("src/account/shipping-address-model.ts");
  const fields=module("src/components/account/ShippingAddressFields.tsx",name=>name==="react/jsx-runtime"?jsx:name==="@/account/shipping-address-model"?model:{FormField:"FormField",FormInput:"FormInput",FormSelect:"FormSelect"});
  const shared=module("src/components/account/GuestBuyerFields.tsx",name=>name==="react/jsx-runtime"?jsx:name==="@/account/shipping-address-model"?model:name==="@/components/account/ShippingAddressFields"?fields:{copyText:(_locale,key)=>key});
- const props={locale:"vi",value:{name:"a".repeat(180),phone:"0901234567",provinceCode:"66",wardCode:"1",address:"Số 12"},areas:[{code:"66",name:"Tỉnh",wards:[{code:"1",name:"Phường",shippingFeeVnd:"0"}]}],loading:false,error:false,copy:{},onChange(){},onRetry(){}};
- const account=fields.ShippingAddressFields(props);
- assert.equal(nodes(account).find(n=>n.type==="FormInput"&&n.props.name==="name").props.maxLength,200);
- assert.equal(model.reviewShippingAddress(props.value,props.areas).complete,true);
+ const props={locale:"vi",value:{name:"a".repeat(180),phone:"0901234567",provinceCode:"66",wardCode:"1",address:"Số 12"},areas:[{code:"66",name:"Tỉnh",wards:[{code:"1",name:"Phường",shippingFeeVnd:"0"}]}],loading:false,error:false,onChange(){},onRetry(){}};
  const guest=shared.GuestBuyerFields({...props,submitted:true});
  const nested=nodes(guest).find(n=>n.type===fields.ShippingAddressFields);
- assert.equal(nested.props.nameMaxLength,150);assert.ok(nested.props.missing.includes("name"));
+ const inputs=nodes(fields.ShippingAddressFields(nested.props));
+ const name=inputs.find(n=>n.type==="FormInput"&&n.props.name==="name");
+ assert.equal(name.props.maxLength,150);
+ assert.equal(name.props["aria-invalid"],true);
+ assert.equal(inputs.find(n=>n.type==="FormInput"&&n.props.name==="phone").props.required,true);
 });
 
 

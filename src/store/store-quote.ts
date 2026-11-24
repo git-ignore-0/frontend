@@ -30,10 +30,11 @@ export function buildStoreQuote(input:{products:StoreProductCard[];quantities:Re
 type GuestAddress={recipient_name:string;phone_number:string;province_code:string;ward_code:string;address:string};
 export function checkoutPayload(input:{quote:StoreCheckoutQuote;locale:StoreLocale;idempotencyKey:string;guest?:GuestAddress}){
  const q=input.quote;
- if(input.guest&&(q.coupon||q.shippingAddressUpdatedAt)||!input.guest&&!q.shippingAddressUpdatedAt)throw Error("invalid_checkout_intent");
+ if(input.guest?(q.coupon||q.shippingAddressUpdatedAt||q.shippingAddressVersion):(!q.shippingAddressUpdatedAt||!q.shippingAddressVersion))throw Error("invalid_checkout_intent");
  return {idempotency_key:input.idempotencyKey,locale:input.locale,delivery_date:q.deliveryDate,
   lines:q.lines.map(line=>({...line})),expected_shipping_fee_vnd:q.shippingFeeVnd,expected_total_vnd:q.totalVnd,
   ...(q.shippingAddressUpdatedAt?{shipping_address_updated_at:q.shippingAddressUpdatedAt}:{}),...(input.guest?{guest:input.guest}:{}),
+  ...(q.shippingAddressVersion?{shipping_address_version:q.shippingAddressVersion}:{}),
   ...(q.coupon&&q.voucherQuote?{coupon_code:q.coupon.code,expected_voucher_quote:q.voucherQuote}:{})};
 }
 

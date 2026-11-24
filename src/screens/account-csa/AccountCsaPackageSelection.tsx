@@ -5,13 +5,14 @@ import {ActionLink,Button,DataState,Icon,MoneyLine,Section} from "@/components/U
 import {DiscountCodeField} from "@/components/DiscountCodeField";
 import {useCsaVoucher} from "./useCsaVoucher";
 import {VOUCHER_COPY,couponErrorMessage} from "@/lib/voucher-copy";
-import {siteAuthHref} from "@/auth/site-auth";
+import {siteAccountHref,siteAuthHref} from "@/auth/site-auth";
+import {csaPurchaseHref} from "@/lib/csa-navigation";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {copyText} from "@/data/account-copy";
 import {formatDate,formatDateTime} from "@/lib/date-format";
 import {useAuth} from "@/auth/AuthProvider";
 import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote,CsaVoucherPreview} from "@/account/csa-service";
-import {AccountApiError,confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus} from "@/account/csa-service";
+import {AccountApiError,confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus,getOwnedCsaPurchaseStatus} from "@/account/csa-service";
 import {useSupportedShippingAreas} from "@/hooks/useSupportedShippingAreas";
 import {BankTransferPanel} from "@/components/BankTransferPanel";
 import {csaMoney,csaQuantity,type CsaPackage} from "@/screens/csa/csa-packages-model";
@@ -126,7 +127,7 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   const pendingSnapshot=useCallback(()=>pendingStorageSnapshot(subject),[subject]);
   const persistedRaw=useSyncExternalStore(subscribe,pendingSnapshot,()=>null);
   useEffect(()=>{if(guestMode)try{clearGuestCsaPending(window);}catch{/* Browser storage may be unavailable. */}},[guestMode]);
-  const pendingOwner={subject,email:data.profile.email,phone:addressState==="ready"?address?.phone??"":""};
+  const pendingOwner={subject,email:data.profile.email};
   const persistedReference=feedback?null:resolveCsaPendingMemberReference(persistedRaw,pendingOwner);
   const persistedRequestCode=persistedReference?.requestCode??"";
   const persistedPhone=persistedReference?.phone??"";
@@ -134,10 +135,13 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   useEffect(()=>{
     if(!persistedRequestCode||!statusKey)return;
     let active=true;
-    void getCsaPurchaseStatus({requestCode:persistedRequestCode,phone:persistedPhone}).then(value=>{
+    const statusRequest=persistedPhone
+      ?getCsaPurchaseStatus({requestCode:persistedRequestCode,phone:persistedPhone})
+      :getOwnedCsaPurchaseStatus(persistedRequestCode);
+    void statusRequest.then(value=>{
       if(!active)return;
       setSyncedRequest({key:statusKey,value,error:false});
-      if(value.status==="approved"&&!guestMode)void refreshResource("csa");
+      if(value?.status==="approved"&&!guestMode)void refreshResource("csa");
     }).catch(()=>{if(active)setSyncedRequest({key:statusKey,value:null,error:true});});
     return ()=>{active=false;};
   },[guestMode,persistedPhone,persistedRequestCode,refreshResource,statusAttempt,statusKey]);
@@ -147,7 +151,8 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   const clearStoredRequest=(requestCode:string)=>{
     try{
       const storage=csaPendingStorage(!guestMode,window);
-      if(storage)discardCsaPending(storage,pendingOwner,requestCode);
+      const ownedLegacySnapshot=!persistedPhone&&syncedRequest?.key===statusKey&&syncedRequest.value?.requestCode===requestCode?persistedRaw:null;
+      if(storage)discardCsaPending(storage,pendingOwner,requestCode,ownedLegacySnapshot);
     }catch{/* The in-memory dismissal still restores package selection. */}
   };
   const discardPersistedRequest=()=>{
@@ -165,7 +170,7 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   if(!packages?.length)return <Section title={L("csa.selectionTitle")} className="benefit-section csa-account-package-selection"><DataState title={L("csa.noPackagesAvailable")} description={L("csa.noPackagesAvailableDesc")} icon="leaf"/></Section>;
 
   const back=()=>{setError("");setStep(step==="account"?"choose":step==="terms"?"account":"terms");};
-  if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} areas={shipping.areas} loading={shipping.loading} error={shipping.error} onRetry={shipping.retry} onChange={value=>{setQuote(null);setGuest(value);}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(!shipping.loading&&!shipping.error&&guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={address} addressLoading={ui.accountFetchState.address==="loading"} addressError={ui.accountFetchState.address==="error"} onRetryAddress={()=>void refreshResource("address")} onBack={back} onContinue={()=>setStep("terms")}/>;
+  if(step==="account")return guestMode?<AccountCsaGuestStep locale={ui.locale} buyer={guest} submitted={guestSubmitted} areas={shipping.areas} loading={shipping.loading} error={shipping.error} onRetry={shipping.retry} onChange={value=>{setQuote(null);setGuest(value);}} onBack={back} onContinue={()=>{setGuestSubmitted(true);if(!shipping.loading&&!shipping.error&&guestReview.complete)setStep("terms");}}/>:<AccountCsaAccountStep locale={ui.locale} profile={data.profile} address={address} returnTo={csaPurchaseHref(ui.locale,current?.packageId,initialPackagePage)} addressLoading={ui.accountFetchState.address==="loading"} addressError={ui.accountFetchState.address==="error"} onRetryAddress={()=>void refreshResource("address")} onBack={back} onContinue={()=>setStep("terms")}/>;
   if(step==="terms"){
     const document=terms.document;
     const updateAcceptance=(update:(keys:string[])=>string[],submitted=termsSubmitted)=>{if(!document)return;setTermsAcceptance({documentKey:csaTermsAcceptanceKey(document),keys:update(acceptedTerms),submitted});};
@@ -205,9 +210,13 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   if(step==="payment"&&quote&&current){
     if(!guestMode){
       if(addressState==="loading")return <DataState kind="loading" title={L("state.loadingTitle")}/>;
-      const addressMatches=addressState==="ready"&&csaAccountReview(address).complete&&!!address?.updatedAt&&address.updatedAt===quote.shippingAddressUpdatedAt;
+      const addressMatches=addressState==="ready"&&csaAccountReview(address).complete&&
+        !!address?.shippingAddressVersion&&address.shippingAddressVersion===quote.shippingAddressVersion&&
+        !!address.updatedAt&&address.updatedAt===quote.shippingAddressUpdatedAt;
       if(!addressMatches||error==="csa_payment_quote_identity_mismatch")return <Section title={L("csa.paymentTitle")} className="benefit-section csa-purchase-step">
-        <DataState kind="error" title={L("csa.quoteAddressChanged")} action={busy?undefined:{label:L("csa.reviewDeliveryAddress"),onClick:()=>{setQuote(null);setError("");setStep("account");}}}/>
+        <DataState kind="error" title={L("csa.quoteAddressChanged")} action={busy?undefined:{label:L("csa.reviewDeliveryAddress"),onClick:()=>{
+          setQuote(null);setError("");setStep("account");void refreshResource("address");
+        }}}/>
       </Section>;
     }
     const confirm=async()=>{
@@ -252,8 +261,9 @@ export function CsaPurchaseSession({initialPackageId,initialPackagePage=1,tracke
   /></>;
 }
 
-export function AccountCsaAccountStep({locale,profile,address,addressLoading=false,addressError=false,onRetryAddress,onBack,onContinue}:{locale:Locale;profile:Pick<Profile,"email">;address?:Address;addressLoading?:boolean;addressError?:boolean;onRetryAddress?:()=>void;onBack:()=>void;onContinue:()=>void}){
+export function AccountCsaAccountStep({locale,profile,address,returnTo=csaPurchaseHref(locale),addressLoading=false,addressError=false,onRetryAddress,onBack,onContinue}:{locale:Locale;profile:Pick<Profile,"email">;address?:Address;returnTo?:string;addressLoading?:boolean;addressError?:boolean;onRetryAddress?:()=>void;onBack:()=>void;onContinue:()=>void}){
   const L=(key:string)=>copyText(locale,key),review=csaAccountReview(address);
+  const missingContact=address?(!address.phone.trim()?"phone":!address.name.trim()?"name":null):null;
   return <div className="benefits-page csa-account-package-selection">
     <Steps locale={locale} current="account"/>
     <Section title={L("csa.accountTitle")} className="benefit-section csa-purchase-step">
@@ -264,10 +274,10 @@ export function AccountCsaAccountStep({locale,profile,address,addressLoading=fal
         <div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{address?.phone||L("common.na")}</strong></div>
         <div className="csa-profile-row"><span>{L("profile.email")}</span><strong>{profile.email||L("profile.noEmail")}</strong></div>
         <div className="csa-profile-row"><span>{L("csa.deliveryAddress")}</span><strong>{review.addressLabel||L("common.na")}</strong></div>
-        {!review.complete&&<p className="help-error" role="alert">{L("csa.accountIncomplete")}</p>}
+        {!review.complete&&<p className="help-error" role="alert">{L(missingContact==="phone"?"profile.phoneMissing":missingContact==="name"?"profile.nameMissing":"csa.accountIncomplete")}</p>}
         <div className="csa-purchase-actions">
           <Button variant="outline" onClick={onBack}><Icon name="back" size={16}/>{L("csa.back")}</Button>
-          {review.complete?<Button onClick={onContinue}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button>:<ActionLink href={`/account/${locale}?tab=address`}>{L("csa.editAccount")}</ActionLink>}
+          {review.complete?<Button onClick={onContinue}>{L("csa.continue")}<Icon name="arrow" size={16}/></Button>:missingContact?<ActionLink href={siteAccountHref(locale,returnTo)}>{L(missingContact==="phone"?"profile.addPhone":"profile.addName")}</ActionLink>:<ActionLink href={`/account/${locale}?tab=address`}>{L("csa.editAccount")}</ActionLink>}
         </div>
       </>}
     </Section>

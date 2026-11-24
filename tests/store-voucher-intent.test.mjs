@@ -11,8 +11,9 @@ const intent=load("src/store/checkout-intent.ts");
 const plain=value=>JSON.parse(JSON.stringify(value));
 const productId="11111111-1111-1111-1111-111111111111",idempotencyKey="22222222-2222-2222-2222-222222222222";
 const address="2026-11-03T08:00:00Z";
+const addressVersion="a".repeat(64);
 const line={product_id:productId,quantity:2,use_quota:true,expected_unit_price_vnd:40000,expected_available_quantity:8,expected_quota_quantity:1};
-const preview=()=>({deliveryDate:"2026-11-14",shippingDiscountReason:"csa_companion_delivery",subtotalVnd:40000,eligibleSubtotalVnd:40000,discountAmountVnd:10000,shippingFeeVnd:0,totalVnd:30000,voucherQuote:"a".repeat(40),shippingAddressUpdatedAt:address,coupon:{id:productId,code:"SAVE_10"},lines:[{...line}]});
+const preview=()=>({deliveryDate:"2026-11-14",shippingDiscountReason:"csa_companion_delivery",subtotalVnd:40000,eligibleSubtotalVnd:40000,discountAmountVnd:10000,shippingFeeVnd:0,totalVnd:30000,voucherQuote:"a".repeat(40),shippingAddressUpdatedAt:address,shippingAddressVersion:addressVersion,coupon:{id:productId,code:"SAVE_10"},lines:[{...line}]});
 const live=()=>({deliveryDate:"2026-11-14",shippingAddressUpdatedAt:address,coupon:null,voucherQuote:null,lines:[{product_id:productId,quantity:3,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:20,expected_quota_quantity:0}],shippingFeeVnd:15000,totalVnd:165000});
 const legacy=()=>({delivery_date:"2026-11-14",idempotency_key:idempotencyKey,locale:"vi",lines:[{product_id:productId,quantity:3,use_quota:false,expected_unit_price_vnd:50000,expected_available_quantity:20,expected_quota_quantity:0}],expected_shipping_fee_vnd:15000,expected_total_vnd:165000,shipping_address_updated_at:address});
 const guest={recipient_name:"An",phone_number:"+84901234567",province_code:"66",ward_code:"22015",address:"12 Nguyen Hue"};
@@ -20,16 +21,27 @@ function storage(){const data=new Map();return {getItem:key=>data.get(key)??null
 
 test("voucher payload uses one backend snapshot even when live quote and address differ",()=>{
  const result=checkoutPayload({quote:preview(),locale:"en",idempotencyKey,shippingAddressUpdatedAt:"2026-11-04T09:00:00Z"});
- assert.deepEqual(plain(result),{delivery_date:"2026-11-14",idempotency_key:idempotencyKey,locale:"en",lines:[line],expected_shipping_fee_vnd:0,expected_total_vnd:30000,shipping_address_updated_at:address,coupon_code:"SAVE_10",expected_voucher_quote:"a".repeat(40)});
+ assert.deepEqual(plain(result),{delivery_date:"2026-11-14",idempotency_key:idempotencyKey,locale:"en",lines:[line],expected_shipping_fee_vnd:0,expected_total_vnd:30000,shipping_address_updated_at:address,shipping_address_version:addressVersion,coupon_code:"SAVE_10",expected_voucher_quote:"a".repeat(40)});
  assert.throws(()=>checkoutPayload({quote:preview(),locale:"vi",idempotencyKey,guest}),/invalid_checkout/);
 });
 
 test("legacy payloads and guest checkout retain their original shape",()=>{
- const result=checkoutPayload({quote:live(),locale:"vi",idempotencyKey,shippingAddressUpdatedAt:address});
- assert.deepEqual(plain(result),legacy());assert.equal(intent.isCheckoutPayload(result,false),true);
+ const result=legacy();
+ assert.equal(intent.isCheckoutPayload(result,false),true);
+ assert.throws(()=>checkoutPayload({quote:live(),locale:"vi",idempotencyKey}),/invalid_checkout/);
  const guestResult=checkoutPayload({quote:{...live(),shippingAddressUpdatedAt:null},locale:"vi",idempotencyKey,guest});
  assert.equal(intent.isCheckoutPayload(guestResult,true),true);assert.equal("coupon_code" in guestResult,false);
  const store=storage();intent.saveCheckoutIntent(store,{owner:"A",payload:result});assert.deepEqual(plain(intent.readCheckoutIntent(store,"A").payload),legacy());
+});
+
+test("a saved address version is retained when replaying the exact member request",()=>{
+ const version="a".repeat(64);
+ const payload=checkoutPayload({quote:{...live(),shippingAddressVersion:version},locale:"vi",idempotencyKey});
+ assert.equal(payload.shipping_address_version,version);
+ const store=storage();intent.saveCheckoutIntent(store,{owner:"A",payload});
+ assert.deepEqual(plain(intent.readCheckoutIntent(store,"A").payload),{...legacy(),shipping_address_version:version});
+ const guestPayload=checkoutPayload({quote:{...live(),shippingAddressUpdatedAt:null},locale:"vi",idempotencyKey,guest});
+ assert.equal(intent.isCheckoutPayload({...guestPayload,shipping_address_version:version},true),false);
 });
 
 test("persisted voucher retry preserves payload and key across locale, voucher and live data changes",()=>{
@@ -38,7 +50,7 @@ test("persisted voucher retry preserves payload and key across locale, voucher a
  intent.saveCheckoutIntent(store,{owner:"A",payload});
  voucher.coupon.code="NEW";voucher.lines[0].quantity=5;voucher.totalVnd=0;
  const retry=intent.readCheckoutIntent(store,"A");
- assert.deepEqual(plain(retry.payload),{delivery_date:"2026-11-14",idempotency_key:idempotencyKey,locale:"vi",lines:[line],expected_shipping_fee_vnd:0,expected_total_vnd:30000,shipping_address_updated_at:address,coupon_code:"SAVE_10",expected_voucher_quote:"a".repeat(40)});
+ assert.deepEqual(plain(retry.payload),{delivery_date:"2026-11-14",idempotency_key:idempotencyKey,locale:"vi",lines:[line],expected_shipping_fee_vnd:0,expected_total_vnd:30000,shipping_address_updated_at:address,shipping_address_version:addressVersion,coupon_code:"SAVE_10",expected_voucher_quote:"a".repeat(40)});
  assert.equal(intent.pendingCheckoutOwner(store,"B"),"A");
  assert.throws(()=>intent.saveCheckoutIntent(store,{owner:"A",payload:checkoutPayload({quote:voucher,locale:"en",idempotencyKey})}),/conflicting_checkout_intents/);
 });

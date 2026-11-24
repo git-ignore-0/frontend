@@ -29,7 +29,7 @@ function load(path){
   if(name==='@/hooks/useSupportedShippingAreas')return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false})};
   if(name==='@/components/account/ShippingAddressFields')return {ShippingAddressFields:props=>{
    onAddressFields?.(props);
-   return React.createElement('input',{name:'recipient',defaultValue:props.value.name});
+   return React.createElement('input',{name:'address',defaultValue:props.value.address});
   }};
   if(name==='@/components/UI')return {Icon:()=>null,Button:({children,onClick,disabled})=>{
    if((Array.isArray(children)?children:[]).includes('Chỉnh sửa'))onAddressEdit?.(onClick);
@@ -263,7 +263,7 @@ test('saved delivery details use the recipient in ShippingAddress independently 
  const shippingAddress={name:'Delivery Recipient',phone:'+84987654321',detail:'Delivery address details'};
  const html=renderAccount(auth,'user-B',{tab:'address',email:null,shippingAddress});
  assert.ok(html.includes('Delivery Recipient +84987654321 Delivery address details'));
- const addressCard=html.match(/<section><h2>Địa chỉ giao hàng<\/h2>[\s\S]*?<\/section>/)?.[0];
+ const addressCard=html.match(/<section><h2>Địa chỉ<\/h2>[\s\S]*?<\/section>/)?.[0];
  assert.ok(addressCard);
  assert.doesNotMatch(addressCard,/\+84901234567/);
 });
@@ -280,19 +280,19 @@ test('same-owner confirmation restores an address draft but never shows it while
  render('A','Saved A');
  edit();
  render('A','Saved A');
- fields.onChange({...fields.value,name:'Unsaved A'});
+ fields.onChange({...fields.value,address:'Unsaved A'});
  Object.assign(auth,{status:'checking',session:null});
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="recipient"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
  auth.status='error';
- assert.doesNotMatch(render('error','Saved A'),/Unsaved A|Saved A|name="recipient"/);
+ assert.doesNotMatch(render('error','Saved A'),/Unsaved A|Saved A|name="address"/);
  Object.assign(auth,{status:'authenticated',session:{subject:'A'}});
  accountUI.accountFetchState.address='loading';
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="recipient"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
  accountUI.accountFetchState.address='ready';
  assert.match(render('A','Saved A'),/value="Unsaved A"/);
  Object.assign(auth,{session:{subject:'B'},lastConfirmedSubject:'B'});
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="recipient"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
  assert.match(render('B','Saved B'),/Saved B/);
  Object.assign(auth,{session:{subject:'A'},lastConfirmedSubject:'A'});
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|name="recipient"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|name="address"/);
 });

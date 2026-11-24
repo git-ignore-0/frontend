@@ -112,6 +112,7 @@ export async function getCSA(locale:Locale):Promise<CSAOverview>{
 export type CsaQuote={
   quoteToken:string;expiresAt:string;requestCode:string;
   shippingAddressUpdatedAt?:string;
+  shippingAddressVersion?:string;
   coupon?:{code:string;discountAmount:string;contractTotalBeforeDiscount:string;paymentPlanTotalBeforeDiscount:string;initialPaymentBeforeDiscount:string;customerPayableTotal:string};
   payment:{amount:string;bankCode:string;bankName:string;accountNumber:string;accountName:string;transferContent:string};
   summary:{paymentType:PaymentType;totalAmount:string;initialPaymentAmount:string;installmentCount:number;installments:{sequence:number;amount:string;cycleCount:number}[]};
@@ -149,7 +150,9 @@ function quoteFrom(value:unknown):CsaQuote{
  const data=record(value),payment=record(data.payment),terms=record(data.terms),qr=record(data.qr_payload),result=paymentSummaryFrom(data);
  if(result.coupon&&(wholeVnd(decimal(payment.amount))!==wholeVnd(result.summary.initialPaymentAmount)||wholeVnd(decimal(qr.amount))!==wholeVnd(result.summary.initialPaymentAmount)))throw new AccountApiError("invalid_response",502);
  const shippingAddressUpdatedAt=optionalString(data.shipping_address_updated_at);
- return {...result,quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),...(shippingAddressUpdatedAt?{shippingAddressUpdatedAt}:{}),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
+ const shippingAddressVersion=data.shipping_address_version;
+ if(shippingAddressVersion!==undefined&&(typeof shippingAddressVersion!=="string"||!/^[a-f0-9]{64}$/.test(shippingAddressVersion)||!shippingAddressUpdatedAt))throw new AccountApiError("invalid_response",502);
+ return {...result,quoteToken:string(data.quote_token),expiresAt:string(data.expires_at),requestCode:string(data.request_code),...(shippingAddressUpdatedAt?{shippingAddressUpdatedAt}:{}),...(shippingAddressVersion?{shippingAddressVersion}:{}),payment:{amount:decimal(payment.amount),bankCode:string(payment.bank_code),bankName:string(payment.bank_name),accountNumber:string(payment.account_number),accountName:string(payment.account_name),transferContent:string(payment.transfer_content)},terms:{version:string(terms.version),locale:string(terms.locale),hash:string(terms.hash)},qr:{acqId:string(qr.acqId),accountNo:string(qr.accountNo),accountName:string(qr.accountName),amount:decimal(qr.amount),addInfo:string(qr.addInfo),format:string(qr.format),template:string(qr.template)}};
 }
 
 export async function previewCsaVoucher(input:{packageId:string;priceOptionId:string;paymentPlanId:string|null;couponCode:string}):Promise<CsaVoucherPreview>{
@@ -176,10 +179,25 @@ export async function confirmCsaTransfer(quoteToken:string,guestIdentity?:CsaGue
   return {id:string(data.id),requestCode:string(data.request_code),status,packageName:string(pkg.name),durationMonths:integer(option.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at),...(recipientPhone?{recipientPhone}:{})};
 }
 
-export type CsaPurchaseStatus=Omit<CsaPurchaseConfirmation,"id"|"recipientPhone">&{rejectionReason?:string;membershipStartDate?:string;membershipEndDate?:string};
-export async function getCsaPurchaseStatus(input:{requestCode:string;phone:string}):Promise<CsaPurchaseStatus>{
-  const payload=await accountApi("csa-purchase-status",{method:"POST",body:JSON.stringify({reference_code:input.requestCode,phone:input.phone})}),data=record(payload.data),pkg=record(data.package_snapshot);
+export type CsaPurchaseStatus=Omit<CsaPurchaseConfirmation,"id"|"recipientPhone"|"expiresAt">&{expiresAt:string|null;rejectionReason?:string;membershipStartDate?:string;membershipEndDate?:string};
+function csaPurchaseStatusFrom(value:unknown):CsaPurchaseStatus{
+  const data=record(value),pkg=record(data.package_snapshot);
   const status=string(data.status);if(status!=="pending"&&status!=="payment_confirmed"&&status!=="approved"&&status!=="rejected"&&status!=="expired")throw new AccountApiError("invalid_response",502);
   const membershipStartDate=optionalString(data.membership_start_date),membershipEndDate=optionalString(data.membership_end_date);
-  return {requestCode:string(data.reference_code),status,packageName:string(pkg.name),durationMonths:integer(data.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:string(data.expires_at),rejectionReason:optionalString(data.rejection_reason),...(membershipStartDate?{membershipStartDate}:{}),...(membershipEndDate?{membershipEndDate}:{})};
+  return {requestCode:string(data.reference_code),status,packageName:string(pkg.name),durationMonths:integer(data.duration_months,1),amount:decimal(data.amount),initialPaymentAmount:decimal(data.initial_payment_amount),expiresAt:data.expires_at===null?null:string(data.expires_at),rejectionReason:optionalString(data.rejection_reason),...(membershipStartDate?{membershipStartDate}:{}),...(membershipEndDate?{membershipEndDate}:{})};
+}
+
+export async function getCsaPurchaseStatus(input:{requestCode:string;phone:string}):Promise<CsaPurchaseStatus>{
+  const payload=await accountApi("csa-purchase-status",{method:"POST",body:JSON.stringify({reference_code:input.requestCode,phone:input.phone})});
+  return csaPurchaseStatusFrom(payload.data);
+}
+
+export async function getOwnedCsaPurchaseStatus(requestCode:string):Promise<CsaPurchaseStatus|null>{
+  try{
+    const payload=await accountApi(`csa-purchase-requests/${encodeURIComponent(requestCode)}`);
+    return csaPurchaseStatusFrom(payload.data);
+  }catch(error){
+    if(error instanceof AccountApiError&&error.status===404&&error.code==="csa_purchase_request_not_found")return null;
+    throw error;
+  }
 }

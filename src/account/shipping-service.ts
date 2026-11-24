@@ -10,8 +10,8 @@ function record(value:unknown):JsonRecord{
   if(!value||typeof value!=="object"||Array.isArray(value))throw new AccountApiError("invalid_response",502);
   return value as JsonRecord;
 }
-function string(value:unknown):string{
-  if(typeof value!=="string"||!value.trim())throw new AccountApiError("invalid_response",502);
+function string(value:unknown,allowEmpty=false):string{
+  if(typeof value!=="string"||(!allowEmpty&&!value.trim()))throw new AccountApiError("invalid_response",502);
   return value.trim();
 }
 function nullableFee(value:unknown):string|null{
@@ -38,10 +38,12 @@ export async function getSupportedShippingAreas(locale:Locale,signal?:AbortSigna
 function addressFrom(value:unknown,names:{province:string;ward:string}):Address{
   const item=record(value),supported=item.is_supported;
   if(typeof supported!=="boolean")throw new AccountApiError("invalid_response",502);
+  const version=item.shipping_address_version;
+  if(version!==undefined&&(typeof version!=="string"||!/^[a-f0-9]{64}$/.test(version)))throw new AccountApiError("invalid_response",502);
   return {
     id:string(item.id),
-    name:string(item.recipient_name),
-    phone:string(item.phone_number),
+    name:string(item.recipient_name,true),
+    phone:string(item.phone_number,true),
     city:names.province,
     ward:names.ward,
     detail:string(item.address),
@@ -50,6 +52,7 @@ function addressFrom(value:unknown,names:{province:string;ward:string}):Address{
     isSupported:supported,
     shippingFeeVnd:nullableFee(item.shipping_fee_vnd),
     updatedAt:string(item.updated_at),
+    ...(version?{shippingAddressVersion:version}:{}),
     isDefault:true,
   };
 }
@@ -69,7 +72,7 @@ export async function getShippingAddress(locale:Locale):Promise<Address|null>{
 export async function saveShippingAddress(input:SavedAddressInput):Promise<Address>{
   const payload=await accountApi("shipping-address",{
     method:"PUT",
-    body:JSON.stringify({recipient_name:input.name,phone_number:input.phone,province_code:input.provinceCode,ward_code:input.wardCode,address:input.address}),
+    body:JSON.stringify({province_code:input.provinceCode,ward_code:input.wardCode,address:input.address}),
   });
   return addressFrom(payload.data,{province:input.provinceName,ward:input.wardName});
 }

@@ -19,7 +19,7 @@ export function parseStoreOrder(value:unknown):StoreOrder{const v=rec(value),add
 
 export type StoreCouponSnapshot={id:string;code:string;discountType:"percent"|"fixed";discountValue:string;maximumDiscountAmount:string|null;subtotalVnd:number;eligibleSubtotalVnd:number;discountAmountVnd:number;totalVnd:number};
 export type StoreVoucherExpectedLine={product_id:string;quantity:number;use_quota:boolean;expected_unit_price_vnd:number;expected_available_quantity:number;expected_quota_quantity:number};
-export type StoreCheckoutQuote={subtotalVnd:number;eligibleSubtotalVnd:number;discountAmountVnd:number;shippingFeeVnd:number;totalVnd:number;deliveryDate:string;shippingDiscountReason:"csa_companion_delivery"|null;coupon:StoreCouponSnapshot|null;voucherQuote:string|null;shippingAddressUpdatedAt:string|null;lines:StoreVoucherExpectedLine[]};
+export type StoreCheckoutQuote={subtotalVnd:number;eligibleSubtotalVnd:number;discountAmountVnd:number;shippingFeeVnd:number;totalVnd:number;deliveryDate:string;shippingDiscountReason:"csa_companion_delivery"|null;coupon:StoreCouponSnapshot|null;voucherQuote:string|null;shippingAddressUpdatedAt:string|null;shippingAddressVersion?:string;lines:StoreVoucherExpectedLine[]};
 /** Parsed quotes have a canonical shape; include date/token even when the displayed money is equal. */
 export function sameStoreCheckoutQuote(previous:StoreCheckoutQuote,next:StoreCheckoutQuote){
  return JSON.stringify(previous)===JSON.stringify(next);
@@ -40,6 +40,8 @@ export function parseStoreCheckoutQuote(value:unknown):StoreCheckoutQuote{
  const v=rec(value);
  if(!Array.isArray(v.lines)||!v.lines.length||v.lines.length>50)throw Error("invalid_response");
  if(!isStoreDeliveryDate(v.delivery_date)||![null,"csa_companion_delivery"].includes(v.shipping_discount_reason as string|null))throw Error("invalid_response");
+ const addressVersion=v.shipping_address_version??undefined;
+ if(addressVersion!==undefined&&(typeof addressVersion!=="string"||!/^[a-f0-9]{64}$/.test(addressVersion)||!v.shipping_address_updated_at))throw Error("invalid_response");
  const money=(value:unknown)=>{if(typeof value!=="string"||!/^\d+$/.test(value))throw Error("invalid_response");return pos(value)};
  const result={deliveryDate:v.delivery_date,shippingDiscountReason:v.shipping_discount_reason as "csa_companion_delivery"|null,subtotalVnd:money(v.subtotal_vnd),eligibleSubtotalVnd:money(v.eligible_subtotal_vnd),discountAmountVnd:money(v.discount_amount_vnd),shippingFeeVnd:money(v.shipping_fee_vnd),totalVnd:money(v.total_vnd),coupon:v.coupon===null?null:parseStoreCouponSnapshot(v.coupon),voucherQuote:v.voucher_quote===null?null:nonempty(v.voucher_quote),shippingAddressUpdatedAt:v.shipping_address_updated_at===null?null:previewTimestamp(v.shipping_address_updated_at),lines:v.lines.map(row=>{
   const l=rec(row),quantity=integer(l.quantity),quota=integer(l.expected_quota_quantity),price=integer(l.expected_unit_price_vnd);
@@ -55,5 +57,5 @@ export function parseStoreCheckoutQuote(value:unknown):StoreCheckoutQuote{
   productIds.add(id);
  }
  if((c&&(result.subtotalVnd!==c.subtotalVnd||result.eligibleSubtotalVnd!==c.eligibleSubtotalVnd||result.discountAmountVnd!==c.discountAmountVnd||result.totalVnd!==c.totalVnd))||result.discountAmountVnd>result.subtotalVnd||result.eligibleSubtotalVnd>result.subtotalVnd||result.totalVnd-result.shippingFeeVnd!==result.subtotalVnd-result.discountAmountVnd||result.lines.reduce((sum,line)=>sum+(line.quantity-line.expected_quota_quantity)*line.expected_unit_price_vnd,0)!==result.subtotalVnd)throw Error("invalid_response");
- return result;
+ return {...result,...(addressVersion?{shippingAddressVersion:addressVersion}:{})};
 }

@@ -224,5 +224,5 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
       }
     }
   }
-  return {current, draft, draftProducts, setDraft, error, busy, loading, dirty, needsReload, access, load, submit};
+  return {current, draft, draftProducts, setDraft, error, busy, loading, dirty, needsReload, access, load, submit, shippingAddress: data.shippingAddress};
 }

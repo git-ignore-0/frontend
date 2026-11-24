@@ -3,10 +3,10 @@ import {normalizeVietnamPhone} from "../../account/shipping-address-model.ts";
 
 export const CSA_PENDING_STORAGE_KEY="nfv:csa-pending:v1";
 
-type PendingMember={subject:string;phone:string;email:string|null};
+type PendingMember={subject:string;email:string|null};
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
 type PendingStores={localStorage:StorageLike;sessionStorage:StorageLike};
-type CsaPendingReference={requestCode:string;phone:string};
+type CsaPendingReference={requestCode:string;phone:string|null};
 
 export function csaPendingStorage(authenticated:boolean,stores:PendingStores):StorageLike|null{
   return authenticated?stores.localStorage:null;
@@ -54,14 +54,15 @@ export function resolveCsaPendingMemberReference(raw:string|null,owner:PendingMe
   if(!stored||!owner.subject)return null;
   if(stored.version===3)return stored.subject===owner.subject?stored.reference:null;
   const email=owner.email?.trim().toLowerCase();
-  return email&&stored.email===email&&stored.reference.phone===normalizeVietnamPhone(owner.phone)?stored.reference:null;
+  return email&&stored.email===email?{requestCode:stored.reference.requestCode,phone:null}:null;
 }
 
-export function discardCsaPending(storage:StorageLike,owner:PendingMember,requestCode:string):void{
+export function discardCsaPending(storage:StorageLike,owner:PendingMember,requestCode:string,ownedLegacySnapshot?:string|null):void{
   if(!owner.subject||!requestCode)return;
   for(const key of [csaPendingStorageKey(owner.subject),CSA_PENDING_STORAGE_KEY]){
-    const stored=resolveCsaPendingMemberReference(storage.getItem(key),owner);
-    if(stored?.requestCode===requestCode)storage.removeItem(key);
+    const raw=storage.getItem(key);
+    const stored=resolveCsaPendingMemberReference(raw,owner);
+    if(stored?.requestCode===requestCode&&(stored.phone!==null||raw===ownedLegacySnapshot))storage.removeItem(key);
   }
 }
 

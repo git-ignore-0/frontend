@@ -15,9 +15,9 @@ const ts=require("typescript");
 const source=path=>readFileSync(join(root,path),"utf8");
 const compile=(path,jsx=false)=>ts.transpileModule(source(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:jsx?ts.JsxEmit.ReactJSX:undefined}}).outputText;
 
-function runModule(path,requireStub){
+function runModule(path,requireStub,globals={}){
  const exp={};
- vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:requireStub,React,console,URLSearchParams});
+ vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:requireStub,React,console,URLSearchParams,...globals});
  return exp;
 }
 
@@ -85,6 +85,8 @@ const guestFields=runModule("src/components/account/GuestBuyerFields.tsx",id=>{
  throw Error(`Unexpected guest fields import ${id}`);
 });
 const voucherCopy=runModule("src/lib/voucher-copy.ts",()=>{throw Error("Unexpected voucher import");});
+const siteAuth=runModule("src/auth/site-auth.ts",()=>{throw Error("Unexpected site auth import");});
+const csaNavigation=runModule("src/lib/csa-navigation.ts",()=>{throw Error("Unexpected CSA navigation import");});
 const discountField=runModule("src/components/DiscountCodeField.tsx",id=>id==="react/jsx-runtime"?jsxRuntime:id==="@/components/UI"?UI:voucherCopy);
 function loadComponent({hooks=React,auth={status:"authenticated",session:{subject:"A"}},csaService,context}={}){
  return runModule("src/screens/account-csa/AccountCsaPackageSelection.tsx",id=>{
@@ -102,7 +104,8 @@ function loadComponent({hooks=React,auth={status:"authenticated",session:{subjec
   )};
   if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
   if(id==="@/lib/date-format")return dateFormat;
-  if(id==="@/auth/site-auth")return {siteAccountHref:()=>"/account"};
+  if(id==="@/auth/site-auth")return siteAuth;
+  if(id==="@/lib/csa-navigation")return csaNavigation;
   if(id==="@/auth/AuthProvider")return {useAuth:()=>auth};
   if(id==="@/account/csa-service")return csaService??{confirmCsaTransfer:async()=>({}),createCsaPaymentQuote:async()=>({}),getCsaPurchaseStatus:async()=>({})};
   if(id==="@/hooks/useSupportedShippingAreas")return {useSupportedShippingAreas:()=>({areas:[],loading:false,error:false,retry:()=>{}})};
@@ -127,15 +130,107 @@ function packageRow(id,plans=[]){
  return {id,name:`Package ${id}`,description:`Description ${id}`,quota_policy:"expire",items:[{product_id:`product-${id}`,product_name:`Vegetable ${id}`,unit_size:"1.000",unit_label_vi:"bó",unit_label_en:"bunch",quota_units:10}],price_options:[{id:`option-${id}`,duration_months:6,monthly_price_vnd:"600000",total_price_vnd:"3600000",sort_order:0,payment_plans:plans}]};
 }
 
+function purchaseHarness({context,pendingRaw=null,csaService}={}){
+ const slots=[],effects=[];
+ let cursor=0;
+ const component=loadComponent({context,csaService,hooks:{
+  ...React,
+  useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return [slots[index],value=>{slots[index]=typeof value==="function"?value(slots[index]):value}]},
+  useRef(value){return slots[cursor++]??={current:value}},
+  useEffect(fn){effects.push(fn);},useLayoutEffect(){},useCallback:fn=>fn,useSyncExternalStore:()=>pendingRaw,
+ }});
+ function render(props){
+  cursor=0;
+  const session=component.AccountCsaPackageSelection(props);
+  return session.type(session.props);
+ }
+ return {render,flushEffects(){for(const effect of effects.splice(0))effect();}};
+}
+
+test("missing-phone link returns to the package selected on the current CSA page",t=>{
+ const previousPackages=hookState;
+ t.after(()=>{hookState=previousPackages;});
+ hookState={status:"ready",page:{data:[packageRow("first"),packageRow("second")]},retry:()=>{}};
+ const address={name:"Member",phone:"",provinceCode:"66",wardCode:"22015",city:"Đắk Lắk",ward:"Tuy Hoà",detail:"12 Main Street",isSupported:true};
+ const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{email:"member@example.test"},shippingAddress:address},refreshResource:async()=>{}};
+ const purchase=purchaseHarness({context});
+ const render=()=>purchase.render({initialPackageId:"first",initialPackagePage:3});
+ render().props.children[1].props.onSelectPackage("second");
+ render().props.children[1].props.onContinue();
+ const markup=renderToStaticMarkup(render());
+ assert.match(markup,/href="\/api\/auth\/account\?returnTo=%2Fcsa%2Fpurchase%2Fvi%3Fpackage%3Dsecond%26page%3D3"/);
+});
+
+test("legacy CSA recovery loads a Core-owned request after the delivery phone changes",async t=>{
+ const previousPackages=hookState;
+ t.after(()=>{hookState=previousPackages;});
+ hookState={status:"ready",page:{data:[packageRow("p")]},retry:()=>{}};
+ const snapshotOwner={email:"member@example.test",phone:"0901234567"};
+ const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{email:snapshotOwner.email},shippingAddress:{phone:"+84911111111"}},refreshResource:async()=>{}};
+ for(const [version,owned] of [[1,true],[2,true],[2,false]]){
+  const status={reference_code:"CSA-001",status:"payment_confirmed",package_snapshot:{name:"Recovered package"},duration_months:6,amount:"3000000",initial_payment_amount:"500000",expires_at:version===1?null:"2099-11-01T00:00:00Z"};
+  const saved=version===1?{confirmation:{requestCode:"CSA-001",packageName:"Untrusted cached package"}}:{reference:{requestCode:"CSA-001"}};
+  const pendingRaw=JSON.stringify({version,owner:snapshotOwner,...saved});
+  const calls=[];
+  const accountApi=runModule("src/account/account-api.ts",()=>{}, {fetch:async(path,init)=>{
+   calls.push({path,method:init.method??"GET",body:init.body});
+   return owned?Response.json({data:status}):Response.json({errors:[{code:"csa_purchase_request_not_found"}]},{status:404});
+  }});
+  const csaService=runModule("src/account/csa-service.ts",id=>id==="./account-api.ts"?accountApi:runModule("src/lib/csa-units.ts",()=>{}));
+  const purchase=purchaseHarness({context,pendingRaw,csaService});
+  purchase.render();
+  purchase.flushEffects();
+  await new Promise(resolve=>setImmediate(resolve));
+
+  assert.deepEqual(calls,[{path:"/api/account/csa-purchase-requests/CSA-001",method:"GET",body:undefined}]);
+  const markup=renderToStaticMarkup(purchase.render());
+  if(owned)assert.match(markup,/Recovered package/);
+  else{
+   assert.match(markup,/csa\.selectionTitle/);
+   assert.doesNotMatch(markup,/Recovered package|CSA-001|data-kind="error"/);
+  }
+  assert.doesNotMatch(markup,/Untrusted cached package/);
+ }
+});
+
+test("CSA reloads account contact when the quote version changed without a location edit",async t=>{
+ const previousPackages=hookState,previousTerms=termsHookState;
+ t.after(()=>{hookState=previousPackages;termsHookState=previousTerms;});
+ hookState={status:"ready",page:{data:[packageRow("p")]},retry:()=>{}};
+ termsHookState={status:"ready",document:{version:"v1",locale:"vi",hash:"a".repeat(64),content:{title:"Terms",sections:[{key:"one",paragraphs:["Terms"]}]}},retry:()=>{}};
+ const address={name:"Old contact",phone:"+84901234567",provinceCode:"66",wardCode:"22015",city:"Đắk Lắk",ward:"Tuy Hoà",detail:"12 Main Street",isSupported:true,updatedAt:"2026-11-21T01:23:45+00:00",shippingAddressVersion:"a".repeat(64)};
+ const freshVersion="b".repeat(64),refreshes=[];
+ const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{email:"member@example.test"},shippingAddress:address},refreshResource:async resource=>{
+  refreshes.push(resource);
+  context.data.shippingAddress={...address,name:"New contact",shippingAddressVersion:freshVersion};
+ }};
+ const quote={quoteToken:"signed-quote",expiresAt:"2099-10-25T01:00:00Z",shippingAddressUpdatedAt:address.updatedAt,shippingAddressVersion:freshVersion,requestCode:"CSA-A1",payment:{bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-A1",amount:"3600000"},summary:{paymentType:"full",initialPaymentAmount:"3600000"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"3600000",addInfo:"CSA-A1"}};
+ const purchase=purchaseHarness({context,csaService:{createCsaPaymentQuote:async()=>quote}});
+ purchase.render().props.children[1].props.onContinue();
+ purchase.render().props.onContinue();
+ purchase.render().props.onToggleAll(true);
+ purchase.render().props.onCreatePayment();
+ await new Promise(resolve=>setImmediate(resolve));
+
+ const mismatch=purchase.render();
+ const markup=renderToStaticMarkup(mismatch);
+ assert.match(markup,/csa\.quoteAddressChanged/);
+ assert.doesNotMatch(markup,/CSA-A1|csa\.confirmTransfer/);
+ mismatch.props.children.props.action.onClick();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(refreshes,["address"]);
+ assert.match(renderToStaticMarkup(purchase.render()),/New contact/);
+});
+
 test("returning to a CSA transfer with the same account keeps its quote and payment step",async t=>{
  const auth={status:"authenticated",session:{subject:"A"},lastConfirmedSubject:"A"};
- const address={name:"Member A",phone:"0901234567",provinceCode:"66",wardCode:"22015",city:"Đắk Lắk",ward:"Tuy Hoà",detail:"12 Main Street",isSupported:true,updatedAt:"2026-11-21T01:23:45+00:00"};
+ const address={name:"Member A",phone:"0901234567",provinceCode:"66",wardCode:"22015",city:"Đắk Lắk",ward:"Tuy Hoà",detail:"12 Main Street",isSupported:true,updatedAt:"2026-11-21T01:23:45+00:00",shippingAddressVersion:"a".repeat(64)};
  const context={accountSessionKey:"A",ui:{locale:"vi",accountFetchState:{address:"ready"}},data:{profile:{email:"member-a@example.test"},shippingAddress:address},refreshResource:async()=>{}};
  const previousPackages=hookState,previousTerms=termsHookState;
  t.after(()=>{hookState=previousPackages;termsHookState=previousTerms});
  hookState={status:"ready",page:{data:[packageRow("p",[paymentPlan("full","full","3600000")])]},retry:()=>{}};
  termsHookState={status:"ready",document:{version:"v1",locale:"vi",hash:"a".repeat(64),content:{title:"Terms",sections:[{key:"one",paragraphs:["Terms"]}]}},retry:()=>{}};
- const quote={quoteToken:"signed-quote",expiresAt:"2099-10-25T01:00:00Z",shippingAddressUpdatedAt:address.updatedAt,requestCode:"CSA-A1",payment:{bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-A1",amount:"3600000"},summary:{paymentType:"full",initialPaymentAmount:"3600000"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"3600000",addInfo:"CSA-A1"}};
+ const quote={quoteToken:"signed-quote",expiresAt:"2099-10-25T01:00:00Z",shippingAddressUpdatedAt:address.updatedAt,shippingAddressVersion:address.shippingAddressVersion,requestCode:"CSA-A1",payment:{bankCode:"970422",bankName:"MB",accountNumber:"123456789",accountName:"NFV",transferContent:"CSA-A1",amount:"3600000"},summary:{paymentType:"full",initialPaymentAmount:"3600000"},qr:{acqId:"970422",accountNo:"123456789",accountName:"NFV",amount:"3600000",addInfo:"CSA-A1"}};
  let quoteCalls=0,confirmCalls=0,key,slots=[],cursor=0;
  const hooks={
   ...React,
@@ -278,8 +373,10 @@ test("Account step requires a known complete address and blocks missing data",()
  assert.match(unknownAddress,/href="\/account\/vi\?tab=address"/);
  assert.doesNotMatch(unknownAddress,/csa\.continue|disabled=""/);
  const incomplete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:{...address,phone:""},onBack:()=>{},onContinue:()=>{}}));
- assert.match(incomplete,/csa\.accountIncomplete/);
- assert.match(incomplete,/csa\.editAccount/);
+ const missingName=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address:{...address,name:""},onBack:()=>{},onContinue:()=>{}}));
+ assert.match(missingName,/api\/auth\/account\?returnTo=.*profile\.addName/);
+ assert.match(incomplete,/profile\.phoneMissing/);
+ assert.match(incomplete,/href="\/api\/auth\/account\?returnTo=%2Fcsa%2Fpurchase%2Fvi"/);
  assert.doesNotMatch(incomplete,/csa\.continue|disabled=""/);
 });
 

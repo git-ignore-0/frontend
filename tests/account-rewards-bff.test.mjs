@@ -171,3 +171,23 @@ test("account BFF forwards the bearer token but never exposes it to the browser 
   assert.equal((await response.text()).includes("secret-access"), false);
 });
 
+test("legacy CSA recovery is an authenticated, uncached GET by request code", async () => {
+  const request = new Request("http://localhost:3000/api/account/csa-purchase-requests/CSA-001");
+  const params = (code) => ({ params: Promise.resolve({ path: ["csa-purchase-requests", code] }) });
+  const guest = routeHarness();
+  assert.equal((await guest.route.GET(request, params("CSA-001"))).status, 401);
+  assert.equal(guest.calls.length, 0);
+
+  const signedIn = routeHarness({ session: { accessToken: "member-access" } });
+  assert.equal((await signedIn.route.GET(request, params("../admin"))).status, 404);
+  assert.equal(signedIn.calls.length, 0);
+  const response = await signedIn.route.GET(request, params("CSA-001"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  assert.equal(signedIn.calls.length, 1);
+  assert.equal(signedIn.calls[0].target, "http://127.0.0.1:8000/api/v1/csa-purchase-requests/CSA-001");
+  assert.equal(signedIn.calls[0].init.method, "GET");
+  assert.equal(signedIn.calls[0].init.headers.Authorization, "Bearer member-access");
+  assert.equal(signedIn.calls[0].init.body, undefined);
+});
+

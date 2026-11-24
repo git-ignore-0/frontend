@@ -10,10 +10,11 @@ import {VOUCHER_COPY,couponErrorMessage} from "@/lib/voucher-copy";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
-import {siteAuthHref,siteLogoutHref} from "@/auth/site-auth";
+import {siteAccountHref,siteAuthHref,siteLogoutHref} from "@/auth/site-auth";
+import {copyText} from "@/data/account-copy";
 import {readBuyAgain,clearBuyAgain,type BuyAgainSession} from "@/store/buy-again-session";
 import {buyAgainMessage} from "@/store/use-buy-again";
-import {prepareBuyAgain,type BuyAgainLine} from "@/store/store-order-service";
+import {prepareBuyAgain,type BuyAgainLine,type StoreCheckoutQuote} from "@/store/store-order-service";
 import {useStoreSession} from "@/store/use-store-session";
 import {formatUnitSize} from "@/store/store-format";
 import {money} from "@/lib/format";
@@ -32,6 +33,7 @@ import {readCheckoutIntent,pendingCheckoutOwner,saveCheckoutIntent,clearCheckout
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
 import {cartAfterCheckout} from "@/store/cart-checkout";
 import {AccountApiError} from "@/account/account-api";
+import type {Address} from "@/types";
 
 const COPY={
  vi:{cart:"Giỏ đi chợ",close:"Đóng giỏ hàng",empty:"Chiếc giỏ đang trống",emptyBody:"Chọn nông sản để thêm vào giỏ hàng.",explore:"Khám phá nông sản",remove:"Xóa",goods:"Tiền hàng",checkout:"Tiến hành đặt hàng",continue:"Tiếp tục mua sắm",unavailable:"Sản phẩm không còn bán",refreshing:"Đang làm mới sản phẩm…",refreshError:"Chưa thể làm mới sản phẩm",out:"Hết hàng",priceChanged:"Giá vừa được cập nhật.",stockChanged:"Số lượng có thể mua vừa thay đổi.",acknowledge:"Dùng thông tin mới",title:"Đặt nông sản",recipient:"Giao đến",editAddress:"Sửa địa chỉ",quota:"Dùng quyền lợi CSA",quotaPoints:"Dùng {points} điểm CSA",quotaPartial:"còn trả",quotaInsufficient:"Chưa đủ quyền lợi CSA, thanh toán bằng tiền",quotaUsed:"CSA thanh toán",cash:"Tiền hàng cần trả",shipping:"Phí giao",freeShipping:"Miễn phí giao kèm CSA",total:"Tổng đơn hàng",confirm:"Tiếp tục",acceptQuote:"Xác nhận thông tin mới",loading:"Đang tải thông tin đơn hàng…",unsupported:"Khu vực này chưa được hỗ trợ giao hàng.",addressRequired:"Vui lòng bổ sung địa chỉ giao hàng trong Tài khoản.",addressLoading:"Đang tải địa chỉ giao hàng…",addressError:"Chưa thể tải địa chỉ giao hàng.",retry:"Thử lại",changed:"Dữ liệu đơn hàng vừa thay đổi. Hãy kiểm tra lại và xác nhận lần nữa.",priceRequote:"Giá sản phẩm vừa thay đổi. Hãy kiểm tra và xác nhận thông tin mới.",stockRequote:"Tồn kho vừa thay đổi. Hãy kiểm tra và xác nhận số lượng mới.",quotaRequote:"Quota khả dụng vừa thay đổi. Hãy kiểm tra và xác nhận phân bổ mới.",addressRequote:"Địa chỉ giao hàng vừa thay đổi. Hãy kiểm tra và xác nhận địa chỉ mới.",totalRequote:"Phí giao hoặc tổng tiền vừa thay đổi. Hãy kiểm tra và xác nhận tổng mới.",paymentUnavailable:"Cửa hàng tạm chưa nhận chuyển khoản. Vui lòng thử lại sau.",failed:"Không thể tạo đơn. Vui lòng thử lại.",loadFailed:"Chưa thể tải dữ liệu checkout.",tooManyProducts:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau. Vui lòng xóa bớt để tiếp tục.`},
@@ -67,7 +69,9 @@ function voucherMessage(error:unknown,locale:"vi"|"en"){
  const messages:Record<string,string>={store_phone_invalid:COPY[locale].addressRequote};
  return Object.prototype.hasOwnProperty.call(messages,code)?messages[code]:c.failed;
 }
-function sameAddressVersion(left:string,right:string){
+function matchesShippingAddress(quote:StoreCheckoutQuote,address:Address|null){
+ if(!address?.shippingAddressVersion||address.shippingAddressVersion!==quote.shippingAddressVersion||!address.updatedAt||!quote.shippingAddressUpdatedAt)return false;
+ const left=address.updatedAt,right=quote.shippingAddressUpdatedAt;
  // Normalize equivalent offsets without dropping the backend's microseconds.
  const fraction=(value:string)=>(/\.(\d{1,6})(?:Z|[+-]\d{2}:\d{2})$/.exec(value)?.[1]??"").padEnd(6,"0");
  return Date.parse(left)===Date.parse(right)&&fraction(left)===fraction(right);
@@ -160,7 +164,8 @@ export function Checkout(){
  const tooManyProducts=Object.keys(quantities).length>STORE_MAX_ORDER_LINES;
  const cartReady=buyAgainMode?sourceInitialized&&sourceKey===`${owner}:${ui.locale}:${sourceVersion}`&&!sourceError&&!!buyAgainSession&&buyAgainRows.length>0&&buyAgainRows.every(line=>line.reason===null):cartHydrated&&!tooManyProducts&&products.length===Object.keys(ui.cart).length&&products.every(product=>ui.cartProductState[product.id]==="ready"&&!ui.cartProductNotice[product.id]&&product.available_quantity>=ui.cart[product.id]&&ui.cart[product.id]>0);
  const quoteFinal=accountSessionKey===owner&&(!authenticated||addressState==="ready")&&!quotePending&&!loadError&&!shippingError&&supported&&shippingKnown&&cartReady&&requoteState!=="loading"&&requoteState!=="error";
- const ready=quoteFinal&&accountSessionKey===owner&&(authenticated?!!address?.updatedAt&&address.isSupported!==false&&addressState==="ready":guestValid);
+ const missingContact=address?(!address.phone.trim()?"phone":!address.name.trim()?"name":null):null;
+ const ready=quoteFinal&&accountSessionKey===owner&&(authenticated?!!address?.updatedAt&&!!address.shippingAddressVersion&&address.isSupported!==false&&addressState==="ready"&&!missingContact:guestValid);
  const voucherCopy=VOUCHER_COPY[ui.locale];
 
  const couponScopeKey=JSON.stringify({owner,locale:ui.locale,products,quantities,useQuota,address,quota,sourceKey,source:buyAgainSession});
@@ -179,23 +184,33 @@ export function Checkout(){
  const guestAddress=guestReview.value?{recipient_name:guestReview.value.name,phone_number:guestReview.value.phone,province_code:guestReview.value.provinceCode,ward_code:guestReview.value.wardCode,address:guestReview.value.address}:undefined;
  const delivery=useCheckoutDelivery({buyer:owner,session:auth.session,locale:ui.locale,enabled:authReady&&intentOwner===owner&&accountSessionKey===owner&&!recovering&&!intentError&&(pendingOwner===null||pendingOwner===owner),ready,locked:busy||recovering||pendingOwner!==null,request:{locale:ui.locale,lines:quote.lines.map(line=>({product_id:line.product.id,quantity:line.quantity,use_quota:line.useQuota})),...(authenticated?{}:{guest:guestAddress}),...(authenticated&&appliedCoupon?{coupon_code:appliedCoupon}:{})},context:JSON.stringify({address,quota,products,source:buyAgainSession,sourceKey,voucherVersion}),run:storeRequest});
  const requestDeliveryQuote=delivery.requestQuote;
+ const requestVerifiedQuote=useCallback(async()=>{
+  const request=lifecycle.current;
+  const fresh=await requestDeliveryQuote();
+  if(request!==lifecycle.current)return null;
+  if(!fresh||!authenticated||matchesShippingAddress(fresh,address))return fresh;
+  const sequence=++requoteRequest.current;
+  requoteReason.current="shipping_address_changed";
+  setAppliedCoupon(null);setRequote(true);setRequoteState("loading");setError(copy.addressRequote);
+  try{
+   await refreshResource("address");
+   if(request===lifecycle.current&&sequence===requoteRequest.current)setRequoteState("ready");
+  }catch{
+   if(request===lifecycle.current&&sequence===requoteRequest.current)setRequoteState("error");
+  }
+  return null;
+ },[requestDeliveryQuote,authenticated,address,copy.addressRequote,refreshResource]);
  // This effect consumes only an explicit Apply action, never ordinary date/quota edits.
  useEffect(()=>{
   const attempt=applyingCoupon.current;
   if(!attempt||attempt.started||!appliedCoupon||!authReady)return;
   attempt.started=true;
-  void requestDeliveryQuote().catch(()=>{}).finally(()=>{if(applyingCoupon.current===attempt)applyingCoupon.current=null});
- },[voucherVersion,appliedCoupon,requestDeliveryQuote,authReady]);
- const serverQuote=delivery.quote&&(!authenticated||!!address?.updatedAt&&!!delivery.quote.shippingAddressUpdatedAt&&sameAddressVersion(delivery.quote.shippingAddressUpdatedAt,address.updatedAt))?delivery.quote:null;
- useEffect(()=>{
-  if(!delivery.quote||!authenticated||!address?.updatedAt||!delivery.quote.shippingAddressUpdatedAt||sameAddressVersion(delivery.quote.shippingAddressUpdatedAt,address.updatedAt))return;
-  let active=true;
-  queueMicrotask(()=>{if(active){setAppliedCoupon(null);setRequote(true);setRequoteState("ready");setError(copy.addressRequote);void refreshResource("address")}});
-  return()=>{active=false};
- },[delivery.quote,authenticated,address?.updatedAt,refreshResource,copy.addressRequote]);
+  void requestVerifiedQuote().catch(()=>{}).finally(()=>{if(applyingCoupon.current===attempt)applyingCoupon.current=null});
+ },[voucherVersion,appliedCoupon,requestVerifiedQuote,authReady]);
+ const serverQuote=delivery.quote&&(!authenticated||matchesShippingAddress(delivery.quote,address))?delivery.quote:null;
  const voucherWanted=authenticated&&!!discountCode.trim();
  const voucherLoading=!!appliedCoupon&&delivery.quoteLoading;
- const previousQuote=delivery.previousQuote&&(!authenticated||!!address?.updatedAt&&!!delivery.previousQuote.shippingAddressUpdatedAt&&sameAddressVersion(delivery.previousQuote.shippingAddressUpdatedAt,address.updatedAt))?delivery.previousQuote:null;
+ const previousQuote=delivery.previousQuote&&(!authenticated||matchesShippingAddress(delivery.previousQuote,address))?delivery.previousQuote:null;
  const itemQuote=serverQuote??previousQuote;
  const voucherSummary=itemQuote?.coupon?itemQuote:undefined;
  const voucherReady=!voucherWanted||!!voucherSummary&&voucherSummary.coupon?.code===discountCode.trim().toUpperCase();
@@ -278,9 +293,8 @@ export function Checkout(){
   submitting.current=true;setBusy(true);setError("");
   try{
    if(!attempt){
-    const fresh=await delivery.requestQuote();
+    const fresh=await requestVerifiedQuote();
     if(request!==lifecycle.current||!fresh)return;
-    if(authenticated&&(!address?.updatedAt||!fresh.shippingAddressUpdatedAt||!sameAddressVersion(fresh.shippingAddressUpdatedAt,address.updatedAt)))return;
     if(displayShipping===null||displayTotal===null||!matchesCheckoutEstimate(fresh,{quote:displayQuote,deliveryDate:delivery.date,shippingFeeVnd:displayShipping,discountAmountVnd:displayDiscount,totalVnd:displayTotal,voucherCode:appliedCoupon})){
      setRequote(true);setRequoteState("ready");setError(copy.changed);return;
     }
@@ -342,8 +356,9 @@ export function Checkout(){
  if(initialPending&&!intentError)return loadingScreen;
  const addressPanel=authenticated
   ? addressState==="loading"&&!address?<DataState kind="loading" title={copy.addressLoading}/>
-   : addressState==="error"?<DataState kind="error" title={copy.addressError} action={{label:copy.retry,onClick:()=>void refreshResource("address")}}/>
-   : address?<StoreRecipientSummary name={address.name} phone={address.phone} address={[address.detail,address.ward,address.city].filter(Boolean).join(", ")} actions={busy||recovering?<Button small variant="outline" disabled><Icon name="edit" size={14}/>{copy.editAddress}</Button>:<a className="btn btn-outline btn-small" href={`/account/${ui.locale}?tab=address`}><Icon name="edit" size={14}/>{copy.editAddress}</a>}/>
+   : addressState==="error"||addressState==="ready"&&address&&!address.shippingAddressVersion?<DataState kind="error" title={copy.addressError} action={{label:copy.retry,onClick:()=>void refreshResource("address")}}/>
+   : address?<><StoreRecipientSummary name={address.name} phone={address.phone} address={[address.detail,address.ward,address.city].filter(Boolean).join(", ")} actions={busy||recovering?<Button small variant="outline" disabled><Icon name="edit" size={14}/>{copy.editAddress}</Button>:<a className="btn btn-outline btn-small" href={`/account/${ui.locale}?tab=address`}><Icon name="edit" size={14}/>{copy.editAddress}</a>}/>
+    {missingContact&&<div><p role="alert">{copyText(ui.locale,missingContact==="phone"?"profile.phoneMissing":"profile.nameMissing")}</p><a className="btn btn-outline btn-small" href={siteAccountHref(ui.locale,`/store/checkout/${ui.locale}${buyAgainRequested?"?source=buy-again":""}`)}>{copyText(ui.locale,missingContact==="phone"?"profile.addPhone":"profile.addName")}</a></div>}</>
    :<DataState title={copy.addressRequired} action={{label:copy.editAddress,onClick:()=>router.push(`/account/${ui.locale}?tab=address`)}}/>
   :<GuestBuyerFields locale={ui.locale} value={guest} areas={areas} loading={quotePending} error={loadError} submitted={guestSubmitted} onRetry={()=>setLoadVersion(value=>value+1)} onChange={setGuest}/>;
  return <main className="main-content"><div className="container store-commerce">

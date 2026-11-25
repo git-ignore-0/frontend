@@ -19,6 +19,7 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
   if(cache.has(path))return cache.get(path);
   const exports={};cache.set(path,exports);
   vm.runInNewContext(ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,URLSearchParams,require:name=>{
+   if(name==="@/lib/phone-number"||name.endsWith("/phone-number.ts"))return load("src/lib/phone-number.ts");
    if(name==="@/account/account-api")return load("src/account/account-api.ts");
    if(name==="@/store/use-checkout-delivery")return {useCheckoutDelivery:()=>({date:"2026-11-14",calendar:null,calendarLoading:pending==="calendar",calendarError:failed?Error("calendar_failed"):null,invalidDate:false,quote:null,error:null,quoteLoading:false,select(){},refresh(){},retryQuote(){}})};
    if(name==="@/components/store/StoreDeliveryDates")return load("src/components/store/StoreDeliveryDates.tsx");

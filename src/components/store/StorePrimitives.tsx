@@ -1,5 +1,6 @@
 import type {ReactNode} from "react";
 import {Icon,MoneyLine} from "@/components/UI";
+import {formatVietnamPhone} from "@/lib/phone-number";
 import type {Locale} from "@/types";
 
 export function StoreSection({title,children,className="",as:Tag="section"}:{title:string;children:ReactNode;className?:string;as?:"section"|"aside"}){
@@ -15,7 +16,7 @@ export function StoreProductRow({name,image,meta,amount,actions,children}:{name:
 }
 
 export function StoreRecipientSummary({name,phone,address,actions}:{name:string;phone:string;address:string;actions?:ReactNode}){
- return <div className="store-recipient-summary"><div className="store-recipient-contact"><strong>{name}</strong><span>{phone}</span></div><p className="store-recipient-location"><Icon name="pin" size={16}/><span>{address}</span></p>{actions&&<div className="store-address-actions">{actions}</div>}</div>;
+ return <div className="store-recipient-summary"><div className="store-recipient-contact"><strong>{name}</strong><span>{formatVietnamPhone(phone)}</span></div><p className="store-recipient-location"><Icon name="pin" size={16}/><span>{address}</span></p>{actions&&<div className="store-address-actions">{actions}</div>}</div>;
 }
 
 export function StoreSummaryAmounts({locale,goods,shipping,benefit,total,reserveBenefit=false,discounts,voucher,cashSubtotal,totalLabel,children}:{locale:Locale;goods:string;shipping:string;benefit?:string;total:string;reserveBenefit?:boolean;discounts?:ReactNode;voucher?:{code:string;discount:string};cashSubtotal?:string;totalLabel?:string;children?:ReactNode}){

@@ -12,7 +12,7 @@ test("cart and checkout select complete Vietnamese or English copy from the acti
  assert.match(checkout,/en:\{/);
  assert.match(checkout,/copy=COPY\[ui\.locale\]/);
  assert.match(checkout,/GuestBuyerFields/);
- assert.match(readFileSync(new URL("../src/components/account/ShippingAddressFields.tsx",import.meta.url),"utf8"),/sanitizeVietnamPhoneInput/);
+ assert.match(readFileSync(new URL("../src/components/account/ShippingAddressFields.tsx",import.meta.url),"utf8"),/handlePhonePaste/);
  assert.match(checkout,/provinceCode/);
  assert.match(checkout,/wardCode/);
  assert.match(ui,/locale==="en"\?"No image":"Chưa có ảnh"/);

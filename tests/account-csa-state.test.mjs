@@ -45,6 +45,12 @@ test("another Core account sharing a recipient phone cannot resolve member pendi
   assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:"",email:null,phone}),null);
 `));
 
+test("pending member references still normalize a stored legacy recipient phone",()=>runPending(`
+  const raw=JSON.stringify({version:3,owner:{subject:member,phone:"+84 901-234-567"},reference:{requestCode:"CSA-001"}});
+  assert.deepEqual(pending.resolveCsaPendingMemberReference(raw,{subject:member,email:null,phone:""}),{requestCode:"CSA-001",phone});
+  assert.equal(pending.resolveCsaPendingMemberReference(raw,{subject:other,email:null,phone}),null);
+`));
+
 test("legacy member references provide a request code for owner lookup without a phone",()=>runPending(`
   for (const raw of [
     JSON.stringify({version:1,owner:{email:"member@example.test",phone:"0901234567"},confirmation}),

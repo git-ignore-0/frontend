@@ -1,5 +1,5 @@
 import type {CsaPurchaseConfirmation} from "@/account/csa-service";
-import {normalizeVietnamPhone} from "../../account/shipping-address-model.ts";
+import {normalizeVietnamPhone} from "../../lib/phone-number.ts";
 
 export const CSA_PENDING_STORAGE_KEY="nfv:csa-pending:v1";
 

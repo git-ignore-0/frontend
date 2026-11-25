@@ -1,6 +1,7 @@
 import {isStoreDeliveryDate} from "./store-delivery.ts";
 import type {checkoutPayload} from "./store-quote";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "./store-limits";
+import {isCanonicalVietnamPhone} from "../lib/phone-number.ts";
 
 export type StoreCheckoutPayload=ReturnType<typeof checkoutPayload>;
 export type StoreCheckoutIntent={owner:string;payload:StoreCheckoutPayload;buyAgain?:{orderId:string;sessionId:string}};
@@ -33,7 +34,7 @@ export function isCheckoutPayload(value:unknown,guest:boolean):value is StoreChe
  }
  if(guest){
   const address=value.guest;
-  return value.shipping_address_updated_at===undefined&&record(address)&&exactKeys(address,["recipient_name","phone_number","province_code","ward_code","address"])&&text(address.recipient_name,200)&&typeof address.phone_number==="string"&&/^\+84[1-9]\d{8,9}$/.test(address.phone_number)&&typeof address.province_code==="string"&&/^\d{2}$/.test(address.province_code)&&typeof address.ward_code==="string"&&/^\d{1,5}$/.test(address.ward_code)&&text(address.address,500);
+  return value.shipping_address_updated_at===undefined&&record(address)&&exactKeys(address,["recipient_name","phone_number","province_code","ward_code","address"])&&text(address.recipient_name,200)&&isCanonicalVietnamPhone(address.phone_number,"contact")&&typeof address.province_code==="string"&&/^\d{2}$/.test(address.province_code)&&typeof address.ward_code==="string"&&/^\d{1,5}$/.test(address.ward_code)&&text(address.address,500);
  }
  return value.guest===undefined&&typeof value.shipping_address_updated_at==="string"&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value.shipping_address_updated_at)&&Number.isFinite(Date.parse(value.shipping_address_updated_at));
 }

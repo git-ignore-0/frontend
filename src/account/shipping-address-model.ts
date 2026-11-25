@@ -1,3 +1,5 @@
+import {normalizeLocalVietnamPhone,normalizeVietnamPhone} from "../lib/phone-number.ts";
+
 export type SupportedShippingWard={code:string;name:string;shippingFeeVnd:string};
 export type SupportedShippingProvince={code:string;name:string;wards:SupportedShippingWard[]};
 
@@ -35,18 +37,6 @@ export function sortShippingAreas(areas:ReadonlyArray<SupportedShippingProvince>
     .sort((left,right)=>collator.compare(left.name,right.name));
 }
 
-export function sanitizeVietnamPhoneInput(value:string):string{
-  const compact=value.replace(/[^\d+]/g,"");
-  const sanitized=compact.startsWith("+")?`+${compact.slice(1).replace(/\+/g,"")}`:compact.replace(/\+/g,"");
-  return sanitized.slice(0,13);
-}
-
-export function normalizeVietnamPhone(value:string):string{
-  const compact=value.trim().replace(/[\s().-]/g,"");
-  const national=compact.startsWith("+84")?compact.slice(3):compact.startsWith("84")?compact.slice(2):compact.startsWith("0")?compact.slice(1):"";
-  return /^[1-9]\d{8,9}$/.test(national)?`+84${national}`:"";
-}
-
 export function reviewShippingAddress(draft:ShippingAddressDraft,areas:ReadonlyArray<SupportedShippingProvince>,{nameMaxLength=SHIPPING_NAME_MAX_LENGTH,requireContact=true}:{nameMaxLength?:number;requireContact?:boolean}={}):{
   complete:boolean;
   missing:ShippingAddressField[];
@@ -55,7 +45,7 @@ export function reviewShippingAddress(draft:ShippingAddressDraft,areas:ReadonlyA
   const missing:ShippingAddressField[]=[];
   const value={
     name:draft.name.trim(),
-    phone:normalizeVietnamPhone(draft.phone),
+    phone:requireContact?normalizeLocalVietnamPhone(draft.phone):normalizeVietnamPhone(draft.phone),
     provinceCode:draft.provinceCode.trim(),
     wardCode:draft.wardCode.trim(),
     address:draft.address.trim(),

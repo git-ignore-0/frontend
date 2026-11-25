@@ -5,6 +5,7 @@ import {StoreRecipientSummary} from "@/components/store/StorePrimitives";
 import {ShippingAddressFields} from "@/components/account/ShippingAddressFields";
 import {useNFV} from "@/state/NFVContext";
 import {formatAddress} from "@/lib/format";
+import {formatVietnamPhone} from "@/lib/phone-number";
 import {copyText} from "@/data/account-copy";
 import {siteAccountHref} from "@/auth/site-auth";
 import {profileBirthDate} from "@/screens/profile-presentation";
@@ -23,7 +24,7 @@ export function ProfileView(){
  const editHref=siteAccountHref(ui.locale,`/account/${ui.locale}?tab=profile`);
  const missing=copyText(ui.locale,"common.na");
  return <Section title={copyText(ui.locale,"profile.title")} description={copyText(ui.locale,"profile.description")} actions={<ActionLink small href={editHref}><Icon name="edit" size={14}/> {copyText(ui.locale,"profile.edit")}</ActionLink>}>
-   <div className="acc-profile-info"><div><span>{copyText(ui.locale,"profile.name")}</span><strong>{p.name||missing}</strong></div><div><span>{copyText(ui.locale,"profile.phone")}</span><strong>{p.phone||missing}</strong></div><div><span>{copyText(ui.locale,"profile.birthDate")}</span><strong>{profileBirthDate(p.dateOfBirth,ui.locale)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.email")}</span><strong>{p.email||copyText(ui.locale,"profile.noEmail")}</strong></div></div>
+   <div className="acc-profile-info"><div><span>{copyText(ui.locale,"profile.name")}</span><strong>{p.name||missing}</strong></div><div><span>{copyText(ui.locale,"profile.phone")}</span><strong>{formatVietnamPhone(p.phone)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.birthDate")}</span><strong>{profileBirthDate(p.dateOfBirth,ui.locale)||missing}</strong></div><div><span>{copyText(ui.locale,"profile.email")}</span><strong>{p.email||copyText(ui.locale,"profile.noEmail")}</strong></div></div>
  </Section>;
 }
 
@@ -33,7 +34,7 @@ export function AddressView({draft,onDraftChange}:{draft:ShippingAddressDraft|nu
  const address=data.shippingAddress;
  const status=ui.accountFetchState.address;
  const initial:ShippingAddressDraft={
-   name:data.profile.name||address?.name||"",phone:data.profile.phone||address?.phone||"",
+   name:data.profile.name||address?.name||"",phone:formatVietnamPhone(data.profile.phone||address?.phone),
    provinceCode:address?.isSupported===false?"":address?.provinceCode??"",
    wardCode:address?.isSupported===false?"":address?.wardCode??"",address:address?.detail??"",
  };

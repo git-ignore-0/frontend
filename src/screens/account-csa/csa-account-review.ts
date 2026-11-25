@@ -1,4 +1,4 @@
-import {normalizeVietnamPhone} from "../../account/shipping-address-model.ts";
+import {normalizeVietnamPhone} from "../../lib/phone-number.ts";
 import type {Address} from "@/types";
 
 export function csaAccountReview(address?:Address){

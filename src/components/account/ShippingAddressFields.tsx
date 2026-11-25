@@ -1,7 +1,10 @@
 "use client";
 
+import {useState} from "react";
 import {Button,FormField,FormInput,FormSelect} from "@/components/UI";
-import {SHIPPING_NAME_MAX_LENGTH,sanitizeVietnamPhoneInput,sortShippingAreas,type ShippingAddressDraft,type ShippingAddressField,type SupportedShippingProvince} from "@/account/shipping-address-model";
+import {SHIPPING_NAME_MAX_LENGTH,sortShippingAreas,type ShippingAddressDraft,type ShippingAddressField,type SupportedShippingProvince} from "@/account/shipping-address-model";
+import {copyText} from "@/data/account-copy";
+import {handlePhonePaste,normalizeLocalVietnamPhone} from "@/lib/phone-number";
 import type {Locale} from "@/types";
 
 export type ShippingAddressFieldsCopy={
@@ -24,17 +27,19 @@ export function ShippingAddressFields({locale,value,areas,loading,error,missing=
   onRetry:()=>void;
   onChange:(value:ShippingAddressDraft)=>void;
 }){
+  const [phoneTouched,setPhoneTouched]=useState(false);
   const provinces=sortShippingAreas(areas,locale);
   const province=provinces.find(item=>item.code===value.provinceCode);
   const wards=province?.wards??[];
   const contact=copy.contact;
   const invalid=(field:ShippingAddressField)=>missing.includes(field);
+  const phoneInvalid=invalid("phone")||(phoneTouched&&!!value.phone&&!normalizeLocalVietnamPhone(value.phone));
   const update=(field:ShippingAddressField,next:string)=>onChange({...value,[field]:next});
 
   return <>
     {contact&&<>
       <FormField label={contact.name}><FormInput name="name" maxLength={nameMaxLength} required placeholder={contact.namePlaceholder} autoComplete="name" value={value.name} aria-invalid={invalid("name")} onChange={event=>update("name",event.target.value)}/></FormField>
-      <FormField label={contact.phone}><FormInput name="phone" type="tel" inputMode="tel" pattern="[+0-9]*" maxLength={13} required autoComplete="tel" placeholder="09xxxxxxxx" value={value.phone} aria-invalid={invalid("phone")} onChange={event=>update("phone",sanitizeVietnamPhoneInput(event.target.value))}/></FormField>
+      <FormField label={contact.phone}><FormInput name="phone" type="tel" inputMode="tel" required autoComplete="tel" placeholder="09xxxxxxxx" value={value.phone} aria-invalid={phoneInvalid} onBlur={()=>setPhoneTouched(true)} onChange={event=>update("phone",event.target.value)} onPaste={event=>handlePhonePaste(event,next=>update("phone",next))}/>{phoneInvalid&&<span className="help-error" role="alert">{copyText(locale,"profile.invalidPhone")}</span>}</FormField>
     </>}
     <FormField label={copy.province} className="acc-address-field"><FormSelect name="province_code" required value={value.provinceCode} disabled={loading||error} aria-invalid={invalid("provinceCode")} onChange={event=>onChange({...value,provinceCode:event.target.value,wardCode:""})}><option value="">{loading?copy.loading:copy.chooseProvince}</option>{provinces.map(item=><option value={item.code} key={item.code}>{item.name}</option>)}</FormSelect></FormField>
     <FormField label={copy.ward} className="acc-address-field"><FormSelect name="ward_code" required value={value.wardCode} disabled={!province||loading||error} aria-invalid={invalid("wardCode")} onChange={event=>update("wardCode",event.target.value)}><option value="">{!value.provinceCode?copy.chooseProvinceFirst:copy.chooseWard}</option>{wards.map(item=><option value={item.code} key={item.code}>{item.name}</option>)}</FormSelect></FormField>

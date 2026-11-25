@@ -13,7 +13,8 @@ import {StoreOrderDetail} from "@/screens/store/StoreOrderDetail";
 import {storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
 import {money} from "@/lib/format";
 import {formatUnitSize} from "@/store/store-format";
-import {sanitizeVietnamPhoneInput} from "@/account/shipping-address-model";
+import {handlePhonePaste,normalizeLocalVietnamPhone} from "@/lib/phone-number";
+import {copyText} from "@/data/account-copy";
 import {readOrdersView,saveOrdersView} from "@/account/orders-view-state";
 import {AccountApiError} from "@/account/account-api";
 
@@ -130,16 +131,17 @@ export function OrdersView({active=true}:{active?:boolean}={}){
 export function OrderDetail(){const {ui}=useNFV();return <main className="main-content"><StoreOrderDetail id={ui.productId} locale={ui.locale} returnTo={ui.accountTab==="csa"?"csa":"orders"}/></main>}
 export function GuestOrderLookup(){
  const {ui}=useNFV(),copy=C[ui.locale];
- const [reference,setReference]=useState(""),[phone,setPhone]=useState(""),[order,setOrder]=useState<StoreOrder|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const [reference,setReference]=useState(""),[phone,setPhone]=useState(""),[order,setOrder]=useState<StoreOrder|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[phoneTouched,setPhoneTouched]=useState(false);
+ const normalizedPhone=normalizeLocalVietnamPhone(phone),invalidPhone=phoneTouched&&Boolean(phone)&&!normalizedPhone;
  const sequence=useRef(0),submitting=useRef(false);
  useEffect(()=>{const request=++sequence.current;currentLookupStoreOrder().then(value=>{if(request===sequence.current)setOrder(value)}).catch(()=>{});return()=>{sequence.current+=1}},[]);
  const submit=async(event:React.FormEvent)=>{
-  event.preventDefault();if(!reference.trim()||!phone.trim()||submitting.current)return;
+  event.preventDefault();setPhoneTouched(true);if(!reference.trim()||!normalizedPhone||submitting.current)return;
   const request=++sequence.current;submitting.current=true;setBusy(true);setError("");
-  try{const value=await lookupStoreOrder(reference.trim().toUpperCase(),phone);if(request===sequence.current)setOrder(value)}
+  try{const value=await lookupStoreOrder(reference.trim().toUpperCase(),normalizedPhone);if(request===sequence.current)setOrder(value)}
   catch(reason){if(request===sequence.current){setOrder(null);setError(reason instanceof AccountApiError&&reason.status===429?copy.limited:reason instanceof AccountApiError&&reason.status===404?copy.notFound:copy.failed)}}
   finally{if(request===sequence.current){submitting.current=false;setBusy(false)}}
  };
  if(order)return <section className="account-guest-order-result"><Button variant="outline" onClick={()=>{sequence.current+=1;setOrder(null)}}>{copy.lookup}</Button><StoreOrderDetail key={order.id} id={order.id} locale={ui.locale} initialOrder={order} onLoaded={setOrder} loadOrder={()=>currentLookupStoreOrder()} readOnly/></section>;
- return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup"><p>{copy.lookupIntro}</p><form className="form-grid" onSubmit={submit}><div><label className="label" htmlFor="guestOrderReference">{copy.reference}</label><FormInput id="guestOrderReference" maxLength={24} autoComplete="off" value={reference} onChange={event=>setReference(event.target.value.toUpperCase())}/></div><div><label className="label" htmlFor="guestOrderPhone">{copy.phone}</label><FormInput id="guestOrderPhone" autoComplete="tel" value={phone} onChange={event=>setPhone(sanitizeVietnamPhoneInput(event.target.value))}/></div><div className="wide"><Button type="submit" loading={busy} disabled={busy||!reference.trim()||!phone.trim()}>{copy.find}</Button></div></form>{error&&<p className="help-error" role="alert">{error}</p>}</StoreSection>;
+ return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup"><p>{copy.lookupIntro}</p><form className="form-grid" onSubmit={submit}><div><label className="label" htmlFor="guestOrderReference">{copy.reference}</label><FormInput id="guestOrderReference" maxLength={24} autoComplete="off" value={reference} onChange={event=>setReference(event.target.value.toUpperCase())}/></div><div><label className="label" htmlFor="guestOrderPhone">{copy.phone}</label><FormInput id="guestOrderPhone" type="tel" inputMode="tel" autoComplete="tel" value={phone} aria-invalid={invalidPhone} onChange={event=>setPhone(event.target.value)} onPaste={event=>handlePhonePaste(event,setPhone)} onBlur={()=>setPhoneTouched(true)}/>{invalidPhone&&<span className="help-error" role="alert">{copyText(ui.locale,"profile.invalidPhone")}</span>}</div><div className="wide"><Button type="submit" loading={busy} disabled={busy||!reference.trim()||!normalizedPhone}>{copy.find}</Button></div></form>{error&&<p className="help-error" role="alert">{error}</p>}</StoreSection>;
 }

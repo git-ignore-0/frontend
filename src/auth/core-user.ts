@@ -1,4 +1,5 @@
 import type { Locale } from "@/types";
+import {isCanonicalVietnamPhone} from "../lib/phone-number.ts";
 
 export type CoreUser = {
   sub: string;
@@ -15,7 +16,6 @@ export type CoreUser = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LOGIN_PHONE = /^\+84(?:[35789][0-9]{8}|2[0-9]{9})$/;
 const PROFILE_PHONE = /^[0-9+().\-\s]*$/;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -42,8 +42,7 @@ export function parseCoreUser(value: unknown): CoreUser | null {
     typeof data.name !== "string" ||
     (data.email !== null && (typeof data.email !== "string" || !EMAIL.test(data.email))) ||
     typeof data.email_verified !== "boolean" || (data.email === null && data.email_verified) ||
-    (data.login_phone_number !== null &&
-      (typeof data.login_phone_number !== "string" || !LOGIN_PHONE.test(data.login_phone_number))) ||
+    (data.login_phone_number !== null && !isCanonicalVietnamPhone(data.login_phone_number,"identity")) ||
     (data.locale !== "vi" && data.locale !== "en") ||
     data.status !== "active" ||
     !Array.isArray(data.roles) || data.roles.some(role => typeof role !== "string") ||

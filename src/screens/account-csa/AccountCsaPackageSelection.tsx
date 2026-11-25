@@ -10,6 +10,7 @@ import {csaPurchaseHref} from "@/lib/csa-navigation";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {copyText} from "@/data/account-copy";
 import {formatDate,formatDateTime} from "@/lib/date-format";
+import {formatVietnamPhone} from "@/lib/phone-number";
 import {useAuth} from "@/auth/AuthProvider";
 import type {CsaPurchaseConfirmation,CsaPurchaseStatus,CsaQuote,CsaVoucherPreview} from "@/account/csa-service";
 import {AccountApiError,confirmCsaTransfer,createCsaPaymentQuote,getCsaPurchaseStatus,getOwnedCsaPurchaseStatus} from "@/account/csa-service";
@@ -271,7 +272,7 @@ export function AccountCsaAccountStep({locale,profile,address,returnTo=csaPurcha
         <p className="csa-purchase-intro">{L("csa.accountDescription")}</p>
         <div className="csa-status-line"><span className={`acc-status ${review.complete?"completed":"processing"}`}>{L("csa.signedIn")}</span><span className="muted">{L("csa.accountManaged")}</span></div>
         <div className="csa-profile-row"><span>{L("profile.name")}</span><strong>{address?.name||L("common.na")}</strong></div>
-        <div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{address?.phone||L("common.na")}</strong></div>
+        <div className="csa-profile-row"><span>{L("profile.phone")}</span><strong>{formatVietnamPhone(address?.phone)||L("common.na")}</strong></div>
         <div className="csa-profile-row"><span>{L("profile.email")}</span><strong>{profile.email||L("profile.noEmail")}</strong></div>
         <div className="csa-profile-row"><span>{L("csa.deliveryAddress")}</span><strong>{review.addressLabel||L("common.na")}</strong></div>
         {!review.complete&&<p className="help-error" role="alert">{L(missingContact==="phone"?"profile.phoneMissing":missingContact==="name"?"profile.nameMissing":"csa.accountIncomplete")}</p>}

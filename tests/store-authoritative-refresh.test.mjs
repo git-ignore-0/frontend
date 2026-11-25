@@ -225,7 +225,9 @@ test("AddressView ignores a save response after its account owner changes",async
  context.setData(state=>({...state,shippingAddress:addressA}));context=h.render();
  const result=deferred(),exports={};
  const jsx=(type,props)=>({type,props});
+ const phoneNumber={};vm.runInNewContext(compile("src/lib/phone-number.ts"),{exports:phoneNumber});
  vm.runInNewContext(compile("src/screens/AccountProfile.tsx"),{exports,require:name=>{
+  if(name==="@/lib/phone-number")return phoneNumber;
   if(name==="react/jsx-runtime")return {jsx,jsxs:jsx};
   if(name==="@/state/NFVContext")return {useNFV:()=>({...context,call:()=>result.promise})};
   if(name==="@/components/UI")return {Section:"Section",Button:"Button",Icon:"Icon"};

@@ -52,8 +52,9 @@ function hooks(){let cursor=0,states=[];return {react:{useState(initial){const i
 
 function detailModule(settings=null){
   const h=hooks(),presentationExports=(()=>{const value={};vm.runInNewContext(compile("src/store/store-order-presentation.ts"),{exports:value,URL,URLSearchParams,require:()=>({})});return value})(),exports={};
-  const shared={},format={},primitives={};
-  vm.runInNewContext(compile("src/components/store/StorePrimitives.tsx"),{exports:primitives,require:name=>name==="react/jsx-runtime"?jsx:{Icon:"Icon",MoneyLine:"MoneyLine"}});
+  const shared={},format={},primitives={},phoneNumber={};
+  vm.runInNewContext(compile("src/lib/phone-number.ts"),{exports:phoneNumber});
+  vm.runInNewContext(compile("src/components/store/StorePrimitives.tsx"),{exports:primitives,require:name=>name==="react/jsx-runtime"?jsx:name==="@/lib/phone-number"?phoneNumber:{Icon:"Icon",MoneyLine:"MoneyLine"}});
   vm.runInNewContext(compile("src/store/store-format.ts"),{exports:format,require:()=>({})});
   vm.runInNewContext(compile("src/components/BankTransferPanel.tsx"),{exports:shared,require:name=>name==="@/state/NFVContext"?{useNFV:()=>({copyToClipboard:async()=>true})}:name==="react"?h.react:name==="react/jsx-runtime"?jsx:name==="@/components/UI"?{Icon:"Icon"}:{copyTextToClipboard:async()=>{}}});
   vm.runInNewContext(compile("src/screens/store/StoreOrderDetail.tsx"),{exports,URL,URLSearchParams,Date,crypto,window:{setInterval:()=>1,clearInterval(){}},require:name=>{
@@ -104,6 +105,8 @@ test("cancelled paid orders show reconciliation guidance and only configured con
     const {h,exports}=detailModule(settings),tree=h.render(exports.StoreOrderDetail,{id:cancelled.id,locale:"vi",initialOrder:cancelled}),links=all(tree).filter(node=>node.type==="a");
     assert.match(text(tree),/Hết thời hạn thanh toán/);
     assert.match(text(tree),/đối soát/);
+    assert.match(text(tree),/0901234567/);
+    assert.doesNotMatch(text(tree),/\+84901234567/);
     assert.equal(links.some(node=>String(node.props.href).startsWith("tel:")),!!settings);
     assert.equal(links.some(node=>String(node.props.href).startsWith("mailto:")),!!settings);
   }

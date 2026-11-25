@@ -1,4 +1,5 @@
 import type {PublicSiteSettings} from "@/types/site-settings";
+import {formatVietnamPhone,normalizeTelephoneNumber} from "./phone-number.ts";
 
 export type ContactPresentation={
   email:string;
@@ -8,23 +9,16 @@ export type ContactPresentation={
   youtube:string;
 };
 
-function telephoneHref(value:string):string{
-  const trimmed=value.trim();
-  const digits=trimmed.replace(/\D/g,"");
-  if(digits.length<7||digits.length>15)return "";
-  return `tel:${trimmed.startsWith("+")?`+${digits}`:digits}`;
-}
-
 export function contactPresentation(settings:PublicSiteSettings|null):ContactPresentation{
   if(!settings)return {email:"",phone:"",phoneHref:"",facebook:"",youtube:""};
   const email=settings.is_email_enabled?settings.email.trim():"";
   const phone=settings.is_phone_enabled?settings.phone_display.trim():"";
-  const phoneHref=telephoneHref(phone);
+  const callablePhone=normalizeTelephoneNumber(phone);
   const social=(kind:"facebook"|"youtube")=>settings.links.find(link=>link.kind===kind)?.url||"";
   return {
     email,
-    phone:phoneHref?phone:"",
-    phoneHref,
+    phone:callablePhone?formatVietnamPhone(phone):"",
+    phoneHref:callablePhone?`tel:${callablePhone}`:"",
     facebook:social("facebook"),
     youtube:social("youtube"),
   };

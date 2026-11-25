@@ -17,17 +17,20 @@ function loadCopy(){
   return exports.copyText;
 }
 
-function component(buttons=[]){
+const phoneNumber={};
+vm.runInNewContext(ts.transpileModule(source("src/lib/phone-number.ts"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:phoneNumber});
+
+function component(buttons=[],{hooks=React,service={}}={}){
   const code=ts.transpileModule(source("src/screens/account-csa/AccountCsaTracker.tsx"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,exports={};
   vm.runInNewContext(code,{exports,React,console,URL,document:{},window:{},require:id=>{
-    if(id==="react")return React;if(id==="react/jsx-runtime")return jsxRuntime;
+    if(id==="react")return hooks;if(id==="react/jsx-runtime")return jsxRuntime;
     if(id==="@/components/UI")return {Button:({children,small,loading,variant,...props})=>{void small;void loading;void variant;buttons.push(props);return React.createElement("button",props,children);},FormField:({label,children})=>React.createElement("label",null,label,children),FormInput:props=>React.createElement("input",props),Icon:({name})=>React.createElement("span",{"data-icon":name}),Section:({title,description,children,className})=>React.createElement("section",{className},React.createElement("h2",null,title),description&&React.createElement("p",null,description),children)};
     if(id==="@/data/account-copy")return {copyText:(_locale,key,vars={})=>Object.entries(vars).reduce((text,[name,value])=>text.replace(`{${name}}`,String(value)),key)};
     if(id==="@/lib/date-format")return dateFormat;
     if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi"}})};
-    if(id==="@/account/csa-tracker-service")return {};
+    if(id==="@/account/csa-tracker-service")return service;
     if(id==="@/screens/csa/csa-packages-model")return {csaMoney:value=>`${value} VND`};
-    if(id==="./csa-guest-buyer")return {normalizeVietnamPhone:value=>value,sanitizeVietnamPhoneInput:value=>value};
+    if(id==="@/lib/phone-number")return phoneNumber;
     throw new Error(`Unexpected import ${id}`);
   }});
   return exports;
@@ -107,6 +110,39 @@ test("tracker form only promises request-code lookup supported by Backend",()=>{
   assert.equal(copyText("en","csa.trackerRequestExpiresAt"),"Request expires at");
 });
 
+test("tracker rejects pasted invalid phones and sends the canonical number for local input",async()=>{
+  const state=[],lookups=[];
+  let cursor=0;
+  const hooks={
+    useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value}];},
+    useRef(initial){return state[cursor++]??={current:initial};},
+  };
+  const {AccountCsaTracker}=component([],{hooks,service:{
+    lookupCsaContract:async({referenceCode,phone})=>{lookups.push([referenceCode,phone]);return base;},
+  }});
+  const nodes=node=>node?.props?[node,...[node.props.children].flat(Infinity).flatMap(nodes)]:[];
+  const render=()=>{cursor=0;return nodes(AccountCsaTracker());};
+  const input=name=>render().find(node=>node.props.name===name).props;
+  const change=(name,value)=>input(name).onChange({target:{value}});
+  const submit=()=>render().find(node=>node.type==="form").props.onSubmit({preventDefault(){}});
+
+  change("reference_code","csa-001");
+  change("phone","0901234567");
+  const phone=input("phone");
+  let prevented=false;
+  phone.onPaste({clipboardData:{getData:()=>"090\n1234567"},currentTarget:{value:phone.value,selectionStart:0,selectionEnd:phone.value.length},preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+  assert.equal(input("phone").value,"090 1234567");
+  submit();
+  assert.equal(input("phone")["aria-invalid"],true);
+  assert.deepEqual(lookups,[]);
+
+  change("phone","02412345678");
+  submit();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(lookups,[["CSA-001","+842412345678"]]);
+});
+
 test("tracker result uses a simple responsive summary",()=>{
   const css=source("app/styles/96-account-benefits.css");
   assert.match(css,/\.account-tab-csa-tracker \.csa-tracker-result\{[^}]*container-name:csa-tracker[^}]*container-type:inline-size/);
@@ -117,7 +153,7 @@ test("tracker result uses a simple responsive summary",()=>{
 
 test("tracker screen has validation, duplicate-submit, retry, session-expiry and new-lookup handling",()=>{
   const tracker=source("src/screens/account-csa/AccountCsaTracker.tsx");
-  assert.match(tracker,/normalizeVietnamPhone\(phone\)/);
+  assert.match(tracker,/normalizeLocalVietnamPhone\(phone\)/);
   assert.match(tracker,/lookupInFlight\.current/);
   assert.match(tracker,/downloadGeneration\.current/);
   assert.match(tracker,/isTrackerSessionExpired/);

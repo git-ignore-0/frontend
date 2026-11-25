@@ -11,6 +11,8 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const phoneNumber = {};
+vm.runInNewContext(transpile("src/lib/phone-number.ts"), { exports: phoneNumber });
 
 function loadContactPresentation() {
   const path = join(root, "src/lib/contact-settings.ts");
@@ -19,7 +21,7 @@ function loadContactPresentation() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, require: () => ({}) });
+  vm.runInNewContext(code, { exports, require: () => phoneNumber });
   return exports.contactPresentation;
 }
 
@@ -30,6 +32,7 @@ function loadOrganizationJsonLd() {
     URL,
     require: (id) => {
       if (id === "../config/site-brand.ts") return { SITE_ORIGIN: "https://site.example" };
+      if (id === "./phone-number.ts") return phoneNumber;
       throw new Error(`Unexpected import ${id}`);
     },
   });
@@ -192,11 +195,21 @@ test("contact presentation exposes enabled backend contact and social settings",
   const present = loadContactPresentation();
   assert.deepEqual(JSON.parse(JSON.stringify(present(settings))), {
     email: "hello@example.com",
-    phone: "+84 97 151 91 85",
+    phone: "0971519185",
     phoneHref: "tel:+84971519185",
     facebook: "https://facebook.com/nfv",
     youtube: "https://youtube.com/@nfv",
   });
+});
+
+test("contact presentation formats legacy Vietnamese numbers and preserves international phone links", () => {
+  const present = loadContactPresentation();
+  const legacy = present({ ...settings, phone_display: "+84 (24) 1234-5678" });
+  assert.equal(legacy.phone, "02412345678");
+  assert.equal(legacy.phoneHref, "tel:+842412345678");
+  const international = present({ ...settings, phone_display: "+1 (202) 555-0123" });
+  assert.equal(international.phone, "+1 (202) 555-0123");
+  assert.equal(international.phoneHref, "tel:+12025550123");
 });
 
 test("contact presentation hides disabled fields and never falls back when settings are absent", () => {
@@ -230,6 +243,7 @@ test("footer renders backend contacts and socials without hardcoded fallback val
   const enabled = renderFooter(settings);
   assert.match(enabled, /mailto:hello@example\.com/);
   assert.match(enabled, /tel:\+84971519185/);
+  assert.match(enabled, />0971519185<\/a>/);
   assert.match(enabled, /https:\/\/facebook\.com\/nfv/);
   assert.match(enabled, /https:\/\/youtube\.com\/@nfv/);
   assert.match(enabled, /aria-label="Facebook \(mở trong tab mới\)"/);

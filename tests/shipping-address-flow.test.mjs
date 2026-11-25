@@ -15,11 +15,14 @@ function run(script){
 test("shared shipping address validation accepts only an active configured ward",()=>run(`
   import assert from 'node:assert/strict';const model=await import(${JSON.stringify(modelUrl)});
   const areas=[{code:'66',name:'Đắk Lắk',wards:[{code:'22015',name:'Phường Tuy Hoà',shippingFeeVnd:'30000'}]}];
-  const draft={name:' Nguyễn Văn An ',phone:'090 123 4567',provinceCode:'66',wardCode:'22015',address:' Số 12, ngõ 5 '};
+  const draft={name:' Nguyễn Văn An ',phone:'0901234567',provinceCode:'66',wardCode:'22015',address:' Số 12, ngõ 5 '};
   assert.deepEqual(model.reviewShippingAddress(draft,areas),{complete:true,missing:[],value:{name:'Nguyễn Văn An',phone:'+84901234567',provinceCode:'66',wardCode:'22015',address:'Số 12, ngõ 5'}});
   assert.deepEqual(model.reviewShippingAddress({...draft,wardCode:'22045'},areas).missing,['wardCode']);
   assert.deepEqual(model.reviewShippingAddress({...draft,phone:'123'},areas).missing,['phone']);
-  assert.equal(model.sanitizeVietnamPhoneInput('09ab 01-23.45'),'09012345');
+  assert.deepEqual(model.reviewShippingAddress({...draft,phone:'090 123 4567'},areas).missing,['phone']);
+  assert.deepEqual(model.reviewShippingAddress({...draft,phone:'+84901234567'},areas).missing,['phone']);
+  assert.equal(model.reviewShippingAddress({...draft,phone:'+84901234567'},areas,{requireContact:false}).value.phone,'+84901234567');
+  assert.equal(model.reviewShippingAddress({...draft,phone:''},areas,{requireContact:false}).complete,true);
 `));
 
 test("supported provinces and wards are sorted A-Z using the active locale",()=>run(`

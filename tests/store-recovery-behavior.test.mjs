@@ -33,6 +33,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
  context.ui??={locale:"vi"};
  const load=(file,extra={})=>{const exports={};vm.runInNewContext(compile(file),{exports,ResizeObserver:resizeObserver,Date,Intl,performance:clock,crypto,URL,URLSearchParams,console,queueMicrotask,document,fetch:fetcher,window:{setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay,once:true,createdAt:clock.now()});return id},clearTimeout:id=>timers.delete(id),location:{search},matchMedia:()=>({matches:mobileAccount}),addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),setInterval:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id},clearInterval:id=>timers.delete(id),sessionStorage:{get length(){return storage.size},key:index=>[...storage.keys()][index]??null,getItem:key=>storage.get(key)??(key==="nfv_store_checkout_guest_v1"?JSON.stringify(guest):null),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}},require:name=>{
   if(name in extra)return extra[name];
+  if(name==="@/lib/phone-number"||name.endsWith("/phone-number.ts"))return load("src/lib/phone-number.ts");
   if(name==="@/store/use-checkout-delivery")return load("src/store/use-checkout-delivery.ts");
   if(name==="@/components/store/StoreDeliveryDates")return load("src/components/store/StoreDeliveryDates.tsx");
   if(name==="@/store/store-delivery"||name==="./store-delivery.ts")return load("src/store/store-delivery.ts");
@@ -95,10 +96,20 @@ test("changing authenticated owner hides old orders immediately and loads the ne
 });
 
 test("guest lookup ignores a slow restore after a newer lookup succeeds",async()=>{
- const old=deferred(),r=runtime("src/screens/AccountOrders.tsx",{context:{ui:{locale:"vi"}},services:{currentLookupStoreOrder:()=>old.promise,lookupStoreOrder:async()=>order("NEW")}});
+ const calls=[],old=deferred(),r=runtime("src/screens/AccountOrders.tsx",{context:{ui:{locale:"vi"}},services:{currentLookupStoreOrder:()=>old.promise,lookupStoreOrder:async(...args)=>{calls.push(args);return order("NEW")}}});
  r.render("GuestOrderLookup");r.flush();const inputs=nodes(r.tree).filter(n=>n.type==="FormInput");
  inputs[0].props.onChange({target:{value:"NEW"}});inputs[1].props.onChange({target:{value:guest.phone}});r.render();
+ for(const value of ["+84901234567","84901234567","090 123 4567","090123456789"]){
+  nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.onChange({target:{value}});r.render();
+  assert.equal(nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.value,value);
+  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&n.props.type==="submit").props.disabled,true);
+  await nodes(r.tree).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});r.render();
+  assert.equal(nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props["aria-invalid"],true);
+ }
+ assert.deepEqual(calls,[]);
+ nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.onChange({target:{value:"02412345678"}});r.render();
  await nodes(r.tree).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});r.render();
+ assert.deepEqual(calls,[["NEW","+842412345678"]]);
  old.resolve(order("OLD"));await tick();r.render();assert.equal(nodes(r.tree).find(n=>n.type==="Detail").props.id,"NEW");r.dispose();
 });
 
@@ -331,6 +342,27 @@ test("valid guest Store submit sends the same normalized address review used by 
  assert.equal(sent.guest.province_code,"66");
  assert.equal(sent.guest.ward_code,"1");
  r.dispose();
+});
+
+test("guest Store restores a legacy canonical draft and keeps newer invalid input invalid after reload",async()=>{
+ const key="nfv_store_checkout_guest_v1",phone="+84901234567";
+ const storage=new Map([[key,JSON.stringify({...guest,phone})]]);
+ let submitted=0;
+ const options={storage,services:{createStoreCheckout:async()=>{submitted++;return order()}}};
+ const fields=r=>nodes(r.tree).find(n=>n.type==="GuestBuyerFields").props;
+ const initial=checkout(options);
+ initial.render("Checkout");await initial.settle();
+ assert.equal(fields(initial).value.phone,"0901234567");
+ fields(initial).onChange({...fields(initial).value,phone});
+ initial.render();await initial.settle();initial.dispose();
+
+ const restored=checkout(options);
+ restored.render("Checkout");await restored.settle();
+ assert.equal(fields(restored).value.phone,phone);
+ assert.equal(confirm(restored).props.disabled,true);
+ await confirm(restored).props.onClick();
+ assert.equal(submitted,0);
+ restored.dispose();
 });
 
 test("an unknown checkout result survives remount and replays its original payload even after cart/address changes",async()=>{

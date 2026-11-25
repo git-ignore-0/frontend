@@ -46,7 +46,6 @@ function viewHarness(getStoreOrders,storage){
     if(name==="@/components/UI")return {Button:"Button",DataState:"DataState",FormInput:"FormInput",Status:"Status",Photo:"Photo",Tabs:({items,value,onChange})=>jsx.jsxs("div",{children:items.map(item=>jsx.jsx("button",{children:item.label,onClick:()=>onChange(item.value),"aria-pressed":value===item.value}))})};
     if(name==="@/store/store-format")return {formatUnitSize:value=>String(Number(value))};
     if(name==="@/lib/format")return {money:value=>String(value)};
-    if(name==="@/account/shipping-address-model")return {sanitizeVietnamPhoneInput:value=>value};
     if(name==="@/account/account-api")return {AccountApiError:class extends Error{}};
     return {};
   }});

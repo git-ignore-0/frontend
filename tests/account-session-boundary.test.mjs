@@ -7,7 +7,9 @@ const require=createRequire(import.meta.url),React=require('react'),jsx=require(
 const root=new URL('../',import.meta.url);
 function loadModule(path, resolve, globals={}){
  const exports={};
- vm.runInNewContext(ts.transpileModule(readFileSync(new URL(path,root),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,URLSearchParams,...globals,require:resolve});
+ vm.runInNewContext(ts.transpileModule(readFileSync(new URL(path,root),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,URLSearchParams,...globals,require:name=>
+  name==='@/lib/phone-number'||name.endsWith('/phone-number.ts')?loadModule('src/lib/phone-number.ts',()=>({})):resolve(name)
+ });
  return exports;
 }
 function renderAccount(auth,owner,{locale='vi',tab='profile',email=`${owner}@example.com`,shippingAddress,data,onRetry,accountHooks,accountUI,onAddressEdit,onAddressFields}={}){
@@ -38,7 +40,7 @@ function load(path){
    if(action)onRetry?.(action.onClick);
    return React.createElement('p',{'data-state':kind},title,action&&React.createElement('button',{onClick:action.onClick},action.label));
   },Section:({title,actions,children})=>React.createElement('section',null,React.createElement('h2',null,title),actions,children)};
-  if(name==='@/components/store/StorePrimitives')return {StoreRecipientSummary:({name,phone,address})=>React.createElement('p',null,name,' ',phone,' ',address)};
+  if(name==='@/components/store/StorePrimitives')return load('src/components/store/StorePrimitives.tsx');
   if(name==='@/lib/format')return {formatAddress:address=>address.detail};
   if(name==='@/screens/AccountOrders')return {GuestOrderLookup:()=>null};
   if(name==='@/components/auth/GuestAuthActions')return {GuestAuthActions:()=>null};
@@ -234,7 +236,7 @@ test('a background check preserves the guest flow on 502 and handles an expired 
 
 test('Account hides old private data until its context owner matches the authenticated subject',()=>{
  const html=renderAccount({status:'authenticated',session:{subject:'user-B'}},'user-A');
- assert.doesNotMatch(html,/user-A@example.com/);assert.match(html,/data-state="loading"/);
+ assert.doesNotMatch(html,/user-A@example.com|0901234567|\+84901234567/);assert.match(html,/data-state="loading"/);
 });
 
 test('Account displays private data for the matching subject',()=>{
@@ -243,7 +245,7 @@ test('Account displays private data for the matching subject',()=>{
 });
 
 test('checking and guest states do not render the previous profile',()=>{
- for(const status of ['checking','guest'])assert.doesNotMatch(renderAccount({status,session:null},'user-A'),/user-A@example.com/);
+ for(const status of ['checking','guest','expired'])assert.doesNotMatch(renderAccount({status,session:null},'user-A'),/user-A@example.com|0901234567|\+84901234567/);
 });
 
 test('a phone-only profile localizes missing email and opens Core edit with the profile tab return path',()=>{
@@ -251,7 +253,8 @@ test('a phone-only profile localizes missing email and opens Core edit with the 
  for(const [locale,missing,edit] of [['vi','Chưa có email','Chỉnh sửa'],['en','No email address','Edit']]){
   const html=renderAccount(auth,'user-B',{locale,email:null});
   assert.ok(html.includes(missing));
-  assert.ok(html.includes('+84901234567'));
+  assert.ok(html.includes('0901234567'));
+  assert.doesNotMatch(html,/\+84901234567/);
   const returnTo=`/account/${locale}?tab=profile`;
   assert.ok(html.includes(`href="/api/auth/account?returnTo=${encodeURIComponent(returnTo)}"`));
   assert.ok(html.includes(` ${edit}</a>`));
@@ -262,10 +265,10 @@ test('saved delivery details use the recipient in ShippingAddress independently 
  const auth={status:'authenticated',session:{subject:'user-B'}};
  const shippingAddress={name:'Delivery Recipient',phone:'+84987654321',detail:'Delivery address details'};
  const html=renderAccount(auth,'user-B',{tab:'address',email:null,shippingAddress});
- assert.ok(html.includes('Delivery Recipient +84987654321 Delivery address details'));
  const addressCard=html.match(/<section><h2>Địa chỉ<\/h2>[\s\S]*?<\/section>/)?.[0];
  assert.ok(addressCard);
- assert.doesNotMatch(addressCard,/\+84901234567/);
+ assert.match(addressCard,/Delivery Recipient.*0987654321.*Delivery address details/);
+ assert.doesNotMatch(addressCard,/0901234567|\+84901234567|\+84987654321/);
 });
 
 test('same-owner confirmation restores an address draft but never shows it while checking or to another owner',()=>{
@@ -280,18 +283,19 @@ test('same-owner confirmation restores an address draft but never shows it while
  render('A','Saved A');
  edit();
  render('A','Saved A');
+ assert.equal(fields.value.phone,'0901234567');
  fields.onChange({...fields.value,address:'Unsaved A'});
  Object.assign(auth,{status:'checking',session:null});
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"|0987654321|\+84987654321/);
  auth.status='error';
- assert.doesNotMatch(render('error','Saved A'),/Unsaved A|Saved A|name="address"/);
+ assert.doesNotMatch(render('error','Saved A'),/Unsaved A|Saved A|name="address"|0987654321|\+84987654321/);
  Object.assign(auth,{status:'authenticated',session:{subject:'A'}});
  accountUI.accountFetchState.address='loading';
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"|0987654321|\+84987654321/);
  accountUI.accountFetchState.address='ready';
  assert.match(render('A','Saved A'),/value="Unsaved A"/);
  Object.assign(auth,{session:{subject:'B'},lastConfirmedSubject:'B'});
- assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"/);
+ assert.doesNotMatch(render('A','Saved A'),/Unsaved A|Saved A|name="address"|0987654321|\+84987654321/);
  assert.match(render('B','Saved B'),/Saved B/);
  Object.assign(auth,{session:{subject:'A'},lastConfirmedSubject:'A'});
  assert.doesNotMatch(render('A','Saved A'),/Unsaved A|name="address"/);

@@ -20,7 +20,7 @@ function load(path, requireStub, globals = {}) {
   const exports = {};
   vm.runInNewContext(code, {
     exports,
-    require: requireStub,
+    require: (id) => id === "../lib/phone-number.ts" ? load("src/lib/phone-number.ts", () => ({})) : requireStub(id),
     URL,
     URLSearchParams,
     Headers,

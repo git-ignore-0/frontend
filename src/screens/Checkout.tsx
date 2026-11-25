@@ -25,6 +25,7 @@ import {csaHundredths} from "../lib/csa-units.ts";
 import {getSupportedShippingAreas} from "@/account/shipping-service";
 import type {SupportedShippingProvince} from "@/account/shipping-address-model";
 import {EMPTY_SHIPPING_ADDRESS,reviewGuestBuyer,type ShippingAddressDraft} from "@/account/shipping-address-model";
+import {formatVietnamPhone} from "@/lib/phone-number";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {buildStoreQuote,checkoutPayload,matchesCheckoutEstimate} from "@/store/store-quote";
 import {parseStoreProductDetail} from "@/store/store-model";
@@ -126,8 +127,20 @@ export function Checkout(){
  },[]);
 
 
- useEffect(()=>{queueMicrotask(()=>{try{const saved=window.sessionStorage.getItem(GUEST_DRAFT);guestLoaded.current=true;if(saved)setGuest({...EMPTY,...JSON.parse(saved)})}catch{guestLoaded.current=true}})},[]);
- useEffect(()=>{if(!guestLoaded.current)return;try{window.sessionStorage.setItem(GUEST_DRAFT,JSON.stringify(guest))}catch{}},[guest]);
+ useEffect(()=>{
+  queueMicrotask(()=>{
+   try{
+    const saved=window.sessionStorage.getItem(GUEST_DRAFT);
+    if(saved){
+     const {phoneInput,...draft}=JSON.parse(saved);
+     const phone=typeof draft.phone==="string"?draft.phone:"";
+     // A legacy draft may contain a canonical phone. Keep newer form input unchanged.
+     setGuest({...EMPTY,...draft,phone:phoneInput==="local"?phone:formatVietnamPhone(phone)});
+    }
+   }catch{}finally{guestLoaded.current=true}
+  });
+ },[]);
+ useEffect(()=>{if(!guestLoaded.current)return;try{window.sessionStorage.setItem(GUEST_DRAFT,JSON.stringify({...guest,phoneInput:"local"}))}catch{}},[guest]);
  useEffect(()=>{if(authPending)return;const session=auth.session;let live=true;queueMicrotask(()=>{if(live){setLoading(true);setLoadError(false)}});Promise.all([getSupportedShippingAreas(ui.locale),authenticated?storeRequest(()=>getStoreQuota(ui.locale),()=>rememberSignIn(intent.current)):Promise.resolve({active:false,products:[]})]).then(([nextAreas,nextQuota])=>{if(live){setAreas(nextAreas);setQuota(nextQuota)}}).catch(()=>{if(live)setLoadError(true)}).finally(()=>{if(live){setQuoteLoad({key:loadKey,session});setLoading(false)}});return()=>{live=false}},[authPending,authenticated,auth.session,ui.locale,loadKey,storeRequest,rememberSignIn]);
  useEffect(()=>{if(authPending)return;let live=true;if(!provinceCode||!wardCode){queueMicrotask(()=>{if(live){setSupported(false);setShipping(null);setShippingError(false)}});return()=>{live=false}}queueMicrotask(()=>{if(live){setShipping(null);setShippingError(false)}});getShippingQuote(provinceCode,wardCode).then(result=>{if(live){setSupported(result.supported);setShipping(result.shippingFeeVnd);setShippingKey(expectedShippingKey)}}).catch(()=>{if(live){setSupported(false);setShipping(null);setShippingError(true)}});return()=>{live=false}},[authPending,provinceCode,wardCode,shippingVersion,expectedShippingKey]);
 

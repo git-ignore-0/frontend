@@ -6,7 +6,16 @@ import vm from "node:vm";
 const require=createRequire(import.meta.url),ts=require("typescript");
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
 const compile=path=>ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-function module(path,stub=()=>({}),globals={}){const exports={};vm.runInNewContext(compile(path),{exports,require:name=>name==="./store-delivery.ts"?module("src/store/store-delivery.ts"):name==="./store-limits"?module("src/store/store-limits.ts"):stub(name),...globals});return exports}
+function module(path,stub=()=>({}),globals={}){
+ const exports={};
+ vm.runInNewContext(compile(path),{exports,require:name=>{
+  if(name==="@/lib/phone-number"||name.endsWith("/phone-number.ts"))return module("src/lib/phone-number.ts");
+  if(name==="./store-delivery.ts")return module("src/store/store-delivery.ts");
+  if(name==="./store-limits")return module("src/store/store-limits.ts");
+  return stub(name);
+ },...globals});
+ return exports;
+}
 const jsx={jsx:(type,props,key)=>({type,props,key}),jsxs:(type,props,key)=>({type,props,key})};
 const nodes=tree=>!tree||typeof tree!=="object"?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return {promise,resolve}};
@@ -50,7 +59,7 @@ function csaRuntime(voucher=defaultCsaVoucher,localValues=new Map()){
   if(name==="./useCsaVoucher")return {useCsaVoucher:()=>voucher};
   if(name==="./useCsaTerms")return {useCsaTerms:()=>({document:doc,status:"ready"})};
   if(name==="./csa-terms-model")return {csaTermsAcceptanceKey:()=>"terms"};
-  if(name==="./csa-guest-buyer")return {EMPTY_CSA_GUEST_BUYER:{},csaGuestBuyerReview:()=>({complete:false}),normalizeVietnamPhone:x=>x};
+  if(name==="./csa-guest-buyer")return {EMPTY_CSA_GUEST_BUYER:{},csaGuestBuyerReview:()=>({complete:false})};
   if(name==="./csa-account-review")return csaAccountReview;
   if(name==="./csa-pending-storage")return pendingStorage;
   if(name==="./csa-selection-model")return {csaSelectionSummary:()=>null,createCsaSelection:()=>selection};
@@ -271,9 +280,16 @@ test("stored checkout validation rejects incomplete or malformed strict contract
  assert.equal(checkoutDefinitelyRejected({status:422}),false);
 });
 
-test("guest recipient fields require a phone and limit the name to 150 characters",()=>{
+test("guest recipient fields enforce the required phone and name limit and validate raw pastes",()=>{
  const model=module("src/account/shipping-address-model.ts");
- const fields=module("src/components/account/ShippingAddressFields.tsx",name=>name==="react/jsx-runtime"?jsx:name==="@/account/shipping-address-model"?model:{FormField:"FormField",FormInput:"FormInput",FormSelect:"FormSelect"});
+ let phoneTouched=false;
+ const fields=module("src/components/account/ShippingAddressFields.tsx",name=>{
+  if(name==="react")return {useState:()=>[phoneTouched,value=>{phoneTouched=value}]};
+  if(name==="react/jsx-runtime")return jsx;
+  if(name==="@/account/shipping-address-model")return model;
+  if(name==="@/data/account-copy")return {copyText:(_locale,key)=>key};
+  return {FormField:"FormField",FormInput:"FormInput",FormSelect:"FormSelect"};
+ });
  const shared=module("src/components/account/GuestBuyerFields.tsx",name=>name==="react/jsx-runtime"?jsx:name==="@/account/shipping-address-model"?model:name==="@/components/account/ShippingAddressFields"?fields:{copyText:(_locale,key)=>key});
  const props={locale:"vi",value:{name:"a".repeat(180),phone:"0901234567",provinceCode:"66",wardCode:"1",address:"Số 12"},areas:[{code:"66",name:"Tỉnh",wards:[{code:"1",name:"Phường",shippingFeeVnd:"0"}]}],loading:false,error:false,onChange(){},onRetry(){}};
  const guest=shared.GuestBuyerFields({...props,submitted:true});
@@ -283,6 +299,29 @@ test("guest recipient fields require a phone and limit the name to 150 character
  assert.equal(name.props.maxLength,150);
  assert.equal(name.props["aria-invalid"],true);
  assert.equal(inputs.find(n=>n.type==="FormInput"&&n.props.name==="phone").props.required,true);
+
+ let draft={...props.value,name:"An"};
+ const phone=()=>{
+  const form=shared.GuestBuyerFields({...props,value:draft,submitted:false,onChange:value=>{draft=value}});
+  const shipping=nodes(form).find(n=>n.type===fields.ShippingAddressFields);
+  return nodes(fields.ShippingAddressFields(shipping.props)).find(n=>n.type==="FormInput"&&n.props.name==="phone").props;
+ };
+ const paste=value=>{
+  const input=phone();
+  let prevented=false;
+  input.onPaste({clipboardData:{getData:()=>value},currentTarget:{value:draft.phone,selectionStart:0,selectionEnd:draft.phone.length},preventDefault(){prevented=true}});
+  if(!prevented)input.onChange({target:{value:value.replace(/[\r\n]/g,"")}});
+ };
+ assert.equal(phone().maxLength,undefined);
+ for(const value of ["84901234567","+84901234567","090 1234567","090-1234567","090\n1234567","０901234567","090123456789"]){
+  paste("02412345678");
+  assert.equal(model.reviewGuestBuyer(draft,props.areas).value.phone,"+842412345678");
+  paste(value);
+  assert.equal(draft.phone,value.replace("\n"," "));
+  assert.equal(model.reviewGuestBuyer(draft,props.areas).complete,false);
+  phone().onBlur();
+  assert.equal(phone()["aria-invalid"],true);
+ }
 });
 
 

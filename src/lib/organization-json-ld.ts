@@ -1,5 +1,6 @@
 import {SITE_ORIGIN} from "../config/site-brand.ts";
 import type {PublicSiteSettings} from "../types/site-settings.ts";
+import {normalizeTelephoneNumber} from "./phone-number.ts";
 
 type OrganizationJsonLd={
   "@context":"https://schema.org";
@@ -14,13 +15,6 @@ type OrganizationJsonLd={
 function validEmail(value:string):string{
   const email=value.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:"";
-}
-
-function normalizedPhone(value:string):string{
-  const trimmed=value.trim();
-  const digits=trimmed.replace(/\D/g,"");
-  if(digits.length<7||digits.length>15)return "";
-  return trimmed.startsWith("+")?`+${digits}`:digits;
 }
 
 function platformHost(kind:"facebook"|"youtube",hostname:string):boolean{
@@ -40,7 +34,7 @@ export function organizationJsonLd(settings:PublicSiteSettings|null):Organizatio
   const value:OrganizationJsonLd={"@context":"https://schema.org","@type":"Organization",name:"Natural Farming Vietnam",url:SITE_ORIGIN};
   if(!settings)return value;
   const email=settings.is_email_enabled?validEmail(settings.email):"";
-  const telephone=settings.is_phone_enabled?normalizedPhone(settings.phone_display):"";
+  const telephone=settings.is_phone_enabled?normalizeTelephoneNumber(settings.phone_display):"";
   const sameAs=settings.links.flatMap(link=>{
     if(link.kind!=="facebook"&&link.kind!=="youtube")return [];
     const url=socialUrl(link.kind,link.url);

@@ -17,7 +17,9 @@ const compile=(path,jsx=false)=>ts.transpileModule(source(path),{compilerOptions
 
 function runModule(path,requireStub,globals={}){
  const exp={};
- vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:requireStub,React,console,URLSearchParams,...globals});
+ vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:id=>
+  id==="@/lib/phone-number"||id.endsWith("/phone-number.ts")?runModule("src/lib/phone-number.ts",()=>({})):requireStub(id),
+ React,console,URLSearchParams,...globals});
  return exp;
 }
 
@@ -72,9 +74,11 @@ const transferPanel=runModule("src/components/BankTransferPanel.tsx",id=>{
  throw Error(`Unexpected transfer import ${id}`);
 });
 const shippingFields=runModule("src/components/account/ShippingAddressFields.tsx",id=>{
+ if(id==="react")return React;
  if(id==="react/jsx-runtime")return jsxRuntime;
  if(id==="@/components/UI")return UI;
  if(id==="@/account/shipping-address-model")return shippingAddressModel;
+ if(id==="@/data/account-copy")return {copyText:(_locale,key)=>key};
  throw Error(`Unexpected shipping fields import ${id}`);
 });
 const guestFields=runModule("src/components/account/GuestBuyerFields.tsx",id=>{
@@ -358,7 +362,8 @@ test("Account step requires a known complete address and blocks missing data",()
  const complete=renderToStaticMarkup(React.createElement(component.AccountCsaAccountStep,{locale:"vi",profile,address,onBack:()=>{},onContinue:()=>{}}));
  assert.match(complete,/25 Đường Láng, Phường Láng, Hà Nội/);
  assert.match(complete,/Người nhận/);
- assert.match(complete,/\+84912345678/);
+ assert.match(complete,/0912345678/);
+ assert.doesNotMatch(complete,/\+84912345678|0911111111/);
  assert.match(complete,/profile\.noEmail/);
  assert.doesNotMatch(complete,/csa\.accountIncomplete/);
  assert.match(complete,/csa\.continue/);

@@ -5,11 +5,12 @@ const require=createRequire(import.meta.url),fs=require('fs'),vm=require('vm'),r
 const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})};
 let cursor=0;const state=[];const react={useState(v){const i=cursor++;if(!(i in state))state[i]=v;return [state[i],x=>state[i]=typeof x==='function'?x(state[i]):x]}};
 const areas=[{code:'P',name:'Province',wards:[{code:'W',name:'Ward',shippingFeeVnd:'0'}]}];
-const model={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(root+'/src/account/shipping-address-model.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:model});
+const phoneNumber={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(root+'/src/lib/phone-number.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:phoneNumber});
+const model={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(root+'/src/account/shipping-address-model.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:model,require:()=>phoneNumber});
 const ui={Button:'Button',FormField:'FormField',FormInput:'FormInput',FormSelect:'FormSelect'};
 const fieldModule={};
 const fieldsSource=fs.readFileSync(root+'/src/components/account/ShippingAddressFields.tsx','utf8');
-vm.runInNewContext(ts.transpileModule(fieldsSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:fieldModule,require(n){if(n==='react/jsx-runtime')return jsx;if(n==='@/components/UI')return ui;return model;}});
+vm.runInNewContext(ts.transpileModule(fieldsSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:fieldModule,require(n){if(n==='react')return react;if(n==='react/jsx-runtime')return jsx;if(n==='@/components/UI')return ui;if(n==='@/lib/phone-number')return phoneNumber;return model;}});
 const out={};const source=fs.readFileSync(root+'/src/screens/AccountProfile.tsx','utf8')+'\nexport {AddressEditor};';
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:out,require(n){if(n==='react')return react;if(n==='react/jsx-runtime')return jsx;if(n==='@/state/NFVContext')return {useNFV:()=>({ui:{locale:'vi'}})};if(n==='@/components/UI')return {Button:'Button'};if(n==='@/account/shipping-address-model')return model;if(n==='@/hooks/useSupportedShippingAreas')return {useSupportedShippingAreas:()=>({areas,loading:false,error:false})};if(n==='@/components/account/ShippingAddressFields')return {ShippingAddressFields:'Fields'};return {}}});
 const nodes=t=>!t||typeof t!=='object'?[]:[t,...[t.props?.children].flat(Infinity).flatMap(nodes)];
@@ -21,6 +22,14 @@ test('the account address form renders only location fields',()=>{
  const rendered=nodes(fieldModule.ShippingAddressFields(fields.props));
  const inputNames=rendered.filter(node=>node.type==='FormInput'||node.type==='FormSelect').map(node=>node.props.name);
  assert.deepEqual(inputNames,['province_code','ward_code','address']);
+});
+test('the address editor does not treat phone representation as a location change',()=>{
+ cursor=0;
+ const value={...initial,phone:'+84901234567'};
+ const tree=out.AddressEditor({initial,value,onChange(){},isNew:false,busy:false,cancel(){},save(){assert.fail('unchanged address')},saveError:''});
+ const submit=nodes(tree).find(n=>n.type==='Button'&&n.props.type==='submit');
+ assert.equal(submit.props.disabled,true);
+ nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
 });
 test('address save stays disabled until all changed fields are valid',()=>{
  let t=render();assert.equal(nodes(t).find(n=>n.type==='Button'&&n.props.type==='submit').props.disabled,true);

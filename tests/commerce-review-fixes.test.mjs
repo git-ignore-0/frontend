@@ -24,10 +24,9 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const defaultCsaVoucher={ready:true,loading:false,code:"",change:()=>{},clear:()=>{},apply:async()=>{}};
 const shippingAddress={name:"Recipient",phone:"+84901234567",provinceCode:"66",wardCode:"22015",detail:"12 Láng",city:"Hà Nội",ward:"Phường Láng",isSupported:true,updatedAt:"2026-11-21T01:23:45.123456+00:00",shippingAddressVersion:"a".repeat(64)};
 const memberQuote={quoteToken:"A",expiresAt:"2099-01-01",shippingAddressUpdatedAt:shippingAddress.updatedAt,shippingAddressVersion:shippingAddress.shippingAddressVersion};
-const shippingAddressModel=module("src/account/shipping-address-model.ts");
-const csaAccountReview=module("src/screens/account-csa/csa-account-review.ts",()=>shippingAddressModel);
+const csaAccountReview=module("src/screens/account-csa/csa-account-review.ts");
 const csaNavigation=module("src/lib/csa-navigation.ts",undefined,{URLSearchParams});
-const pendingStorage=module("src/screens/account-csa/csa-pending-storage.ts",()=>shippingAddressModel);
+const pendingStorage=module("src/screens/account-csa/csa-pending-storage.ts");
 
 function csaRuntime(voucher=defaultCsaVoucher,localValues=new Map()){
  const quoteInputs=[],lookups=[];

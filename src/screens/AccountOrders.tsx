@@ -143,5 +143,13 @@ export function GuestOrderLookup(){
   finally{if(request===sequence.current){submitting.current=false;setBusy(false)}}
  };
  if(order)return <section className="account-guest-order-result"><Button variant="outline" onClick={()=>{sequence.current+=1;setOrder(null)}}>{copy.lookup}</Button><StoreOrderDetail key={order.id} id={order.id} locale={ui.locale} initialOrder={order} onLoaded={setOrder} loadOrder={()=>currentLookupStoreOrder()} readOnly/></section>;
- return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup"><p>{copy.lookupIntro}</p><form className="form-grid" onSubmit={submit}><div><label className="label" htmlFor="guestOrderReference">{copy.reference}</label><FormInput id="guestOrderReference" maxLength={24} autoComplete="off" value={reference} onChange={event=>setReference(event.target.value.toUpperCase())}/></div><div><label className="label" htmlFor="guestOrderPhone">{copy.phone}</label><FormInput id="guestOrderPhone" type="tel" inputMode="tel" autoComplete="tel" value={phone} aria-invalid={invalidPhone} onChange={event=>setPhone(event.target.value)} onPaste={event=>handlePhonePaste(event,setPhone)} onBlur={()=>setPhoneTouched(true)}/>{invalidPhone&&<span className="help-error" role="alert">{copyText(ui.locale,"profile.invalidPhone")}</span>}</div><div className="wide"><Button type="submit" loading={busy} disabled={busy||!reference.trim()||!normalizedPhone}>{copy.find}</Button></div></form>{error&&<p className="help-error" role="alert">{error}</p>}</StoreSection>;
+ return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup">
+  <p>{copy.lookupIntro}</p>
+  <form className="form-grid" onSubmit={submit}>
+   <div><label className="label" htmlFor="guestOrderReference">{copy.reference}</label><FormInput id="guestOrderReference" maxLength={24} autoComplete="off" value={reference} disabled={busy} onChange={event=>setReference(event.target.value.toUpperCase())}/></div>
+   <div><label className="label" htmlFor="guestOrderPhone">{copy.phone}</label><FormInput id="guestOrderPhone" type="tel" inputMode="tel" autoComplete="tel" value={phone} disabled={busy} aria-invalid={invalidPhone} onChange={event=>setPhone(event.target.value)} onPaste={event=>handlePhonePaste(event,setPhone)} onBlur={()=>setPhoneTouched(true)}/>{invalidPhone&&<span className="help-error" role="alert">{copyText(ui.locale,"profile.invalidPhone")}</span>}</div>
+   <div className="wide"><Button type="submit" loading={busy} disabled={busy||!reference.trim()||!normalizedPhone}>{copy.find}</Button></div>
+  </form>
+  {error&&<p className="help-error" role="alert">{error}</p>}
+ </StoreSection>;
 }

@@ -34,7 +34,7 @@ export function AddressView({draft,onDraftChange}:{draft:ShippingAddressDraft|nu
  const address=data.shippingAddress;
  const status=ui.accountFetchState.address;
  const initial:ShippingAddressDraft={
-   name:data.profile.name||address?.name||"",phone:formatVietnamPhone(data.profile.phone||address?.phone),
+   name:data.profile.name||address?.name||"",phone:formatVietnamPhone(data.profile.phone||address?.phone||""),
    provinceCode:address?.isSupported===false?"":address?.provinceCode??"",
    wardCode:address?.isSupported===false?"":address?.wardCode??"",address:address?.detail??"",
  };

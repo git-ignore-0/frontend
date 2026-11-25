@@ -97,20 +97,61 @@ test("changing authenticated owner hides old orders immediately and loads the ne
 
 test("guest lookup ignores a slow restore after a newer lookup succeeds",async()=>{
  const calls=[],old=deferred(),r=runtime("src/screens/AccountOrders.tsx",{context:{ui:{locale:"vi"}},services:{currentLookupStoreOrder:()=>old.promise,lookupStoreOrder:async(...args)=>{calls.push(args);return order("NEW")}}});
- r.render("GuestOrderLookup");r.flush();const inputs=nodes(r.tree).filter(n=>n.type==="FormInput");
- inputs[0].props.onChange({target:{value:"NEW"}});inputs[1].props.onChange({target:{value:guest.phone}});r.render();
- for(const value of ["+84901234567","84901234567","090 123 4567","090123456789"]){
-  nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.onChange({target:{value}});r.render();
-  assert.equal(nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.value,value);
+ const phone=()=>nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props;
+ r.render("GuestOrderLookup");r.flush();
+ nodes(r.tree).find(n=>n.props?.id==="guestOrderReference").props.onChange({target:{value:"NEW"}});
+ phone().onChange({target:{value:guest.phone}});r.render();
+ for(const value of ["+84901234567","84901234567","090 123 4567","090\n1234567","090123456789"]){
+  const input=phone();
+  let prevented=false;
+  input.onPaste({clipboardData:{getData:()=>value},currentTarget:{value:input.value,selectionStart:0,selectionEnd:input.value.length},preventDefault(){prevented=true}});
+  if(!prevented)input.onChange({target:{value:value.replace(/[\r\n]/g,"")}});
+  r.render();
+  assert.equal(phone().value,value.replace("\n"," "));
   assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&n.props.type==="submit").props.disabled,true);
   await nodes(r.tree).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});r.render();
-  assert.equal(nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props["aria-invalid"],true);
+  assert.equal(phone()["aria-invalid"],true);
  }
  assert.deepEqual(calls,[]);
- nodes(r.tree).find(n=>n.props?.id==="guestOrderPhone").props.onChange({target:{value:"02412345678"}});r.render();
+ phone().onChange({target:{value:"02412345678"}});r.render();
  await nodes(r.tree).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});r.render();
  assert.deepEqual(calls,[["NEW","+842412345678"]]);
  old.resolve(order("OLD"));await tick();r.render();assert.equal(nodes(r.tree).find(n=>n.type==="Detail").props.id,"NEW");r.dispose();
+});
+
+test("guest lookup locks both inputs until failure and retries with the new reference and phone",async()=>{
+ const pending=deferred(),calls=[];
+ const r=runtime("src/screens/AccountOrders.tsx",{services:{
+  currentLookupStoreOrder:async()=>null,
+  lookupStoreOrder:(...args)=>{calls.push(args);return calls.length===1?pending.promise:Promise.resolve(order(args[0]));},
+ }});
+ const input=id=>nodes(r.tree).find(node=>node.props?.id===id).props;
+ const edit=(id,value)=>input(id).onChange({target:{value}});
+ const submit=()=>nodes(r.tree).find(node=>node.type==="form").props.onSubmit({preventDefault(){}});
+ r.render("GuestOrderLookup");await r.settle();
+ edit("guestOrderReference","first");edit("guestOrderPhone",guest.phone);r.render();
+ const first=submit();r.render();
+ assert.equal(input("guestOrderReference").disabled,true);
+ assert.equal(input("guestOrderPhone").disabled,true);
+ await submit();
+ assert.deepEqual(calls,[["FIRST","+84901234567"]]);
+
+ pending.reject(new ApiError(404));await first;r.render();
+ assert.equal(input("guestOrderReference").disabled,false);
+ assert.equal(input("guestOrderPhone").disabled,false);
+ assert.equal(input("guestOrderReference").value,"FIRST");
+ assert.equal(input("guestOrderPhone").value,guest.phone);
+ assert.equal(nodes(r.tree).find(node=>node.props?.role==="alert")?.props.children,"Không tìm thấy đơn hàng với thông tin này.");
+ assert.ok(!nodes(r.tree).some(node=>node.type==="Detail"));
+
+ edit("guestOrderReference","retry");edit("guestOrderPhone","02412345678");r.render();
+ await submit();r.render();
+ assert.deepEqual(calls,[["FIRST","+84901234567"],["RETRY","+842412345678"]]);
+ assert.equal(nodes(r.tree).find(node=>node.type==="Detail").props.id,"RETRY");
+ nodes(r.tree).find(node=>node.type==="Button").props.onClick();r.render();
+ assert.equal(input("guestOrderReference").disabled,false);
+ assert.equal(input("guestOrderPhone").disabled,false);
+ r.dispose();
 });
 
 function checkout(options={}){
@@ -363,6 +404,15 @@ test("guest Store restores a legacy canonical draft and keeps newer invalid inpu
  await confirm(restored).props.onClick();
  assert.equal(submitted,0);
  restored.dispose();
+});
+
+test("guest Store still restores a legacy draft with whitespace inside the phone",async()=>{
+ const storage=new Map([["nfv_store_checkout_guest_v1",JSON.stringify({...guest,phone:"+84\t901-234-567"})]]);
+ const r=checkout({storage});
+ r.render("Checkout");await r.settle();
+ const fields=nodes(r.tree).find(n=>n.type==="GuestBuyerFields").props;
+ assert.equal(fields.value.phone,guest.phone);
+ r.dispose();
 });
 
 test("an unknown checkout result survives remount and replays its original payload even after cart/address changes",async()=>{

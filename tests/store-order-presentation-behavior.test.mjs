@@ -52,8 +52,9 @@ function hooks(){let cursor=0,states=[];return {react:{useState(initial){const i
 
 function detailModule(settings=null){
   const h=hooks(),presentationExports=(()=>{const value={};vm.runInNewContext(compile("src/store/store-order-presentation.ts"),{exports:value,URL,URLSearchParams,require:()=>({})});return value})(),exports={};
-  const shared={},format={},primitives={},phoneNumber={};
+  const shared={},format={},primitives={},phoneNumber={},contact={};
   vm.runInNewContext(compile("src/lib/phone-number.ts"),{exports:phoneNumber});
+  vm.runInNewContext(compile("src/lib/contact-settings.ts"),{exports:contact,require:()=>phoneNumber});
   vm.runInNewContext(compile("src/components/store/StorePrimitives.tsx"),{exports:primitives,require:name=>name==="react/jsx-runtime"?jsx:name==="@/lib/phone-number"?phoneNumber:{Icon:"Icon",MoneyLine:"MoneyLine"}});
   vm.runInNewContext(compile("src/store/store-format.ts"),{exports:format,require:()=>({})});
   vm.runInNewContext(compile("src/components/BankTransferPanel.tsx"),{exports:shared,require:name=>name==="@/state/NFVContext"?{useNFV:()=>({copyToClipboard:async()=>true})}:name==="react"?h.react:name==="react/jsx-runtime"?jsx:name==="@/components/UI"?{Icon:"Icon"}:{copyTextToClipboard:async()=>{}}});
@@ -76,7 +77,7 @@ function detailModule(settings=null){
     if(name==="@/store/store-order-presentation")return presentationExports;
     if(name==="@/account/administrative-units-service")return {resolveAdministrativeAddressNames:async()=>({provinceName:"Đắk Lắk",wardName:"Phường Tuy Hoà"})};
     if(name==="@/hooks/useSiteSettings")return {useSiteSettings:()=>settings};
-    if(name==="@/lib/contact-settings")return {contactPresentation:value=>value?{phone:"0901234567",phoneHref:"tel:0901234567",email:"hello@example.com"}:{phone:"",phoneHref:"",email:""}};
+    if(name==="@/lib/contact-settings")return contact;
     return {};
   }});
   return {h,exports,shared};
@@ -101,13 +102,13 @@ test("invalid backend payment payload is explained and not rendered as transfer 
 
 test("cancelled paid orders show reconciliation guidance and only configured contact links",()=>{
   const cancelled=order({status:"cancelled",cancelledAt:"2026-11-01T01:05:00Z",cancellationReason:"expired",expiresAt:null});
-  for(const settings of [null,{enabled:true}]){
+  for(const settings of [null,{is_phone_enabled:true,phone_display:"(+84) 901 234 567",is_email_enabled:true,email:"hello@example.com",links:[]}]){
     const {h,exports}=detailModule(settings),tree=h.render(exports.StoreOrderDetail,{id:cancelled.id,locale:"vi",initialOrder:cancelled}),links=all(tree).filter(node=>node.type==="a");
     assert.match(text(tree),/Hết thời hạn thanh toán/);
     assert.match(text(tree),/đối soát/);
     assert.match(text(tree),/0901234567/);
     assert.doesNotMatch(text(tree),/\+84901234567/);
-    assert.equal(links.some(node=>String(node.props.href).startsWith("tel:")),!!settings);
+    assert.deepEqual(links.map(node=>node.props.href).filter(href=>String(href).startsWith("tel:")),settings?["tel:+84901234567"]:[]);
     assert.equal(links.some(node=>String(node.props.href).startsWith("mailto:")),!!settings);
   }
 });

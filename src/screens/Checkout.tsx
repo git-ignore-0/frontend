@@ -25,7 +25,7 @@ import {csaHundredths} from "../lib/csa-units.ts";
 import {getSupportedShippingAreas} from "@/account/shipping-service";
 import type {SupportedShippingProvince} from "@/account/shipping-address-model";
 import {EMPTY_SHIPPING_ADDRESS,reviewGuestBuyer,type ShippingAddressDraft} from "@/account/shipping-address-model";
-import {formatVietnamPhone} from "@/lib/phone-number";
+import {formatVietnamPhone,normalizeVietnamPhone} from "@/lib/phone-number";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {buildStoreQuote,checkoutPayload,matchesCheckoutEstimate} from "@/store/store-quote";
 import {parseStoreProductDetail} from "@/store/store-model";
@@ -134,8 +134,8 @@ export function Checkout(){
     if(saved){
      const {phoneInput,...draft}=JSON.parse(saved);
      const phone=typeof draft.phone==="string"?draft.phone:"";
-     // A legacy draft may contain a canonical phone. Keep newer form input unchanged.
-     setGuest({...EMPTY,...draft,phone:phoneInput==="local"?phone:formatVietnamPhone(phone)});
+     // Apply legacy normalization only when restoring an older draft.
+     setGuest({...EMPTY,...draft,phone:phoneInput==="local"?phone:formatVietnamPhone(normalizeVietnamPhone(phone)||phone)});
     }
    }catch{}finally{guestLoaded.current=true}
   });

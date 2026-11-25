@@ -204,9 +204,11 @@ test("contact presentation exposes enabled backend contact and social settings",
 
 test("contact presentation formats legacy Vietnamese numbers and preserves international phone links", () => {
   const present = loadContactPresentation();
-  const legacy = present({ ...settings, phone_display: "+84 (24) 1234-5678" });
-  assert.equal(legacy.phone, "02412345678");
-  assert.equal(legacy.phoneHref, "tel:+842412345678");
+  for (const phone_display of ["024 1234-5678", "84 (24) 1234-5678", "(+84) 24 1234-5678"]) {
+    const legacy = present({ ...settings, phone_display });
+    assert.equal(legacy.phone, "02412345678");
+    assert.equal(legacy.phoneHref, "tel:+842412345678");
+  }
   const international = present({ ...settings, phone_display: "+1 (202) 555-0123" });
   assert.equal(international.phone, "+1 (202) 555-0123");
   assert.equal(international.phoneHref, "tel:+12025550123");

@@ -13,6 +13,11 @@ export function isCanonicalVietnamPhone(value:unknown,domain:keyof typeof nation
   return typeof value==="string"&&value.startsWith(countryPrefix)&&nationalPatterns[domain].test(value.slice(countryPrefix.length));
 }
 
+function nationalDigits(value:string):string{
+  const prefix=storedPrefixes.find(prefix=>value.startsWith(prefix));
+  return prefix?value.slice(prefix.length):"";
+}
+
 function canonicalContact(national:string):string{
   return nationalPatterns.contact.test(national)?countryPrefix+national:"";
 }
@@ -25,14 +30,16 @@ export function normalizeLocalVietnamPhone(value:string):string{
 
 /** Accept previously saved contact values without changing their ownership or meaning. */
 export function normalizeVietnamPhone(value:string):string{
-  const compact=value.replace(/[\s().-]/g,"");
-  const prefix=storedPrefixes.find(prefix=>compact.startsWith(prefix));
-  return prefix?canonicalContact(compact.slice(prefix.length)):"";
+  return canonicalContact(nationalDigits(value.replace(/[\s().-]/g,"")));
 }
 
-export function formatVietnamPhone(value:string|null|undefined):string{
-  const canonical=normalizeVietnamPhone(value??"");
-  return canonical?localPrefix+canonical.slice(countryPrefix.length):value??"";
+/** Format stored Vietnamese numbers using the presentation separators shared with Backend and Admin. */
+export function formatVietnamPhone(value:string):string;
+export function formatVietnamPhone(value:string|null|undefined):string|null;
+export function formatVietnamPhone(value:string|null|undefined):string|null{
+  if(value==null)return null;
+  const national=nationalDigits(value.replace(/[ ().-]/g,""));
+  return nationalPatterns.contact.test(national)?localPrefix+national:value;
 }
 
 export function handlePhonePaste(event:ClipboardEvent<HTMLInputElement>,update:(value:string)=>void):void{
@@ -44,8 +51,10 @@ export function handlePhonePaste(event:ClipboardEvent<HTMLInputElement>,update:(
   update(value.slice(0,selectionStart??value.length)+text.replace(/[\r\n]/g," ")+value.slice(selectionEnd??value.length));
 }
 
-/** Keep the existing international telephone fallback for public site settings. */
+/** Normalize Vietnamese calling destinations and preserve the international fallback. */
 export function normalizeTelephoneNumber(value:string):string{
+  const vietnamese=normalizeVietnamPhone(value);
+  if(vietnamese)return vietnamese;
   const trimmed=value.trim();
   const digits=trimmed.replace(/\D/g,"");
   if(digits.length<7||digits.length>15)return "";

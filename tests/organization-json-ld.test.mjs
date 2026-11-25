@@ -30,6 +30,20 @@ test("organization structured data includes only enabled valid contact and socia
   `);
 });
 
+test("organization structured data uses the canonical telephone for legacy Vietnamese numbers",()=>{
+  run(`
+    import assert from 'node:assert/strict';
+    const {organizationJsonLd}=await import(${JSON.stringify(jsonLdUrl)});
+    const settings={is_email_enabled:false,is_phone_enabled:true,links:[]};
+    for(const phone_display of ['024 1234 5678','842412345678','(+84) 24 1234-5678']){
+      assert.equal(organizationJsonLd({...settings,phone_display}).telephone,'+842412345678');
+    }
+    assert.equal(organizationJsonLd({...settings,phone_display:'+1 (202) 555-0123'}).telephone,'+12025550123');
+    assert.equal(organizationJsonLd({...settings,phone_display:''}).telephone,undefined);
+    assert.equal(organizationJsonLd({...settings,phone_display:'(+84) 24 1234-5678',is_phone_enabled:false}).telephone,undefined);
+  `);
+});
+
 test("organization structured data omits disabled or malformed optional values",()=>{
   run(`
     import assert from 'node:assert/strict';

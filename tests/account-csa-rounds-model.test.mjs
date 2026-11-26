@@ -31,3 +31,11 @@ test('round delivery is a strict date and reselect closes at Vietnam midnight',(
  assert.equal(access(Date.parse('2026-12-31T16:59:59Z')).mode,'reselect');assert.equal(access(Date.parse('2026-12-31T17:00:00Z')).mode,'readonly');
  assert.equal(m.parseCsaRound({...raw,delivery_date:'2028-02-29'}).deliveryDate,'2028-02-29');
 `));
+
+test('round products accept a capped held-only row and an older catalog row',()=>run(`
+ const id='11111111-1111-4111-8111-111111111111';
+ const model={id,name:'Rau',unit_size:'500',unit_label:'g',primary_image:null,available_quantity:2,csa_quota_group:{id,name:'Rau',cost:'1.00'}};
+ assert.equal(m.parseCsaProduct({...model,selection_mode:'held_only'}).heldOnly,true);
+ assert.equal(m.parseCsaProduct(model).heldOnly,undefined);
+ assert.throws(()=>m.parseCsaProduct({...model,selection_mode:'unknown'}));
+`));

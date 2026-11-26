@@ -57,7 +57,12 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   const reselect = access.mode === 'reselect';
   const saveDisabled = disabled || invalid || (!selection && lines.length === 0);
   const changeQuantity = (id: string, quantity: number) => {
-    if (!disabled) setDraft(value => quantity > 0 && !(value[id] > 0) && Object.values(value).filter(q => q > 0).length >= CSA_SELECTION_MAX_LINES ? value : {...value, [id]: quantity});
+    if (disabled) return;
+    setDraft(value => {
+      const currentQuantity = value[id] ?? 0;
+      if (quantity > currentQuantity && quantity > (limits[id] ?? 0)) return value;
+      return {...value, [id]: quantity};
+    });
   };
 
   return <main className="main-content"><div className={`container store-commerce ${styles.page}`}>

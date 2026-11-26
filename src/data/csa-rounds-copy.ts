@@ -7,6 +7,7 @@ const en:typeof vi={title:'Produce selection rounds',rounds:'rounds',empty:'No s
 export function csaRoundsCopy(locale:Locale){return locale==='en'?en:vi;}
 export function csaRoundError(error:unknown,locale:Locale):string{
  const c=csaRoundsCopy(locale),code=error instanceof AccountApiError?error.code:'';
+ if(code==='csa_product_unavailable')return c.unavailableProduct;
  if(code==='csa_stock_insufficient')return c.stock;
  if(code==='csa_quota_insufficient')return c.quotaChanged;
  if(code==='csa_selection_stale')return c.stale;

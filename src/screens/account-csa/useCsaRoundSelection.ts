@@ -183,6 +183,16 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
     };
   }, []);
 
+  function applySavedSelection(snapshot: SelectionSnapshot, selection: CsaSelection) {
+    const quantities = new Map(selection.lines.map(line => [line.productId, line.quantity]));
+    const products = snapshot.products.flatMap(product => {
+      if (!product.heldOnly) return [product];
+      const quantity = quantities.get(product.id);
+      return quantity ? [{...product, availableQuantity: Math.min(product.availableQuantity, quantity)}] : [];
+    });
+    applySnapshot({...snapshot, products, selection}, true);
+  }
+
   async function submit(confirm = false) {
     if (mutation.current || !current || loading || needsReload || access.mode === 'readonly') return;
     const generation = lifecycle.current;
@@ -194,19 +204,20 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
     try {
       const selected = await submitCsaSelection({roundId, selection: savedRef.current, lines: draftLines(draftRef.current), locale, confirm});
       if (!isCurrent()) return;
-      applySnapshot({...current, selection: selected}, true);
+      applySavedSelection(current, selected);
+      setNeedsReload(true);
       await loadRef.current(true);
       if (isCurrent()) void refreshResource('csa');
     } catch (caught) {
       if (!isCurrent()) return;
       const failure = caught instanceof CsaConfirmationError ? caught.reason : caught;
       if (caught instanceof CsaConfirmationError) {
-        applySnapshot({...current, selection: caught.selection}, true);
+        applySavedSelection(current, caught.selection);
       }
       setError(failure);
       if (failure instanceof AccountApiError && failure.status === 401) auth.expire();
       if (failure instanceof AccountApiError && failure.status === 409) {
-        if (['csa_stock_insufficient', 'csa_quota_insufficient'].includes(failure.code)) {
+        if (['csa_stock_insufficient', 'csa_quota_insufficient', 'csa_product_unavailable'].includes(failure.code)) {
           try {
             const next = await snapshot(roundId, locale, historyPage);
             if (isCurrent()) applySnapshot(next, false);

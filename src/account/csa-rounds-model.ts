@@ -13,7 +13,7 @@ export type CsaSelection = {
   id:string;roundId:string;membershipId:string;state:"selecting"|"locked"|"reselecting"|"confirmed"|"cancelled"|"delivered";
   revision:number;orderId:string|null;reopenUntil:string|null;serverTime:string;lines:CsaSelectionLine[];
 };
-export type CsaProduct = {id:string;name:string;unitSize:string;unitLabel:string;imageUrl:string|null;availableQuantity:number;quotaGroupId:string;quotaGroupName:string;quotaCost:number};
+export type CsaProduct = {id:string;name:string;unitSize:string;unitLabel:string;imageUrl:string|null;availableQuantity:number;quotaGroupId:string;quotaGroupName:string;quotaCost:number;heldOnly?:true};
 export type CsaRoundProducts = {round:CsaRound;selection:CsaSelection|null;products:CsaProduct[];quota:{groupId:string;availableUnits:number}[]};
 
 type RecordValue=Record<string,unknown>;
@@ -51,7 +51,8 @@ export function parseCsaSelection(value:unknown):CsaSelection {
 export function parseCsaProduct(value:unknown):CsaProduct {
   const row=csaRecord(value),group=csaRecord(row.csa_quota_group),unitSize=text(row.unit_size);
   if(!/^\d+(?:\.\d+)?$/.test(unitSize)||Number(unitSize)<=0||!Number.isFinite(Number(unitSize)))return invalid();
-  return {id:uuid(row.id),name:text(row.name),unitSize,unitLabel:text(row.unit_label),imageUrl:row.primary_image===null?null:text(csaRecord(row.primary_image).url),availableQuantity:csaInteger(row.available_quantity),quotaGroupId:uuid(group.id),quotaGroupName:text(group.name),quotaCost:points(group.cost,.01)};
+  if(row.selection_mode!==undefined&&row.selection_mode!=="held_only")return invalid();
+  return {id:uuid(row.id),name:text(row.name),unitSize,unitLabel:text(row.unit_label),imageUrl:row.primary_image===null?null:text(csaRecord(row.primary_image).url),availableQuantity:csaInteger(row.available_quantity),quotaGroupId:uuid(group.id),quotaGroupName:text(group.name),quotaCost:points(group.cost,.01),...(row.selection_mode==="held_only"?{heldOnly:true as const}:{})};
 }
 export function parseCsaQuota(value:unknown):CsaRoundProducts["quota"] {
   if(!Array.isArray(value))return invalid();return value.map(value=>{const row=csaRecord(value);return {groupId:uuid(row.product_id),availableUnits:points(row.available_units)};});

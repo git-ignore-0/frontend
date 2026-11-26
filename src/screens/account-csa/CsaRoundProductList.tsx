@@ -30,7 +30,7 @@ export function CsaRoundProductList({products,limits,draft,quota,used,disabled,l
       <CsaRoundQuota name={group.name} available={available.get(id)??0} used={used[id]??0} locale={locale}/>
       <div className={styles.products}>{group.products.map(product=>{
         const count=draft[product.id]??0,limit=limits[product.id]??0;
-        const hint=count>product.availableQuantity?c.stock:count>limit?c.quotaChanged:product.availableQuantity===0?c.unavailableProduct:null;
+        const hint=product.heldOnly?copy.heldOnly:count>product.availableQuantity?c.stock:count>limit?c.quotaChanged:product.availableQuantity===0?c.unavailableProduct:null;
         return <div key={product.id} className={styles.product}>
           <StoreProductRow name={product.name}
             image={<Photo src={product.imageUrl??undefined} alt={product.name} locale={locale}/>}

@@ -25,10 +25,17 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   const {current, draft, changeQuantity, loading, busy, error, notice, access, needsReload, needsReview} = state;
   const parent = {href: `/account/${locale}?tab=csa`, label: c.back};
 
+  const failure = error instanceof AccountApiError ? error : null;
+  const code = failure?.code ?? '';
+  const denied = failure?.status === 403 || code === 'csa_membership_unavailable';
+  const signedOut = failure?.status === 401;
+  const retry = {label: c.retry, onClick: () => void state.load()};
+
   if (!current) return <main className="main-content"><div className={`container store-commerce ${styles.page}`}>
     <StorePageHeading title={copy.title} locale={locale} parent={parent}/>
-    <DataState kind={error ? 'error' : 'loading'} title={error ? csaRoundError(error, locale) : c.loading}
-      action={error ? {label: c.retry, onClick: () => void state.load()} : undefined}/>
+    <DataState kind={signedOut ? 'auth' : error ? 'error' : 'loading'}
+      title={error ? csaRoundError(error, locale) : c.loading}
+      action={error && !denied && !signedOut && !loading ? retry : undefined}/>
   </div></main>;
 
   const {round, selection} = current;
@@ -43,7 +50,6 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   const limits = quantityLimits(current.products, draft, current.quota, used);
   const lines = draftLines(draft);
   const invalid = !isSelectionDraftValid(lines, limits);
-  const code = error instanceof AccountApiError ? error.code : '';
   const addressError = code.includes('address') || code.includes('shipping');
   const address = code === 'store_shipping_address_required' ? state.shippingAddress : null;
   const missingContact = address ? (!address.phone.trim() ? 'phone' : !address.name.trim() ? 'name' : null) : null;
@@ -51,6 +57,42 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
     ?? (Date.parse(round.serverTime) < Date.parse(round.opensAt) ? 'scheduled' : 'unselected');
   const reselect = access.mode === 'reselect';
   const saveDisabled = disabled || invalid || (!selection && lines.length === 0);
+
+  const savedLines = selection?.lines.length ? <ul className={styles.savedLines}>
+    {selection.lines.map(line => <li key={line.productId}>
+      <span>{line.name}</span><strong>× {line.quantity}</strong>
+    </li>)}
+  </ul> : <p>{c.noSelection}</p>;
+  const noticeText = notice ? c[notice] : undefined;
+  let feedback;
+  if (displayError && (denied || signedOut)) {
+    feedback = <DataState compact kind={signedOut ? 'auth' : 'error'} title={csaRoundError(displayError, locale)}/>;
+  } else if (loading) {
+    feedback = <DataState compact kind="loading" title={c.verifying} description={noticeText}/>;
+  } else if (needsReload) {
+    feedback = <DataState compact kind="error" title={c.refreshNeeded} description={noticeText}
+      action={busy ? undefined : retry}/>;
+  } else if (!readonly && needsReview) {
+    feedback = <StoreSection title={c.reviewLatest} className={styles.review}>
+      <p role="status">{noticeText ?? c.reviewChanged}</p>
+      {savedLines}
+      <Button small variant="outline" disabled={busy} onClick={state.acceptReview}>{c.acceptLatest}</Button>
+    </StoreSection>;
+  } else if (readonly && (code === 'csa_selection_locked' || code === 'csa_reselection_expired')) {
+    feedback = <p className={styles.notice} role="status">{c.locked}</p>;
+  } else if (displayError) {
+    feedback = <div className={`help-error ${styles.validation}`} role="alert">
+      {noticeText && <p>{noticeText}</p>}
+      <p>{missingContact
+        ? copyText(locale, missingContact === 'phone' ? 'profile.phoneMissing' : 'profile.nameMissing')
+        : csaRoundError(displayError, locale)}</p>
+      {missingContact ? <ActionLink variant="plain" href={siteAccountHref(locale, csaRoundHref(roundId, locale))}>
+        {copyText(locale, missingContact === 'phone' ? 'profile.addPhone' : 'profile.addName')}
+      </ActionLink> : addressError && <ActionLink variant="plain" href={`/account/${locale}?tab=address`}>{c.address}</ActionLink>}
+    </div>;
+  } else if (noticeText || reselect) {
+    feedback = <p className={styles.notice} role="status">{noticeText ?? copy.reselectHint}</p>;
+  }
 
   return <main className="main-content"><div className={`container store-commerce ${styles.page}`}>
     <StorePageHeading title={readonly ? round.name : copy.title} locale={locale} parent={parent}>
@@ -66,34 +108,16 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
       {round.cancellationReason && <p className={styles.cancellationReason}><span>{c.reason}</span>{round.cancellationReason}</p>}
     </section>
 
-    {!readonly && lines.length >= CSA_SELECTION_MAX_LINES && <p role="status">{copy.lineLimit.replace("{max}", String(CSA_SELECTION_MAX_LINES))}</p>}
-    {reselect && <p className={styles.reselectionNotice}>{copy.reselectHint}</p>}
-    {notice && <p className={styles.feedbackError} role="status">{c[notice]}</p>}
-    {Boolean(displayError) && <div className={styles.feedbackError} role="alert">
-      <p>{missingContact ? copyText(locale, missingContact === 'phone' ? 'profile.phoneMissing' : 'profile.nameMissing') : csaRoundError(displayError, locale)}</p>
-      {missingContact ? <ActionLink variant="plain" href={siteAccountHref(locale, csaRoundHref(roundId, locale))}>
-        {copyText(locale, missingContact === 'phone' ? 'profile.addPhone' : 'profile.addName')}
-      </ActionLink> : addressError && <ActionLink variant="plain" href={`/account/${locale}?tab=address`}>{c.address}</ActionLink>}
-    </div>}
-    {needsReload && <div className={styles.feedbackError} role="status">
-      <p>{c.refreshNeeded}</p>
-      <Button small variant="outline" disabled={busy || loading} onClick={() => void state.load()}>{c.retry}</Button>
-    </div>}
-    {!readonly && needsReview && !needsReload && <div className={styles.feedbackError}>
-      <p>{c.reviewLatest}</p>
-      {selection?.lines.length ? <ul className={styles.savedLines}>{selection.lines.map(line => <li key={line.productId}>
-        <span>{line.name}</span><strong>× {line.quantity}</strong>
-      </li>)}</ul> : <p>{c.noSelection}</p>}
-      <Button small variant="outline" disabled={busy || loading} onClick={state.acceptReview}>{c.acceptLatest}</Button>
-    </div>}
+    {feedback && <div className={styles.feedback}>{feedback}</div>}
 
     {readonly ? ((!cancelled || selection?.lines.length || selection?.orderId) ? <StoreSection title={c.summary}>
-      {selection?.lines.length ? <ul className={styles.savedLines}>{selection.lines.map(line => <li key={line.productId}>
-        <span>{line.name}</span><strong>× {line.quantity}</strong>
-      </li>)}</ul> : <p>{c.noSelection}</p>}
+      {savedLines}
       {selection?.orderId && <ActionLink variant="outline" href={`/store/orders/${selection.orderId}/${locale}?from=csa`}>{c.order}</ActionLink>}
     </StoreSection> : null) : <div className={styles.workspace}>
-      <section aria-label={c.choose}>
+      <section aria-label={c.choose} aria-busy={loading || busy}>
+        {lines.length >= CSA_SELECTION_MAX_LINES && <p className={styles.lineLimit} role="status">
+          {copy.lineLimit.replace("{max}", String(CSA_SELECTION_MAX_LINES))}
+        </p>}
         <CsaRoundProductList products={current.products} limits={limits} quota={current.quota} used={used} draft={draft}
           disabled={disabled} locale={locale} onChange={changeQuantity}/>
       </section>

@@ -279,6 +279,53 @@ test("a discontinued basket item discovered during quote can be removed before a
  }finally{r.dispose()}
 });
 
+test("checkout keeps a known discontinued item removable when another product refresh fails",async()=>{
+ const other={...product,id:"22222222-2222-4222-8222-222222222222",slug:"other",name:"Khác"};
+ const discontinued=deferred(),reads=[],created=[];
+ const failure=new ApiError(400);failure.code="store_product_changed";
+ let offline=true,quotes=0;
+ const r=checkout({
+  fetcher:async url=>{
+   reads.push(url);
+   if(url.includes("/rau?"))return discontinued.promise;
+   if(offline)throw Error("offline");
+   return {ok:true,json:async()=>other};
+  },
+  services:{
+   getStoreQuote:async input=>{if(++quotes===1)throw failure;return authoritativeQuote(input,{fee:30000})},
+   createStoreCheckout:async payload=>{created.push(payload);return order()},
+   storeOrderHref:()=>"/done",
+  },
+ });
+ r.context.data.storeProducts[other.id]=other;
+ r.context.ui.cart[other.id]=1;
+ r.context.ui.cartProductState[other.id]="ready";
+ r.context.updateCart=(id,delta)=>{if(r.context.ui.cart[id]+delta===0)delete r.context.ui.cart[id]};
+ const loadFailure=()=>nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Chưa thể tải dữ liệu checkout.");
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.ok(loadFailure());
+  discontinued.resolve({ok:false,status:404});await r.settle();
+
+  const unavailable=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán");
+  assert.equal(unavailable?.props.action?.label,"Xóa");
+  unavailable.props.action.onClick();await r.settle();
+  assert.equal(confirm(r).props.disabled,true);
+  assert.equal(created.length,0);
+
+  offline=false;
+  loadFailure().props.action.onClick();await r.settle();
+  assert.equal(reads.filter(url=>url.includes("/rau?")).length,1);
+  assert.equal(confirm(r).props.disabled,true);
+  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));
+  assert.equal(accept.props.disabled,false);
+  accept.props.onClick();await r.settle();
+  await confirm(r).props.onClick();
+  assert.deepEqual(created.flatMap(payload=>payload.lines.map(line=>line.product_id)),[other.id]);
+ }finally{r.dispose()}
+});
+
 test("an unsupported shipping result is explained and cannot be submitted",async()=>{
  const r=checkout({services:{getShippingQuote:async()=>({supported:false,shippingFeeVnd:null})}});
  r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/chưa được hỗ trợ giao hàng/);r.dispose();

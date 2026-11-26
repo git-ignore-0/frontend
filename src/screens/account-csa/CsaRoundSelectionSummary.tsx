@@ -22,14 +22,15 @@ export function CsaRoundSelectionSummary({snapshot, draft, products, locale, dis
   const live = new Map(snapshot.products.map(product => [product.id, product]));
   const selected = products.filter(product => (draft[product.id] ?? 0) > 0);
   return (
-    <div className={styles.summaryContent} aria-label={c.summary}>
+    <div className={styles.summaryContent} role={selected.length ? "group" : undefined}
+      aria-label={selected.length ? c.summary : undefined} tabIndex={selected.length ? 0 : undefined}>
       {selected.length ? <ul>{selected.map(product => {
         const liveProduct = live.get(product.id);
         return <li key={product.id}>
           <span className={styles.summaryName}>{product.name}</span>
           <strong className={styles.summaryQuantity}>× {draft[product.id]}</strong>
           {!liveProduct && <p className={styles.invalid}>{copy.missingHold}</p>}
-          {!disabled && (!liveProduct || liveProduct.heldOnly) && <Button small variant="plain" onClick={() => onRemove(product.id)} aria-label={`${c.remove}: ${product.name}`}>{c.remove}</Button>}
+          {(!liveProduct || liveProduct.heldOnly) && <Button small variant="plain" disabled={disabled} onClick={() => onRemove(product.id)} aria-label={`${c.remove}: ${product.name}`}>{c.remove}</Button>}
         </li>;
       })}</ul> : <p className="sm muted">{copy.empty}</p>}
     </div>

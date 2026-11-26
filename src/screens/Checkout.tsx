@@ -249,32 +249,34 @@ export function Checkout(){
  const removeVoucher=()=>{if(busy||intent.current||checkoutCompleted.current)return;applyingCoupon.current=null;setDiscountDraft({owner,code:""});setAppliedCoupon(null);setVoucherError(null);setVoucherVersion(value=>value+1)};
  const refreshRequote=async()=>{
   const request=lifecycle.current,sequence=++requoteRequest.current;setRequoteState("loading");setShippingVersion(value=>value+1);
+  const current=()=>request===lifecycle.current&&sequence===requoteRequest.current;
   try{
    const refreshAreas=requoteReason.current==="shipping_area_unsupported"||requoteReason.current==="shipping_address_changed";
    const [nextQuota,refreshed,nextAreas]=await Promise.all([
     authenticated?storeRequest(()=>getStoreQuota(ui.locale),()=>rememberSignIn(intent.current)):Promise.resolve({active:false,products:[]}),
     buyAgainMode?storeRequest(async()=>{if(!buyAgainSession)throw Error("missing_buy_again");return {source:"buy-again" as const,rows:await prepareBuyAgain(buyAgainSession.orderId,ui.locale)}}):Promise.all(products.map(async product=>{
      const response=await fetch(`/api/store/products/${encodeURIComponent(product.slug)}?locale=${ui.locale}&retry=1`,{cache:"no-store"});
-     if(response.status===404)return {id:product.id,product:null};
+     if(response.status===404){
+      if(current())markCartProductsUnavailable([product.id]);
+      return null;
+     }
      if(!response.ok)throw Error("refresh_failed");
-     return {id:product.id,product:parseStoreProductDetail(await response.json())};
+     return parseStoreProductDetail(await response.json());
     })).then(rows=>({source:"cart" as const,rows})),
     refreshAreas?getSupportedShippingAreas(ui.locale):Promise.resolve(null),
     authenticated&&refreshAreas?refreshResource("address"):Promise.resolve(),
    ]);
-   if(request!==lifecycle.current||sequence!==requoteRequest.current)return;
+   if(!current())return;
    setQuota(nextQuota);if(nextAreas)setAreas(nextAreas);
    if(refreshed.source==="buy-again"){
     const rows=refreshed.rows;
     setBuyAgainRows(rows);setSourceError(buyAgainMessage(rows,ui.locale));setSourceKey(`${owner}:${ui.locale}:${sourceVersion}`);
    }else{
-    const rows=refreshed.rows;
-    cacheStoreProducts(rows.flatMap(row=>row.product?[row.product]:[]),"verified");
-    markCartProductsUnavailable(rows.filter(row=>row.product===null).map(row=>row.id));
+    cacheStoreProducts(refreshed.rows.filter(product=>product!==null),"verified");
    }
    if(refreshAreas&&!authenticated)setGuestSubmitted(true);
    setRequoteState("ready");
-  }catch{if(request===lifecycle.current&&sequence===requoteRequest.current)setRequoteState("error")}
+  }catch{if(current())setRequoteState("error")}
  };
  const requoteMessage=(reason:unknown)=>reason==="delivery_date_invalid"?DELIVERY_COPY[ui.locale].invalid:reason==="price_changed"?copy.priceRequote:reason==="stock_changed"?copy.stockRequote:reason==="quota_changed"?copy.quotaRequote:reason==="shipping_address_changed"?copy.addressRequote:reason==="total_changed"?copy.totalRequote:copy.changed;
  const handledQuoteError=useRef<unknown>(null);

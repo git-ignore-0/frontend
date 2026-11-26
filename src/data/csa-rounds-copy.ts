@@ -1,30 +1,37 @@
 import type {Locale} from '@/types';
 import {AccountApiError} from '../account/account-api.ts';
 const vi={
- saveUncertain:'Chưa xác minh được lựa chọn đã lưu hay chưa. Hãy tải dữ liệu mới nhất trước khi gửi lại.',
+ saveUncertain:'Chưa xác minh được lựa chọn đã lưu hay chưa.',
+ verifying:'Đang kiểm tra dữ liệu mới nhất…',
+ reviewChanged:'Lựa chọn đã thay đổi. Kiểm tra bản đã lưu trước khi tiếp tục.',
  confirmUncertain:'Lựa chọn đã được lưu. Chưa xác minh được việc xác nhận.',
  confirmFailed:'Lựa chọn mới nhất đã được lưu. Xác nhận chưa thành công.',
  reviewLatest:'Lựa chọn đã lưu mới nhất',
  acceptLatest:'Tôi đã kiểm tra, tiếp tục',
  unavailableProduct:'Sản phẩm hoặc số lượng đã chọn hiện không đủ điều kiện. Hãy kiểm tra danh mục và điều chỉnh lựa chọn.',
+ invalidSelection:'Lựa chọn chưa hợp lệ. Hãy kiểm tra số lượng đã chọn.',
  stock:'Tồn khả dụng không đủ cho số lượng đã chọn. Hãy kiểm tra và giảm số lượng nếu cần.',
  quotaChanged:'Số điểm khả dụng không đủ. Hãy giảm số lượng sản phẩm trong nhóm.',
- title:'Đợt chọn hàng',rounds:'đợt',empty:'Chưa có đợt chọn hàng.',loading:'Đang tải đợt chọn hàng…',retry:'Thử lại',back:'Về CSA của tôi',view:'Xem chi tiết',delivery:'Giao hàng',window:'Thời gian chọn',deadline:'Hạn chọn lại',select:'Chọn hàng',edit:'Sửa lựa chọn',reselect:'Chọn lại',order:'Xem đơn hàng',more:'sản phẩm khác',choose:'Sản phẩm trong đợt',summary:'Lựa chọn của bạn',save:'Lưu lựa chọn',confirm:'Xác nhận lựa chọn mới',locked:'Đã hết thời gian chỉnh sửa. Thông tin bên dưới là lựa chọn đã lưu.',refreshNeeded:'Cần xác minh dữ liệu hiện tại trước khi tiếp tục. Hãy thử tải lại.',noProducts:'Hiện chưa có sản phẩm khả dụng.',remove:'Bỏ sản phẩm',address:'Cập nhật địa chỉ giao hàng',signin:'Đăng nhập để xem đợt chọn hàng của bạn.',unavailable:'Bạn không có quyền chọn hàng cho đợt này.',failed:'Không thể tải dữ liệu. Vui lòng thử lại.',stale:'Lựa chọn đã được cập nhật ở nơi khác. Tải bản mới trước khi lưu.',addressRequired:'Bạn cần có địa chỉ giao hàng hợp lệ trước khi tham gia đợt.',states:{unknown:'Chưa tải được trạng thái',scheduled:'Chưa mở',unselected:'Chưa chọn',selecting:'Đã lưu',locked:'Đã chốt',reselecting:'Cần chọn lại',confirmed:'Đã xác nhận',delivered:'Đã giao',cancelled:'Đã hủy',closed:'Đã khóa'},previous:'Trước',next:'Tiếp',page:'Trang',reason:'Lý do hủy',invalid:'Dữ liệu không hợp lệ. Vui lòng tải lại.',noSelection:'Chưa có lựa chọn đã lưu.',
+ title:'Đợt chọn hàng',rounds:'đợt',empty:'Chưa có đợt chọn hàng.',loading:'Đang tải đợt chọn hàng…',retry:'Thử lại',back:'Về CSA của tôi',view:'Xem chi tiết',delivery:'Giao hàng',window:'Thời gian chọn',deadline:'Hạn chọn lại',select:'Chọn hàng',edit:'Sửa lựa chọn',reselect:'Chọn lại',order:'Xem đơn hàng',more:'sản phẩm khác',choose:'Sản phẩm trong đợt',summary:'Lựa chọn của bạn',save:'Lưu lựa chọn',confirm:'Xác nhận lựa chọn mới',locked:'Đã hết thời gian chỉnh sửa. Thông tin bên dưới là lựa chọn đã lưu.',refreshNeeded:'Không thể tải dữ liệu mới nhất để tiếp tục.',noProducts:'Hiện chưa có sản phẩm khả dụng.',remove:'Bỏ sản phẩm',address:'Cập nhật địa chỉ giao hàng',signin:'Đăng nhập để xem đợt chọn hàng của bạn.',unavailable:'Bạn không có quyền chọn hàng cho đợt này.',failed:'Không thể tải dữ liệu. Vui lòng thử lại.',stale:'Lựa chọn đã được cập nhật ở nơi khác. Tải bản mới trước khi lưu.',addressRequired:'Bạn cần có địa chỉ giao hàng hợp lệ trước khi tham gia đợt.',states:{unknown:'Chưa tải được trạng thái',scheduled:'Chưa mở',unselected:'Chưa chọn',selecting:'Đã lưu',locked:'Đã chốt',reselecting:'Cần chọn lại',confirmed:'Đã xác nhận',delivered:'Đã giao',cancelled:'Đã hủy',closed:'Đã khóa'},previous:'Trước',next:'Tiếp',page:'Trang',reason:'Lý do hủy',invalid:'Dữ liệu không hợp lệ. Vui lòng tải lại.',noSelection:'Chưa có lựa chọn đã lưu.',
 };
 const en:typeof vi={
- saveUncertain:'We could not verify whether your selection was saved. Load the latest information before submitting again.',
+ saveUncertain:'We could not verify whether your selection was saved.',
+ verifying:'Checking the latest information…',
+ reviewChanged:'The selection has changed. Review the saved version before continuing.',
  confirmUncertain:'Your selection was saved. We could not verify whether it was confirmed.',
  confirmFailed:'Your latest selection was saved. Confirmation did not succeed.',
  reviewLatest:'Latest saved selection',
  acceptLatest:'I’ve reviewed it. Continue',
  unavailableProduct:'This product or quantity is no longer eligible. Review the catalog and adjust your selection.',
+ invalidSelection:'This selection is invalid. Check the selected quantities.',
  stock:'There is not enough stock for this quantity. Check availability and reduce the quantity if needed.',
  quotaChanged:'There are not enough points. Reduce the selected quantity within this group.',
- title:'Produce selection rounds',rounds:'rounds',empty:'No selection rounds yet.',loading:'Loading selection rounds…',retry:'Try again',back:'Back to My CSA',view:'View details',delivery:'Delivery',window:'Selection window',deadline:'Reselection deadline',select:'Choose produce',edit:'Edit selection',reselect:'Choose again',order:'View order',more:'other products',choose:'Produce in this round',summary:'Your selection',save:'Save selection',confirm:'Confirm new selection',locked:'Editing is closed. Your saved selection is shown below.',refreshNeeded:'The latest information must be verified before you can continue. Try reloading.',noProducts:'No produce is currently available.',remove:'Remove product',address:'Update delivery address',signin:'Sign in to view your selection rounds.',unavailable:'You cannot choose produce for this round.',failed:'Could not load data. Please try again.',stale:'Your selection was updated elsewhere. Load the latest version before saving.',addressRequired:'Add a valid delivery address before joining a round.',states:{unknown:'Status unavailable',scheduled:'Not open yet',unselected:'Not selected',selecting:'Saved',locked:'Finalized',reselecting:'Choose again',confirmed:'Confirmed',delivered:'Delivered',cancelled:'Cancelled',closed:'Locked'},previous:'Previous',next:'Next',page:'Page',reason:'Cancellation reason',invalid:'Invalid data. Please reload.',noSelection:'No selection has been saved.'};
+ title:'Produce selection rounds',rounds:'rounds',empty:'No selection rounds yet.',loading:'Loading selection rounds…',retry:'Try again',back:'Back to My CSA',view:'View details',delivery:'Delivery',window:'Selection window',deadline:'Reselection deadline',select:'Choose produce',edit:'Edit selection',reselect:'Choose again',order:'View order',more:'other products',choose:'Produce in this round',summary:'Your selection',save:'Save selection',confirm:'Confirm new selection',locked:'Editing is closed. Your saved selection is shown below.',refreshNeeded:'Could not load the latest information.',noProducts:'No produce is currently available.',remove:'Remove product',address:'Update delivery address',signin:'Sign in to view your selection rounds.',unavailable:'You cannot choose produce for this round.',failed:'Could not load data. Please try again.',stale:'Your selection was updated elsewhere. Load the latest version before saving.',addressRequired:'Add a valid delivery address before joining a round.',states:{unknown:'Status unavailable',scheduled:'Not open yet',unselected:'Not selected',selecting:'Saved',locked:'Finalized',reselecting:'Choose again',confirmed:'Confirmed',delivered:'Delivered',cancelled:'Cancelled',closed:'Locked'},previous:'Previous',next:'Next',page:'Page',reason:'Cancellation reason',invalid:'Invalid data. Please reload.',noSelection:'No selection has been saved.'};
 export function csaRoundsCopy(locale:Locale){return locale==='en'?en:vi;}
 export function csaRoundError(error:unknown,locale:Locale):string{
  const c=csaRoundsCopy(locale),code=error instanceof AccountApiError?error.code:'';
  if(code==='csa_product_unavailable')return c.unavailableProduct;
+ if(code==='csa_selection_invalid'||code==='validation_error')return c.invalidSelection;
  if(code==='csa_stock_insufficient')return c.stock;
  if(code==='csa_quota_insufficient')return c.quotaChanged;
  if(code==='csa_selection_stale')return c.stale;

@@ -28,7 +28,7 @@ import {EMPTY_SHIPPING_ADDRESS,reviewGuestBuyer,type ShippingAddressDraft} from 
 import {formatVietnamPhone,normalizeVietnamPhone} from "@/lib/phone-number";
 import {GuestBuyerFields} from "@/components/account/GuestBuyerFields";
 import {buildStoreQuote,checkoutPayload,matchesCheckoutEstimate} from "@/store/store-quote";
-import {parseStoreProductDetail} from "@/store/store-model";
+import {verifyCartProduct} from "@/store/cart-product-refresh";
 import {createStoreCheckout,getShippingQuote,getStoreQuota,storeOrderHref} from "@/store/store-order-service";
 import {readCheckoutIntent,pendingCheckoutOwner,saveCheckoutIntent,clearCheckoutIntent,checkoutSignInOwner,requireCheckoutSignIn,clearCheckoutSignIn,checkoutDefinitelyRejected,checkoutRequoteReason,type StoreCheckoutIntent} from "@/store/checkout-intent";
 import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
@@ -254,14 +254,17 @@ export function Checkout(){
    const refreshAreas=requoteReason.current==="shipping_area_unsupported"||requoteReason.current==="shipping_address_changed";
    const [nextQuota,refreshed,nextAreas]=await Promise.all([
     authenticated?storeRequest(()=>getStoreQuota(ui.locale),()=>rememberSignIn(intent.current)):Promise.resolve({active:false,products:[]}),
-    buyAgainMode?storeRequest(async()=>{if(!buyAgainSession)throw Error("missing_buy_again");return {source:"buy-again" as const,rows:await prepareBuyAgain(buyAgainSession.orderId,ui.locale)}}):Promise.all(products.map(async product=>{
-     const response=await fetch(`/api/store/products/${encodeURIComponent(product.slug)}?locale=${ui.locale}&retry=1`,{cache:"no-store"});
-     if(response.status===404){
-      if(current())markCartProductsUnavailable([product.id]);
+    buyAgainMode?storeRequest(async()=>{if(!buyAgainSession)throw Error("missing_buy_again");return {source:"buy-again" as const,rows:await prepareBuyAgain(buyAgainSession.orderId,ui.locale)}}):Promise.all(Object.keys(ui.cart).map(async id=>{
+     const cached=data.storeProducts[id];
+     if(!cached)return null;
+     const result=await verifyCartProduct({id,cached,locale:ui.locale},{isCurrent:current});
+     if(!current())return null;
+     if(result==="error")throw Error("refresh_failed");
+     if(result==="unavailable"){
+      markCartProductsUnavailable([id]);
       return null;
      }
-     if(!response.ok)throw Error("refresh_failed");
-     return parseStoreProductDetail(await response.json());
+     return result;
     })).then(rows=>({source:"cart" as const,rows})),
     refreshAreas?getSupportedShippingAreas(ui.locale):Promise.resolve(null),
     authenticated&&refreshAreas?refreshResource("address"):Promise.resolve(),

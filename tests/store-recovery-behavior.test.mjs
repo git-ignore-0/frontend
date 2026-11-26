@@ -18,7 +18,14 @@ const ADDRESS_VERSION="a".repeat(64);
 const DELIVERY_DATE="2026-11-01";
 const guest={name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"};
 const PRODUCT_ID="11111111-1111-4111-8111-111111111111";
+const OTHER_PRODUCT_ID="22222222-2222-4222-8222-222222222222";
+const QUOTA_GROUP_ID="33333333-3333-4333-8333-333333333333";
 const product={id:PRODUCT_ID,slug:"rau",name:"Rau",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,csa_quota_group:null};
+const detailResponse=(value=product)=>({ok:true,status:200,json:async()=>({data:{
+ sku:"RAU",alternate_name:null,short_description:"",description:"",
+ category:{id:OTHER_PRODUCT_ID,slug:"rau",name:"Rau"},primary_image:null,suppliers:[],
+ requested_locale:"vi",content_locale:"vi",available_locales:["vi"],is_fallback:false,...value,
+}})});
 const order=(id="A",overrides={})=>({id,referenceCode:id,workflowVersion:1,refundStatus:null,status:"pending_review",paymentStatus:"not_required",locale:"vi",lines:[],shippingAddress:{provinceCode:"66",wardCode:"1",recipientName:"Khách thử",phoneNumber:"0901234567",address:"12 Đường thử"},subtotalVnd:0,shippingFeeVnd:0,totalVnd:0,payment:null,expiresAt:null,serverTime:"2026-11-01T00:00:00Z",createdAt:"2026-11-01T00:00:00Z",...overrides});
 
 function runtime(path,{services={},context={},auth={status:"guest",session:null},mobileAccount=false,storage=new Map(),onNavigate=()=>{},onReplace=onNavigate,search="",searchState={value:search},fetcher=async()=>{throw Error("offline")},clock=performance,resizeObserver}={}){
@@ -68,7 +75,8 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/store/store-quote")return load("src/store/store-quote.ts");
   if(name==="@/store/store-order-presentation")return load("src/store/store-order-presentation.ts");
   if(name==="@/store/store-format")return {formatUnitSize:Number};
-  if(name==="@/store/store-model")return {parseStoreProductDetail:v=>v};
+  if(name==="@/store/cart-product-refresh")return load("src/store/cart-product-refresh.ts");
+  if(name==="@/store/store-model"||name==="./store-model")return load("src/store/store-model.ts");
   if(name==="@/account/shipping-service")return {getSupportedShippingAreas:services.getSupportedShippingAreas??(async()=>[{code:"66",wards:[{code:"1"}]}])};
   if(name==="@/account/administrative-units-service")return {resolveAdministrativeAddressNames:services.resolveAdministrativeAddressNames??(async()=>({provinceName:"Tỉnh thử",wardName:"Phường thử"}))};
   if(name==="@/account/shipping-address-model")return load("src/account/shipping-address-model.ts");
@@ -192,7 +200,7 @@ test("checkout exposes product refresh failure with a working retry",async()=>{
 });
 
 test("retry after a failed requote reloads product data before allowing confirmation",async()=>{
- let requests=0;const r=checkout({fetcher:async()=>{if(++requests===1)throw Error("offline");return {ok:true,json:async()=>({...product,retail_price_vnd:50000})}},services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"price_changed"})}}});
+ let requests=0;const r=checkout({fetcher:async()=>{if(++requests===1)throw Error("offline");return detailResponse({...product,retail_price_vnd:50000})},services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"price_changed"})}}});
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();r.render();
  const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error");assert.ok(retry);retry.props.action.onClick();await r.settle();
  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);
@@ -202,7 +210,7 @@ test("retry after a failed requote reloads product data before allowing confirma
 test("checkout requotes changed stock and requires explicit confirmation before creating another attempt",async()=>{
  const payloads=[];
  const r=checkout({
-  fetcher:async()=>({ok:true,json:async()=>({...product,available_quantity:4})}),
+  fetcher:async()=>detailResponse({...product,available_quantity:4}),
   services:{createStoreCheckout:async payload=>{
    payloads.push(payload);
    if(payloads.length===1)throw new ApiError(409,{reason:"stock_changed",product_id:PRODUCT_ID,available_quantity:4});
@@ -236,7 +244,7 @@ test("a stock rejection from the quote blocks creation and keeps the requested q
  const failure=new ApiError(409,{product_id:PRODUCT_ID,available_quantity:1});
  failure.code="store_stock_changed";
  const r=checkout({
-  fetcher:async()=>({ok:true,json:async()=>({...product,available_quantity:1})}),
+  fetcher:async()=>detailResponse({...product,available_quantity:1}),
   services:{getStoreQuote:async()=>{quotes++;throw failure},createStoreCheckout:async()=>{submits++;return order()}},
  });
  try{
@@ -279,6 +287,96 @@ test("a discontinued basket item discovered during quote can be removed before a
  }finally{r.dispose()}
 });
 
+test("checkout verifies a renamed product through its catalog slug",async()=>{
+ const reads=[],failure=new ApiError(400);
+ failure.code="store_product_changed";
+ const r=checkout({
+  fetcher:async url=>{
+   reads.push(url);
+   return url.includes("/rau-moi?")?detailResponse({...product,slug:"rau-moi",retail_price_vnd:50000}):{ok:false,status:404};
+  },
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ r.context.data.storeProducts[PRODUCT_ID]={...product,catalogSlug:"rau-moi"};
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.deepEqual(reads,["/api/store/products/rau-moi?locale=vi&retry=1"]);
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].slug,"rau-moi");
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"ready");
+  assert.equal(confirm(r).props.disabled,true);
+  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&text(n)==="Xác nhận thông tin mới").props.disabled,false);
+ }finally{r.dispose()}
+});
+
+test("checkout verifies the saved slug when the catalog slug returns 404",async()=>{
+ const reads=[],failure=new ApiError(400);
+ failure.code="store_product_changed";
+ const r=checkout({
+  fetcher:async url=>{
+   reads.push(url.split("?")[0]);
+   return url.includes("/rau-cu?")?{ok:false,status:404}:detailResponse({...product,retail_price_vnd:50000});
+  },
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ const markedUnavailable=[];
+ const markUnavailable=r.context.markCartProductsUnavailable;
+ r.context.markCartProductsUnavailable=ids=>{markedUnavailable.push(...ids);markUnavailable(ids)};
+ r.context.data.storeProducts[PRODUCT_ID]={...product,catalogSlug:"rau-cu"};
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.deepEqual(reads,["/api/store/products/rau-cu","/api/store/products/rau"]);
+  assert.deepEqual(markedUnavailable,[]);
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"ready");
+ }finally{r.dispose()}
+});
+
+test("checkout does not cache a different product when the saved slug has been reused",async()=>{
+ const reads=[],failure=new ApiError(400),catalog=deferred();
+ failure.code="store_product_changed";
+ const r=checkout({
+  fetcher:async url=>{
+   reads.push(url);
+   return url.includes("/rau-moi?")?catalog.promise:detailResponse({...product,id:OTHER_PRODUCT_ID});
+  },
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ r.context.data.storeProducts[PRODUCT_ID]={...product,catalogSlug:"rau-moi"};
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"ready");
+  assert.equal(confirm(r).props.disabled,true);
+  catalog.resolve({ok:false,status:404});await r.settle();
+  assert.equal(r.context.data.storeProducts[OTHER_PRODUCT_ID],undefined);
+  assert.deepEqual(reads,["/api/store/products/rau-moi?locale=vi&retry=1","/api/store/products/rau?locale=vi&retry=1"]);
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"unavailable");
+  assert.equal(confirm(r).props.disabled,true);
+ }finally{catalog.resolve({ok:false,status:404});r.dispose()}
+});
+
+test("checkout keeps an invalid detail response retryable when the alternate slug is missing",async()=>{
+ const failure=new ApiError(400);
+ failure.code="store_product_changed";
+ const r=checkout({
+  fetcher:async url=>url.includes("/rau-moi?")?{ok:false,status:404}:{ok:true,status:200,json:async()=>({data:{id:PRODUCT_ID}})},
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ r.context.data.storeProducts[PRODUCT_ID]={...product,catalogSlug:"rau-moi"};
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  const error=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Chưa thể tải dữ liệu checkout.");
+  assert.equal(error?.props.action?.label,"Thử lại");
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"ready");
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,40000);
+  assert.equal(confirm(r).props.disabled,true);
+ }finally{r.dispose()}
+});
+
 test("checkout keeps a known discontinued item removable when another product refresh fails",async()=>{
  const other={...product,id:"22222222-2222-4222-8222-222222222222",slug:"other",name:"Khác"};
  const discontinued=deferred(),reads=[],created=[];
@@ -289,7 +387,7 @@ test("checkout keeps a known discontinued item removable when another product re
    reads.push(url);
    if(url.includes("/rau?"))return discontinued.promise;
    if(offline)throw Error("offline");
-   return {ok:true,json:async()=>other};
+   return detailResponse(other);
   },
   services:{
    getStoreQuote:async input=>{if(++quotes===1)throw failure;return authoritativeQuote(input,{fee:30000})},
@@ -306,6 +404,7 @@ test("checkout keeps a known discontinued item removable when another product re
   r.render("Checkout");await r.settle();
   await confirm(r).props.onClick();await r.settle();
   assert.ok(loadFailure());
+  assert.equal(r.context.ui.cartProductState[other.id],"ready");
   discontinued.resolve({ok:false,status:404});await r.settle();
 
   const unavailable=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán");
@@ -324,6 +423,62 @@ test("checkout keeps a known discontinued item removable when another product re
   await confirm(r).props.onClick();
   assert.deepEqual(created.flatMap(payload=>payload.lines.map(line=>line.product_id)),[other.id]);
  }finally{r.dispose()}
+});
+
+test("a late 404 from a failed requote cannot override a newer retry or start a slug fallback",async()=>{
+ const late=deferred(),reads=[],other={...product,id:OTHER_PRODUCT_ID,slug:"other"};
+ const failure=new ApiError(400);failure.code="store_product_changed";
+ let offline=true;
+ const r=checkout({
+  fetcher:async url=>{
+   reads.push(url.split("?")[0]);
+   if(url.includes("/other?")){
+    if(offline)throw Error("offline");
+    return detailResponse(other);
+   }
+   if(offline)return late.promise;
+   return detailResponse({...product,slug:"rau-moi",retail_price_vnd:50000});
+  },
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ r.context.data.storeProducts[PRODUCT_ID]={...product,catalogSlug:"rau-moi"};
+ r.context.data.storeProducts[other.id]=other;
+ r.context.ui.cart[other.id]=1;
+ r.context.ui.cartProductState[other.id]="ready";
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Chưa thể tải dữ liệu checkout.");
+  offline=false;
+  retry.props.action.onClick();await r.settle();
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);
+
+  late.resolve({ok:false,status:404});await r.settle();
+  assert.equal(reads.includes("/api/store/products/rau"),false);
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"ready");
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);
+ }finally{late.resolve({ok:false,status:404});r.dispose()}
+});
+
+test("a verified detail body arriving after a session change cannot update the cart cache",async()=>{
+ const body=deferred(),failure=new ApiError(400);
+ failure.code="store_product_changed";
+ let readingBody=false;
+ const r=addressCheckout({
+  fetcher:async()=>({ok:true,status:200,json:()=>{readingBody=true;return body.promise}}),
+  services:{getStoreQuote:async()=>{throw failure}},
+ });
+ try{
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(readingBody,true);
+  r.auth.session={subject:"B"};
+  r.context.accountSessionKey="B";
+  r.render();await r.settle();
+  body.resolve(await detailResponse({...product,retail_price_vnd:99000}).json());await r.settle();
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,40000);
+  assert.equal(nodes(r.tree).some(n=>n.type==="Button"&&text(n)==="Xác nhận thông tin mới"),false);
+ }finally{body.resolve({});r.dispose()}
 });
 
 test("an unsupported shipping result is explained and cannot be submitted",async()=>{
@@ -455,13 +610,13 @@ test("a slow requote cannot overwrite shipping resolved for the updated saved ad
  const products=deferred();const r=addressCheckout({fetcher:()=>products.promise,services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"shipping_address_changed"})},getShippingQuote:async province=>({supported:true,shippingFeeVnd:province==="77"?50000:30000})}});
  r.context.refreshResource=async()=>{r.context.data.shippingAddress={...r.context.data.shippingAddress,provinceCode:"77",wardCode:"2",updatedAt:"2026-11-02T00:00:00Z"}};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();await r.settle();
- products.resolve({ok:true,json:async()=>product});await r.settle();
+ products.resolve(detailResponse(product));await r.settle();
  assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"90000");
  assert.equal(nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")).props.disabled,false);r.dispose();
 });
 
 test("a failed saved-address refresh cannot publish or accept a final requote",async()=>{
- const r=addressCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"shipping_address_changed"})}}});
+ const r=addressCheckout({fetcher:async()=>detailResponse(product),services:{createStoreCheckout:async()=>{throw new ApiError(409,{reason:"shipping_address_changed"})}}});
  r.context.refreshResource=async()=>{r.context.ui.accountFetchState.address="error"};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await tick();await r.settle();
  assert.equal(nodes(r.tree).find(n=>n.type==="MoneyLine"&&n.props.label==="Tổng đơn hàng").props.value,"—");
@@ -557,6 +712,8 @@ test("an unknown checkout result replays its original payload after the product 
  assert.equal(nodes(next.tree).find(n=>n.type==="MoneyLine").props.value,"70000");
  await confirm(next).props.onClick();await tick();
  assert.deepEqual(JSON.parse(JSON.stringify(payloads[1])),JSON.parse(JSON.stringify(payloads[0])));
+ assert.ok(payloads[0].idempotency_key);
+ assert.equal(payloads[1].idempotency_key,payloads[0].idempotency_key);
  assert.equal(quotes,0);
  assert.deepEqual(navigated,["/store/orders/original/vi"]);
  assert.ok(![...storage.keys()].some(key=>key.startsWith("nfv_store_checkout_intent")));
@@ -690,7 +847,7 @@ test("resuming an unknown checkout keeps items added after the saved request",as
 test("CSA unavailable rejection requotes and allows a new cash request",async()=>{
  const payloads=[],failure=new ApiError(400);failure.code="store_quota_unavailable";let quotaCalls=0;
  const auth={status:"authenticated",session:{subject:"A"}};
- const r=checkout({auth,fetcher:async()=>({ok:true,json:async()=>({...product,csa_quota_group:{id:"g",cost:1}})}),context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:"g",cost:1}}},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{getStoreQuota:async()=>++quotaCalls===1?{active:true,products:[{productId:"g",availableUnits:1}]}:{active:false,products:[]},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
+ const r=checkout({auth,fetcher:async()=>detailResponse({...product,csa_quota_group:{id:QUOTA_GROUP_ID,name:"Rau",cost:1}}),context:{accountSessionKey:"A",data:{authenticated:true,storeProducts:{[PRODUCT_ID]:{...product,csa_quota_group:{id:QUOTA_GROUP_ID,name:"Rau",cost:1}}},shippingAddress:{name:"A",phone:guest.phone,provinceCode:"66",wardCode:"1",detail:guest.address,updatedAt:"2026-11-01T00:00:00Z",shippingAddressVersion:ADDRESS_VERSION,isSupported:true}}},services:{getStoreQuota:async()=>++quotaCalls===1?{active:true,products:[{productId:QUOTA_GROUP_ID,availableUnits:1}]}:{active:false,products:[]},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
  r.context.ui.accountFetchState.address="ready";r.context.ui.applyCSA={[PRODUCT_ID]:true};r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();
  assert.equal(payloads[0].lines[0].use_quota,true);assert.ok(!text(r.tree).includes("Chưa xác định được kết quả"));
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.ok(accept);assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();await confirm(r).props.onClick();
@@ -759,21 +916,23 @@ test("mobile Account hub re-entry refreshes orders while the hidden hub does not
 });
 
 
-test("product rejection refreshes every line, keeps removed products visible and allows checkout after removal",async()=>{
+test("member checkout submits only verified lines after removal and requote confirmation",async()=>{
  const other="22222222-2222-4222-8222-222222222222",payloads=[],fetched=[];const failure=new ApiError(400);failure.code="store_product_changed";
- const r=checkout({fetcher:async url=>{fetched.push(url);return url.includes("/rau?")?{ok:false,status:404}:{ok:true,json:async()=>({...product,id:other,slug:"other",retail_price_vnd:50000})}},services:{createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
+ const r=addressCheckout({fetcher:async url=>{fetched.push(url);return url.includes("/rau?")?{ok:false,status:404}:detailResponse({...product,id:other,slug:"other",retail_price_vnd:50000})},services:{createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
  r.context.data.storeProducts[other]={...product,id:other,slug:"other"};r.context.ui.cart[other]=1;r.context.ui.cartProductState[other]="ready";
  r.context.updateCart=(id,delta)=>{r.context.ui.cart[id]+=delta;if(r.context.ui.cart[id]<=0)delete r.context.ui.cart[id]};
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();
  assert.equal(fetched.length,2);assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"unavailable");assert.equal(r.context.ui.cart[PRODUCT_ID],1);assert.equal(r.context.data.storeProducts[other].retail_price_vnd,50000);assert.equal(confirm(r).props.disabled,true);
  nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán").props.action.onClick();r.render();await r.settle();
+ await confirm(r).props.onClick();
+ assert.equal(payloads.length,1);
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();confirm(r).props.onClick();await tick();
  assert.equal(payloads.length,2);assert.equal(payloads[1].lines.length,1);assert.equal(payloads[1].lines[0].product_id,other);assert.equal(payloads[1].expected_total_vnd,80000);assert.notEqual(payloads[0].idempotency_key,payloads[1].idempotency_key);r.dispose();
 });
 
 test("unsupported area rejection refreshes guest choices and permits a supported replacement address",async()=>{
  let areasCalls=0;const payloads=[],shippingCalls=[],failure=new ApiError(400);failure.code="store_shipping_area_unsupported";
- const r=checkout({fetcher:async()=>({ok:true,json:async()=>product}),services:{getSupportedShippingAreas:async()=>[{code:"66",name:"Province",wards:[{code:++areasCalls===1?"1":"2",name:"Ward",shippingFeeVnd:"40000"}]}],getShippingQuote:async(_province,ward)=>{shippingCalls.push(ward);return ward==="2"?{supported:true,shippingFeeVnd:40000}:shippingCalls.length===1?{supported:true,shippingFeeVnd:30000}:{supported:false,shippingFeeVnd:null}},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
+ const r=checkout({fetcher:async()=>detailResponse(product),services:{getSupportedShippingAreas:async()=>[{code:"66",name:"Province",wards:[{code:++areasCalls===1?"1":"2",name:"Ward",shippingFeeVnd:"40000"}]}],getShippingQuote:async(_province,ward)=>{shippingCalls.push(ward);return ward==="2"?{supported:true,shippingFeeVnd:40000}:shippingCalls.length===1?{supported:true,shippingFeeVnd:30000}:{supported:false,shippingFeeVnd:null}},createStoreCheckout:async payload=>{payloads.push(payload);if(payloads.length===1)throw failure;return order()},storeOrderHref:()=>"/store/orders/A/vi"}});
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();assert.equal(areasCalls,2);assert.equal(shippingCalls.length,2);assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/Khu vực này chưa được hỗ trợ/);
  const fields=nodes(r.tree).find(n=>n.type==="GuestBuyerFields");assert.equal(fields.props.areas[0].wards[0].code,"2");fields.props.onChange({...guest,wardCode:"2"});await r.settle();
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();confirm(r).props.onClick();await tick();
@@ -783,7 +942,7 @@ test("unsupported area rejection refreshes guest choices and permits a supported
 test("address rejection reloads the member address and does not replay its obsolete timestamp",async()=>{
  for(const code of ["store_shipping_address_invalid","store_shipping_address_required"]){
   const failure=new ApiError(400);failure.code=code;let refreshes=0;
-  const r=addressCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{createStoreCheckout:async()=>{throw failure}}});
+  const r=addressCheckout({fetcher:async()=>detailResponse(product),services:{createStoreCheckout:async()=>{throw failure}}});
   r.context.refreshResource=async resource=>{assert.equal(resource,"address");refreshes++;r.context.data.shippingAddress=null};
   r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();assert.equal(refreshes,1);assert.equal(confirm(r).props.disabled,true);assert.ok(!text(r.tree).includes("Chưa xác định được kết quả"));
   assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&n.props.title.includes("bổ sung địa chỉ")));r.dispose();
@@ -800,7 +959,7 @@ test("expired payment hides QR and transfer copying even when status refresh fai
 
 test("a failed resource refresh after product rejection stays blocked until retry succeeds",async()=>{
  let fail=true,gets=0;const failure=new ApiError(400);failure.code="store_product_changed";
- const r=checkout({fetcher:async()=>{gets++;if(fail)throw Error("offline");return {ok:true,json:async()=>({...product,retail_price_vnd:50000})}},services:{createStoreCheckout:async()=>{throw failure}}});
+ const r=checkout({fetcher:async()=>{gets++;if(fail)throw Error("offline");return detailResponse({...product,retail_price_vnd:50000})},services:{createStoreCheckout:async()=>{throw failure}}});
  r.render("Checkout");await r.settle();confirm(r).props.onClick();await r.settle();assert.equal(confirm(r).props.disabled,true);
  const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.kind==="error"&&n.props.title.includes("checkout"));assert.ok(retry);fail=false;retry.props.action.onClick();await r.settle();
  assert.equal(gets,2);assert.equal(r.context.data.storeProducts[PRODUCT_ID].retail_price_vnd,50000);const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.equal(accept.props.disabled,false);r.dispose();
@@ -1081,7 +1240,7 @@ test("an unresolved cart intent owns recovery source even with a buy again query
  const first=buyAgainCheckout({storage,searchState:{value:""},services:{createStoreCheckout:async()=>{throw Error("offline")}}});
  first.render("Checkout");await first.settle();await confirm(first).props.onClick();first.dispose();
  let prepares=0;
- const r=buyAgainCheckout({storage,fetcher:async()=>({ok:true,json:async()=>({...product,retail_price_vnd:50000})}),services:{prepareBuyAgain:async()=>{prepares++;throw Error("wrong_source")},createStoreCheckout:async()=>{throw new ApiError(409,{reason:"price_changed"})}}});
+ const r=buyAgainCheckout({storage,fetcher:async()=>detailResponse({...product,retail_price_vnd:50000}),services:{prepareBuyAgain:async()=>{prepares++;throw Error("wrong_source")},createStoreCheckout:async()=>{throw new ApiError(409,{reason:"price_changed"})}}});
  r.render("Checkout");await r.settle();assert.match(text(r.tree),/Chưa xác định/);
  await confirm(r).props.onClick();await r.settle();assert.equal(prepares,0);
  assert.equal(nodes(r.tree).find(n=>n.type==="StoreProductRow").props.name,"Rau");
@@ -1295,7 +1454,7 @@ test("logout while previewing prevents the old member quote from appearing for a
 });
 
 test("preview cannot silently submit to a newer server address than the recipient being displayed",async()=>{
- let sent=0,refreshed=0;const r=voucherCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:"2026-11-02T00:00:00Z"}),createStoreCheckout:async()=>{sent++;return order()}}});
+ let sent=0,refreshed=0;const r=voucherCheckout({fetcher:async()=>detailResponse(product),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:"2026-11-02T00:00:00Z"}),createStoreCheckout:async()=>{sent++;return order()}}});
  r.context.refreshResource=async resource=>{if(resource==="address"){refreshed++;r.context.data.shippingAddress={...r.context.data.shippingAddress,name:"New recipient",updatedAt:"2026-11-02T00:00:00Z"}}};
  r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
  assert.equal(refreshed,1);assert.equal(sent,0);assert.ok(!nodes(r.tree).some(n=>n.type==="MoneyLine"&&n.props.label?.startsWith("Voucher ·")));assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/địa chỉ|Địa chỉ/);r.dispose();
@@ -1311,7 +1470,7 @@ test("rechecking an applied code invalidates the old discount if the server now 
 
 for(const [timestamp,mismatch] of [["2026-11-01T00:00:00+00:00",false],["2026-11-01T00:00:00.000001Z",true]]){
  test(`preview address compares normalized instants while preserving microseconds: ${timestamp}`,async()=>{
-  let refreshed=0;const r=voucherCheckout({fetcher:async()=>({ok:true,json:async()=>product}),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:timestamp})}});
+  let refreshed=0;const r=voucherCheckout({fetcher:async()=>detailResponse(product),services:{previewStoreVoucher:async()=>voucherResponse("SAVE",{shippingAddressUpdatedAt:timestamp})}});
   r.context.refreshResource=async()=>{refreshed++};r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
   assert.equal(refreshed,mismatch?1:0);assert.equal(confirm(r).props.disabled,mismatch);r.dispose();
  });
@@ -1320,7 +1479,7 @@ for(const [timestamp,mismatch] of [["2026-11-01T00:00:00+00:00",false],["2026-11
 for(const code of ["store_stock_changed","store_product_changed","store_quota_unavailable"]){
  test(`voucher preview ${code} refreshes checkout data and retains the typed code`,async()=>{
   let reads=0,previews=0,submits=0;const failure=new ApiError(400);failure.code=code;
-  const r=voucherCheckout({fetcher:async()=>{reads++;return {ok:true,json:async()=>product};},services:{previewStoreVoucher:async()=>{if(++previews===1)throw failure;return voucherResponse();},createStoreCheckout:async()=>{submits++;return order();}}});
+  const r=voucherCheckout({fetcher:async()=>{reads++;return detailResponse(product);},services:{previewStoreVoucher:async()=>{if(++previews===1)throw failure;return voucherResponse();},createStoreCheckout:async()=>{submits++;return order();}}});
   r.render("Checkout");await r.settle();const before=reads;await applyCode(r);await r.settle();
   assert.ok(reads>before);assert.equal(voucherInput(r).props.value,"SAVE");assert.equal(confirm(r).props.disabled,true);assert.equal(submits,0);
   const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.ok(accept);assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();r.flush();
@@ -1330,7 +1489,7 @@ for(const code of ["store_stock_changed","store_product_changed","store_quota_un
 
 test("failed voucher preview recovery offers a retry without losing the code",async()=>{
  let failRefresh=true;const failure=new ApiError(400);failure.code="store_stock_changed";
- const r=voucherCheckout({fetcher:async()=>{if(failRefresh)throw Error("offline");return {ok:true,json:async()=>product};},services:{previewStoreVoucher:async()=>{throw failure;}}});
+ const r=voucherCheckout({fetcher:async()=>{if(failRefresh)throw Error("offline");return detailResponse(product);},services:{previewStoreVoucher:async()=>{throw failure;}}});
  r.render("Checkout");await r.settle();await applyCode(r);await r.settle();
  const retry=nodes(r.tree).find(n=>n.type==="DataState"&&n.props?.action?.label==="Thử lại");assert.ok(retry);assert.equal(voucherInput(r).props.value,"SAVE");assert.equal(confirm(r).props.disabled,true);
  failRefresh=false;retry.props.action.onClick();await r.settle();assert.equal(voucherInput(r).props.value,"SAVE");assert.ok(nodes(r.tree).some(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới")));r.dispose();

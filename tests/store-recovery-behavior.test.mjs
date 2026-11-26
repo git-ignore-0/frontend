@@ -199,6 +199,86 @@ test("retry after a failed requote reloads product data before allowing confirma
  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));assert.equal(accept.props.disabled,false);accept.props.onClick();r.render();assert.equal(confirm(r).props.disabled,false);r.dispose();
 });
 
+test("checkout requotes changed stock and requires explicit confirmation before creating another attempt",async()=>{
+ const payloads=[];
+ const r=checkout({
+  fetcher:async()=>({ok:true,json:async()=>({...product,available_quantity:4})}),
+  services:{createStoreCheckout:async payload=>{
+   payloads.push(payload);
+   if(payloads.length===1)throw new ApiError(409,{reason:"stock_changed",product_id:PRODUCT_ID,available_quantity:4});
+   return order();
+  },storeOrderHref:()=>"/done"},
+ });
+ try{
+  r.context.ui.cart[PRODUCT_ID]=2;
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(r.context.ui.cart[PRODUCT_ID],2);
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].available_quantity,4);
+  assert.match(text(r.tree),/Tồn kho vừa thay đổi/);
+  assert.equal(confirm(r).props.disabled,true);
+  await confirm(r).props.onClick();
+  assert.equal(payloads.length,1);
+  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));
+  assert.equal(accept.props.disabled,false);
+  accept.props.onClick();await r.settle();
+  await confirm(r).props.onClick();
+  assert.equal(payloads.length,2);
+  assert.equal(payloads[0].lines[0].expected_available_quantity,10);
+  assert.equal(payloads[1].lines[0].expected_available_quantity,4);
+  assert.equal(payloads[1].lines[0].quantity,2);
+  assert.notEqual(payloads[1].idempotency_key,payloads[0].idempotency_key);
+ }finally{r.dispose()}
+});
+
+test("a stock rejection from the quote blocks creation and keeps the requested quantity",async()=>{
+ let quotes=0,submits=0;
+ const failure=new ApiError(409,{product_id:PRODUCT_ID,available_quantity:1});
+ failure.code="store_stock_changed";
+ const r=checkout({
+  fetcher:async()=>({ok:true,json:async()=>({...product,available_quantity:1})}),
+  services:{getStoreQuote:async()=>{quotes++;throw failure},createStoreCheckout:async()=>{submits++;return order()}},
+ });
+ try{
+  r.context.ui.cart[PRODUCT_ID]=2;
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(r.context.ui.cart[PRODUCT_ID],2);
+  assert.equal(r.context.data.storeProducts[PRODUCT_ID].available_quantity,1);
+  assert.equal(confirm(r).props.disabled,true);
+  const accept=nodes(r.tree).find(n=>n.type==="Button"&&text(n).includes("Xác nhận thông tin mới"));
+  assert.equal(accept.props.disabled,true);
+  await confirm(r).props.onClick();
+  assert.equal(quotes,1);
+  assert.equal(submits,0);
+ }finally{r.dispose()}
+});
+
+test("a discontinued basket item discovered during quote can be removed before any checkout POST",async()=>{
+ let quotes=0,submits=0;
+ const failure=new ApiError(400);
+ failure.code="store_product_changed";
+ const r=checkout({
+  fetcher:async()=>({ok:false,status:404}),
+  services:{getStoreQuote:async()=>{quotes++;throw failure},createStoreCheckout:async()=>{submits++;return order()}},
+ });
+ try{
+  r.context.updateCart=(id,delta)=>{if(r.context.ui.cart[id]+delta===0)delete r.context.ui.cart[id]};
+  r.render("Checkout");await r.settle();
+  await confirm(r).props.onClick();await r.settle();
+  assert.equal(r.context.ui.cart[PRODUCT_ID],1);
+  assert.equal(r.context.ui.cartProductState[PRODUCT_ID],"unavailable");
+  const unavailable=nodes(r.tree).find(n=>n.type==="DataState"&&n.props.title==="Sản phẩm không còn bán");
+  assert.equal(confirm(r).props.disabled,true);
+  await confirm(r).props.onClick();
+  assert.equal(quotes,1);
+  assert.equal(submits,0);
+  unavailable.props.action.onClick();await r.settle();
+  assert.equal(r.context.ui.cart[PRODUCT_ID],undefined);
+  assert.equal(confirm(r),undefined);
+ }finally{r.dispose()}
+});
+
 test("an unsupported shipping result is explained and cannot be submitted",async()=>{
  const r=checkout({services:{getShippingQuote:async()=>({supported:false,shippingFeeVnd:null})}});
  r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,true);assert.match(text(r.tree),/chưa được hỗ trợ giao hàng/);r.dispose();
@@ -415,19 +495,22 @@ test("guest Store still restores a legacy draft with whitespace inside the phone
  r.dispose();
 });
 
-test("an unknown checkout result survives remount and replays its original payload even after cart/address changes",async()=>{
+test("an unknown checkout result replays its original payload after the product becomes unavailable",async()=>{
  const storage=new Map(),payloads=[],navigated=[];
  const first=checkout({storage,services:{createStoreCheckout:async payload=>{payloads.push(payload);throw new ApiError(0)}}});
  first.render("Checkout");await first.settle();await confirm(first).props.onClick();await tick();first.render();
  assert.match(text(first.tree),/Chưa xác định/);
  first.dispose();
- const next=checkout({storage,onNavigate:href=>navigated.push(href),services:{createStoreCheckout:async payload=>{payloads.push(payload);return order("original",{locale:"vi"})},storeOrderHref:value=>`/store/orders/${value.id}/${value.locale}`}});
+ let quotes=0;
+ const next=checkout({storage,onNavigate:href=>navigated.push(href),services:{getStoreQuote:async()=>{quotes++;throw Error("unavailable")},createStoreCheckout:async payload=>{payloads.push(payload);return order("original",{locale:"vi"})},storeOrderHref:value=>`/store/orders/${value.id}/${value.locale}`}});
  next.context.data.storeProducts[PRODUCT_ID]={...product,retail_price_vnd:90000};next.context.ui.cart[PRODUCT_ID]=2;
+ next.context.ui.cartProductState[PRODUCT_ID]="unavailable";
  next.render("Checkout");await next.settle();
  assert.match(text(next.tree),/Chưa xác định/);
  assert.equal(nodes(next.tree).find(n=>n.type==="MoneyLine").props.value,"70000");
  await confirm(next).props.onClick();await tick();
  assert.deepEqual(JSON.parse(JSON.stringify(payloads[1])),JSON.parse(JSON.stringify(payloads[0])));
+ assert.equal(quotes,0);
  assert.deepEqual(navigated,["/store/orders/original/vi"]);
  assert.ok(![...storage.keys()].some(key=>key.startsWith("nfv_store_checkout_intent")));
  next.dispose();
@@ -855,11 +938,14 @@ test("buy again unknown result survives reload and replays same key without clea
  await confirm(next).props.onClick();await tick();assert.equal(JSON.stringify(payloads[0]),JSON.stringify(payloads[1]));assert.equal(next.context.ui.cart[PRODUCT_ID],7);next.dispose();
 });
 
-test("buy again unavailable and technical errors block checkout without reducing quantities",async()=>{
- for(const technical of [false,true]){
-  const r=buyAgainCheckout({services:{prepareBuyAgain:async()=>{if(technical)throw Error("offline");return [{productId:PRODUCT_ID,quantity:10,name:"Rau",reason:"insufficient_stock",product:{...product,available_quantity:6}}]}}});
+test("buy again discontinued, insufficient stock, and technical errors block checkout without reducing quantities",async()=>{
+ for(const [reason,message] of [["unavailable",/Rau không còn được bán/],["insufficient_stock",/chỉ còn 6, đơn cũ cần 10/],["offline",/Chưa thể kiểm tra sản phẩm/]]){
+  let submits=0;
+  const r=buyAgainCheckout({services:{prepareBuyAgain:async()=>{if(reason==="offline")throw Error("offline");return [{productId:PRODUCT_ID,quantity:10,name:"Rau",reason,product:reason==="unavailable"?null:{...product,available_quantity:6}}]},createStoreCheckout:async()=>{submits++;return order()}}});
   r.render("Checkout");await r.settle();assert.equal(confirm(r).props.disabled,true);
-  assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&(technical?/Chưa thể kiểm tra sản phẩm/:/chỉ còn 6, đơn cũ cần 10/).test(n.props.title)));
+  assert.ok(nodes(r.tree).some(n=>n.type==="DataState"&&message.test(n.props.title)));
+  await confirm(r).props.onClick();
+  assert.equal(submits,0);
   assert.equal(r.context.ui.cart[PRODUCT_ID],7);r.dispose();
  }
 });
@@ -904,6 +990,34 @@ test("clicking an order card opens detail without preparing buy again and preser
  assert.equal(link.props.href,`/store/orders/${SOURCE_ORDER}/vi`);assert.ok(!nodes(r.tree).some(n=>n.type==="Button"&&/Mua lại|Xem chi tiết/.test(text(n))));
  let prevented=false;link.props.onClick({button:0,ctrlKey:true,preventDefault(){prevented=true}});assert.equal(nav.length,0);assert.equal(prevented,false);
  link.props.onClick({button:0,preventDefault(){prevented=true}});assert.equal(prevented,true);assert.equal(nav[0][0],"order-detail");assert.equal(nav[0][1].productId,SOURCE_ORDER);r.dispose();
+});
+
+test("order history and detail keep the purchased snapshot when the product is no longer sold",async()=>{
+ const line={id:"line",productId:PRODUCT_ID,name:"Rau mồng tơi cũ",quantity:2,unitSize:"0.500",unitLabel:"kg",unitPriceVnd:25000,quotaQuantity:0,cashQuantity:2,cashSubtotalVnd:50000};
+ const snapshot=order(SOURCE_ORDER,{referenceCode:"SO-OLD",status:"delivered",paymentStatus:"received",canBuyAgain:true,createdAt:"2025-01-14T08:00:00Z",lines:[line],subtotalVnd:50000,totalVnd:50000});
+ const auth={status:"authenticated",session:{subject:"A"}};
+ const context={data:{storeProducts:{}},ui:{locale:"vi"},navigate(){}};
+ const redirects=[];
+ const history=runtime("src/screens/AccountOrders.tsx",{auth,context,services:{getStoreOrders:async()=>({items:[snapshot],meta:{total:1}})}});
+ const detail=runtime("src/screens/store/StoreOrderDetail.tsx",{auth,context,onNavigate:href=>redirects.push(href),services:{
+  getStoreOrder:async id=>{assert.equal(id,SOURCE_ORDER);return snapshot},
+  prepareBuyAgain:async()=>[{productId:PRODUCT_ID,quantity:line.quantity,name:line.name,reason:"unavailable",product:null}],
+ }});
+ try{
+  history.render("OrdersView");await history.settle();
+  const card=nodes(history.tree).find(node=>node.type==="article");
+  assert.match(text(card),/SO-OLD.*Rau mồng tơi cũ.*50000/);
+  assert.equal(nodes(card).find(node=>node.type==="a").props.href,`/store/orders/${SOURCE_ORDER}/vi`);
+
+  detail.render("StoreOrderDetail",{id:SOURCE_ORDER,locale:"vi"});await detail.settle();
+  const purchasedRow=()=>nodes(detail.tree).find(node=>node.type==="StoreProductRow"&&node.props.name===line.name);
+  assert.equal(purchasedRow().props.amount,"50000");
+  const buyAgain=nodes(detail.tree).find(node=>node.type==="Button"&&text(node).includes("Mua lại"));
+  await buyAgain.props.onClick();await detail.settle();
+  assert.match(text(detail.tree),/Rau mồng tơi cũ không còn được bán/);
+  assert.equal(purchasedRow().props.amount,"50000");
+  assert.deepEqual(redirects,[]);
+ }finally{history.dispose();detail.dispose()}
 });
 
 test("changing checkout source marker returns to the untouched regular cart",async()=>{

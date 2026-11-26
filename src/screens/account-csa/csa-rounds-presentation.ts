@@ -58,6 +58,13 @@ export function quantityLimits(
   return limits;
 }
 
+export function isSelectionDraftValid(
+  lines: ReturnType<typeof draftLines>,
+  limits: Record<string, number>,
+): boolean {
+  return lines.length <= CSA_SELECTION_MAX_LINES && lines.every(line => line.quantity <= (limits[line.productId] ?? 0));
+}
+
 export function pointsLabel(hundredths: number): string {
   return (hundredths / 100).toLocaleString('en-GB', {maximumFractionDigits: 2});
 }

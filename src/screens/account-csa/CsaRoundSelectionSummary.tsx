@@ -23,12 +23,15 @@ export function CsaRoundSelectionSummary({snapshot, draft, products, locale, dis
   const selected = products.filter(product => (draft[product.id] ?? 0) > 0);
   return (
     <div className={styles.summaryContent} aria-label={c.summary}>
-      {selected.length ? <ul>{selected.map(product => <li key={product.id}>
-        <span className={styles.summaryName}>{product.name}</span>
-        <strong className={styles.summaryQuantity}>× {draft[product.id]}</strong>
-        {!live.has(product.id) && <p className={styles.invalid}>{c.unavailableProduct}</p>}
-        {!disabled && (!live.has(product.id) || live.get(product.id)?.heldOnly) && <Button small variant="plain" onClick={() => onRemove(product.id)} aria-label={`${c.remove}: ${product.name}`}>{c.remove}</Button>}
-      </li>)}</ul> : <p className="sm muted">{copy.empty}</p>}
+      {selected.length ? <ul>{selected.map(product => {
+        const liveProduct = live.get(product.id);
+        return <li key={product.id}>
+          <span className={styles.summaryName}>{product.name}</span>
+          <strong className={styles.summaryQuantity}>× {draft[product.id]}</strong>
+          {!liveProduct && <p className={styles.invalid}>{copy.missingHold}</p>}
+          {!disabled && (!liveProduct || liveProduct.heldOnly) && <Button small variant="plain" onClick={() => onRemove(product.id)} aria-label={`${c.remove}: ${product.name}`}>{c.remove}</Button>}
+        </li>;
+      })}</ul> : <p className="sm muted">{copy.empty}</p>}
     </div>
   );
 }

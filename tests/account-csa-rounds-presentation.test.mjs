@@ -49,3 +49,11 @@ test('100 distinct choices block only new products, retaining quantity edits and
  assert.equal(limits['100'],0);assert.equal(limits['0'],10);
  draft['0']=0;assert.equal(m.quantityLimits(products,draft,quota)['100'],10);
 `));
+
+test('resumed selling uses the server cap for stock 0, 2 or 10 with a saved hold of 3',()=>run(`
+ import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
+ const product={id:'p',quotaGroupId:'g',quotaCost:.25};
+ const responses=[{availableQuantity:3,heldOnly:true},{availableQuantity:3,heldOnly:true},{availableQuantity:10}];
+ const quota=[{groupId:'g',availableUnits:20}];
+ assert.deepEqual(responses.map(response=>m.quantityLimits([{...product,...response}],{p:3},quota).p),[3,3,10]);
+`));

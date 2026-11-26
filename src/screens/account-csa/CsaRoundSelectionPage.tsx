@@ -6,7 +6,7 @@ import {AuthGate} from '@/components/auth/AuthGate';
 import {siteAccountHref} from '@/auth/site-auth';
 import {csaRoundHref} from '@/lib/csa-navigation';
 import {formatDate,formatDateTime} from '@/lib/date-format';
-import {CSA_SELECTION_MAX_LINES,pointHundredths} from '@/account/csa-rounds-model';
+import {CSA_SELECTION_MAX_LINES} from '@/account/csa-rounds-model';
 import {AccountApiError} from '@/account/account-api';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
 import {copyText} from '@/data/account-copy';
@@ -14,7 +14,7 @@ import type {Locale} from '@/types';
 import {useCsaRoundSelection} from './useCsaRoundSelection';
 import {CsaRoundProductList} from './CsaRoundProductList';
 import {CsaRoundSelectionSummary} from './CsaRoundSelectionSummary';
-import {draftLines, usedPoints, selectionProducts, quantityLimits} from './csa-rounds-presentation';
+import {draftLines, isSelectionDraftValid, usedPoints, selectionProducts, quantityLimits} from './csa-rounds-presentation';
 import {csaSelectionCopy} from './csa-selection-copy';
 import styles from './csa-rounds.module.css';
 
@@ -22,13 +22,13 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   const c = csaRoundsCopy(locale);
   const copy = csaSelectionCopy(locale);
   const state = useCsaRoundSelection(roundId, locale);
-  const {current, draft, setDraft, loading, busy, error, access, needsReload} = state;
+  const {current, draft, changeQuantity, loading, busy, error, notice, access, needsReload, needsReview} = state;
   const parent = {href: `/account/${locale}?tab=csa`, label: c.back};
 
   if (!current) return <main className="main-content"><div className={`container store-commerce ${styles.page}`}>
     <StorePageHeading title={copy.title} locale={locale} parent={parent}/>
     <DataState kind={error ? 'error' : 'loading'} title={error ? csaRoundError(error, locale) : c.loading}
-      action={error ? {label: c.retry, onClick: () => void state.load(true)} : undefined}/>
+      action={error ? {label: c.retry, onClick: () => void state.load()} : undefined}/>
   </div></main>;
 
   const {round, selection} = current;
@@ -37,17 +37,12 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
   const cancelled = !delivered && (round.status === 'cancelled' || selection?.state === 'cancelled');
   const expectedCatalogClosure = round.status === 'cancelled' && current.catalogError?.status === 404 && error === current.catalogError;
   const displayError = expectedCatalogClosure ? null : error;
-  const disabled = readonly || busy || loading || needsReload;
+  const disabled = readonly || busy || loading || needsReload || needsReview;
   const products = selectionProducts(current, state.draftProducts);
   const used = usedPoints(draft, products);
   const limits = quantityLimits(current.products, draft, current.quota, used);
-  const availableProducts = new Map(current.products.map(product => [product.id, product]));
-  const availablePoints = new Map(current.quota.map(row => [row.groupId, pointHundredths(row.availableUnits)]));
   const lines = draftLines(draft);
-  const invalid = lines.length > CSA_SELECTION_MAX_LINES || lines.some(line => {
-    const product = availableProducts.get(line.productId);
-    return !product || line.quantity > product.availableQuantity;
-  }) || Object.entries(used).some(([group, amount]) => amount > (availablePoints.get(group) ?? 0));
+  const invalid = !isSelectionDraftValid(lines, limits);
   const code = error instanceof AccountApiError ? error.code : '';
   const addressError = code.includes('address') || code.includes('shipping');
   const address = code === 'store_shipping_address_required' ? state.shippingAddress : null;
@@ -56,14 +51,6 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
     ?? (Date.parse(round.serverTime) < Date.parse(round.opensAt) ? 'scheduled' : 'unselected');
   const reselect = access.mode === 'reselect';
   const saveDisabled = disabled || invalid || (!selection && lines.length === 0);
-  const changeQuantity = (id: string, quantity: number) => {
-    if (disabled) return;
-    setDraft(value => {
-      const currentQuantity = value[id] ?? 0;
-      if (quantity > currentQuantity && quantity > (limits[id] ?? 0)) return value;
-      return {...value, [id]: quantity};
-    });
-  };
 
   return <main className="main-content"><div className={`container store-commerce ${styles.page}`}>
     <StorePageHeading title={readonly ? round.name : copy.title} locale={locale} parent={parent}>
@@ -81,6 +68,7 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
 
     {!readonly && lines.length >= CSA_SELECTION_MAX_LINES && <p role="status">{copy.lineLimit.replace("{max}", String(CSA_SELECTION_MAX_LINES))}</p>}
     {reselect && <p className={styles.reselectionNotice}>{copy.reselectHint}</p>}
+    {notice && <p className={styles.feedbackError} role="status">{c[notice]}</p>}
     {Boolean(displayError) && <div className={styles.feedbackError} role="alert">
       <p>{missingContact ? copyText(locale, missingContact === 'phone' ? 'profile.phoneMissing' : 'profile.nameMissing') : csaRoundError(displayError, locale)}</p>
       {missingContact ? <ActionLink variant="plain" href={siteAccountHref(locale, csaRoundHref(roundId, locale))}>
@@ -89,7 +77,14 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
     </div>}
     {needsReload && <div className={styles.feedbackError} role="status">
       <p>{c.refreshNeeded}</p>
-      <Button small variant="outline" disabled={busy || loading} onClick={() => void state.load(true)}>{c.retry}</Button>
+      <Button small variant="outline" disabled={busy || loading} onClick={() => void state.load()}>{c.retry}</Button>
+    </div>}
+    {!readonly && needsReview && !needsReload && <div className={styles.feedbackError}>
+      <p>{c.reviewLatest}</p>
+      {selection?.lines.length ? <ul className={styles.savedLines}>{selection.lines.map(line => <li key={line.productId}>
+        <span>{line.name}</span><strong>× {line.quantity}</strong>
+      </li>)}</ul> : <p>{c.noSelection}</p>}
+      <Button small variant="outline" disabled={busy || loading} onClick={state.acceptReview}>{c.acceptLatest}</Button>
     </div>}
 
     {readonly ? ((!cancelled || selection?.lines.length || selection?.orderId) ? <StoreSection title={c.summary}>

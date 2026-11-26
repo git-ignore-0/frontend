@@ -26,24 +26,40 @@ export function CsaRoundProductList({products,limits,draft,quota,used,disabled,l
   }
   const available=new Map(quota.map(row=>[row.groupId,row.availableUnits]));
   return <div className={styles.catalog}>
-    {[...groups].map(([id,group])=><section className={styles.productGroup} id={`produce-${id}`} key={id} aria-label={group.name}>
-      <CsaRoundQuota name={group.name} available={available.get(id)??0} used={used[id]??0} locale={locale}/>
-      <div className={styles.products}>{group.products.map(product=>{
-        const count=draft[product.id]??0,limit=limits[product.id]??0;
-        const hint=product.heldOnly?copy.heldOnly:count>product.availableQuantity?c.stock:count>limit?c.quotaChanged:product.availableQuantity===0?c.unavailableProduct:null;
-        return <div key={product.id} className={styles.product}>
-          <StoreProductRow name={product.name}
-            image={<Photo src={product.imageUrl??undefined} alt={product.name} locale={locale}/>}
-            meta={<>1 {copy.portion} · {formatUnitSize(product.unitSize)} {product.unitLabel}</>}
-            amount={`${pointsLabel(pointHundredths(product.quotaCost))} ${copy.perPortion}`}
-            actions={<fieldset disabled={disabled} aria-label={product.name} className={styles.productControls}>
-              <Quantity count={count} min={0} max={limit} id={product.name} locale={locale}
-                onMinus={()=>onChange(product.id,Math.max(0,count-1))} onPlus={()=>onChange(product.id,count+1)}/>
-            </fieldset>}>
-            {hint&&<p className={count>limit?styles.invalid:styles.limitHint}>{hint}</p>}
-          </StoreProductRow>
-        </div>;
-      })}</div>
-    </section>)}
+    {[...groups].map(([id,group])=>{
+      const allowance=available.get(id)??0;
+      const groupUsed=used[id]??0;
+      const remaining=pointHundredths(allowance)-groupUsed;
+      return <section className={styles.productGroup} id={`produce-${id}`} key={id} aria-label={group.name}>
+        <CsaRoundQuota name={group.name} available={allowance} used={groupUsed} locale={locale}/>
+        <div className={styles.products}>{group.products.map(product=>{
+          const count=draft[product.id]??0,limit=limits[product.id]??0;
+          const availableQuantity=product.availableQuantity;
+          const cost=pointHundredths(product.quotaCost);
+          let correction;
+          if (count>availableQuantity) correction=product.heldOnly ? copy.heldLimit.replace('{max}',String(availableQuantity)) : c.stock;
+          else if (count>limit) correction=c.quotaChanged;
+          let blockedReason;
+          if (count===0 && limit===0) {
+            if (availableQuantity===0) blockedReason=copy.noStock;
+            else if (remaining<cost) blockedReason=copy.noQuota;
+          }
+          return <div key={product.id} className={styles.product}>
+            <StoreProductRow name={product.name}
+              image={<Photo src={product.imageUrl??undefined} alt={product.name} locale={locale}/>}
+              meta={<>1 {copy.portion} · {formatUnitSize(product.unitSize)} {product.unitLabel}</>}
+              amount={`${pointsLabel(cost)} ${copy.perPortion}`}
+              actions={<fieldset disabled={disabled} aria-label={product.name} className={styles.productControls}>
+                <Quantity count={count} min={0} max={limit} id={product.name} locale={locale}
+                  onMinus={()=>onChange(product.id,Math.max(0,count-1))} onPlus={()=>onChange(product.id,count+1)}/>
+              </fieldset>}>
+              {product.heldOnly&&<p className={styles.limitHint}>{copy.heldOnly}</p>}
+              {correction&&<p className={styles.invalid}>{correction}</p>}
+              {blockedReason&&<p className={styles.limitHint}>{blockedReason}</p>}
+            </StoreProductRow>
+          </div>;
+        })}</div>
+      </section>;
+    })}
   </div>;
 }

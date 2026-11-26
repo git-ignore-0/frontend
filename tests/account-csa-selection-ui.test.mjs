@@ -91,8 +91,75 @@ test('group allowance is visible without expanding a dropdown',()=>{
  const text=JSON.stringify(tree);assert.ok(text.includes('Rau'));assert.ok(text.includes('điểm còn lại'));assert.equal(text.includes('Đang chọn'),false);
 });
 
-test('products still identify selections needing a stock or quota correction',()=>{
+test('held-only quantity can be reduced, removed, and restored within its saved limit',()=>{
  const {CsaRoundProductList}=load(resolve(root,'src/screens/account-csa/CsaRoundProductList.tsx'));
- const tree=CsaRoundProductList({products:[p],limits:{p:1},draft:{p:2},quota:[{groupId:'g',availableUnits:1}],used:{g:200},disabled:false,locale:'vi',onChange(){}});
- assert.ok(JSON.stringify(tree).includes('Điểm khả dụng đã thay đổi'));
+ const {CsaRoundSelectionSummary}=load(resolve(root,'src/screens/account-csa/CsaRoundSelectionSummary.tsx'));
+ const {Quantity,Button}=load(resolve(root,'src/components/UI.tsx'));
+ const held={...p,heldOnly:true,availableQuantity:3};
+ const productList={products:[held],limits:{p:3},quota:[{groupId:'g',availableUnits:5}],used:{g:300},disabled:false,locale:'en'};
+ let count=3;
+ const setQuantity=(id,quantity)=>{assert.equal(id,'p');count=quantity;};
+ const render=()=>CsaRoundProductList({...productList,draft:{p:count},onChange:setQuantity});
+ const controls=()=>nodes(Quantity(nodes(render()).find(n=>n.type==='Quantity').props)).filter(n=>n.type==='button');
+
+ assert.match(JSON.stringify(render()),/closed to new selections.*restore.*before saving/i);
+ assert.equal(controls()[1].props.disabled,true);
+ controls()[0].props.onClick();
+ assert.equal(count,2);
+ assert.equal(controls()[1].props.disabled,false);
+ controls()[1].props.onClick();
+ assert.equal(count,3);
+
+ const summary=CsaRoundSelectionSummary({snapshot:{products:[held]},products:[held],draft:{p:count},locale:'en',disabled:false,onRemove:id=>setQuantity(id,0)});
+ const remove=Button(nodes(summary).find(n=>n.type==='Button').props);
+ remove.props.onClick();
+ assert.equal(count,0);
+ assert.equal(controls()[0].props.disabled,true);
+ assert.equal(controls()[1].props.disabled,false);
+ controls()[1].props.onClick();
+ assert.equal(count,1);
+});
+
+test('quantity corrections distinguish hold cap, stock and quota without requiring removal',()=>{
+ const {CsaRoundProductList}=load(resolve(root,'src/screens/account-csa/CsaRoundProductList.tsx'));
+ const {Quantity}=load(resolve(root,'src/components/UI.tsx'));
+ const cases=[
+  {product:{...p,heldOnly:true,availableQuantity:2},limit:2,points:5,message:/giảm xuống tối đa 2/i},
+  {product:{...p,availableQuantity:2},limit:2,points:5,message:/tồn khả dụng không đủ/i},
+  {product:p,limit:2,points:2,message:/số điểm khả dụng không đủ/i},
+ ];
+ for(const {product,limit,points,message} of cases){
+  let next;
+  const tree=CsaRoundProductList({products:[product],limits:{p:limit},draft:{p:3},quota:[{groupId:'g',availableUnits:points}],used:{g:300},disabled:false,locale:'vi',onChange:(_,quantity)=>{next=quantity;}});
+  assert.match(JSON.stringify(tree),message);
+  assert.doesNotMatch(JSON.stringify(tree),/ngừng bán|vui lòng bỏ sản phẩm/i);
+  const [minus,plus]=nodes(Quantity(nodes(tree).find(n=>n.type==='Quantity').props)).filter(n=>n.type==='button');
+  assert.equal(minus.props.disabled,false);
+  assert.equal(plus.props.disabled,true);
+  minus.props.onClick();
+  assert.equal(next,2);
+ }
+});
+
+test('a zero quantity distinguishes no stock from insufficient points for one portion',()=>{
+ const {CsaRoundProductList}=load(resolve(root,'src/screens/account-csa/CsaRoundProductList.tsx'));
+ const args={limits:{p:0},draft:{},quota:[{groupId:'g',availableUnits:.15}],used:{},disabled:false,locale:'vi',onChange(){}};
+ const render=availableQuantity=>JSON.stringify(CsaRoundProductList({...args,products:[{...p,quotaCost:.25,availableQuantity}]}));
+ assert.match(render(0),/không còn hàng khả dụng/i);
+ assert.doesNotMatch(render(0),/bỏ sản phẩm/i);
+ assert.match(render(5),/không đủ điểm cho một phần/i);
+});
+
+test('a retained draft line absent from the catalog has only a removal action',()=>{
+ const {CsaRoundSelectionSummary}=load(resolve(root,'src/screens/account-csa/CsaRoundSelectionSummary.tsx'));
+ const {Button}=load(resolve(root,'src/components/UI.tsx'));
+ let removed;
+ const tree=CsaRoundSelectionSummary({snapshot:{products:[]},products:[p],draft:{p:2},locale:'vi',disabled:false,onRemove:id=>{removed=id;}});
+ assert.match(JSON.stringify(tree),/không còn trong danh mục.*không có lượt giữ hiệu lực/i);
+ const rendered=nodes(tree);
+ assert.equal(rendered.filter(n=>n.type==='Quantity').length,0);
+ const actions=rendered.filter(n=>n.type==='Button');
+ assert.equal(actions.length,1);
+ Button(actions[0].props).props.onClick();
+ assert.equal(removed,'p');
 });

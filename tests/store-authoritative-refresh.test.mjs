@@ -8,7 +8,7 @@ const compile=path=>ts.transpileModule(readFileSync(new URL(`../${path}`,import.
 const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail});return {promise,resolve,reject}};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-function providerHarness({authenticated=false,initialResources=[],initialPage="home"}={}){
+function providerHarness({authenticated=false,initialResources=[],initialPage="home",storage}={}){
  let cursor=0,states=[],memos=[],deps=[],effects=[],layoutEffects=[];
  const jsx={jsx:(type,props)=>({type,props})};
  const react={createContext:()=>({Provider:"Provider"}),useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==="function"?initial():initial;return [states[i],value=>{states[i]=typeof value==="function"?value(states[i]):value}]},useRef(initial){const i=cursor++;return states[i]??={current:initial}},useEffect(fn){cursor++;effects.push(fn)},useMemo(fn,next){const i=cursor++;if(!deps[i]||next.some((value,j)=>value!==deps[i][j])){deps[i]=next;memos[i]=fn()}return memos[i]},useCallback(fn,next){return react.useMemo(()=>fn,next)}};
@@ -16,9 +16,11 @@ function providerHarness({authenticated=false,initialResources=[],initialPage="h
  const original={id:"p",slug:"rau",retail_price_vnd:40000,available_quantity:10};
  const responses=[],resourceRequests=[],redemptions=[];
  const auth={status:authenticated?"authenticated":"guest",session:authenticated?{subject:"owner"}:null};
- const load=(path,stub)=>{const exports={};vm.runInNewContext(compile(path),{exports,AbortController,window:{NFV_BACKEND:{},sessionStorage:{}},fetch:(url,options)=>{const response=deferred();responses.push({...response,url,signal:options.signal});return response.promise},require:stub});return exports};
+ const sessionStorage=storage?{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}:{};
+ const load=(path,stub)=>{const exports={};vm.runInNewContext(compile(path),{exports,AbortController,window:{NFV_BACKEND:{},sessionStorage},fetch:(url,options)=>{const response=deferred();responses.push({...response,url,signal:options.signal});return response.promise},require:stub});return exports};
  const snapshots=load("src/store/store-product-snapshots.ts",()=>({}));
  const coordinator=load("src/store/cart-product-refresh.ts",()=>({parseStoreProductDetail:value=>value}));
+ const persistence=storage?load("src/state/cart-persistence.ts",()=>load("src/store/store-limits.ts",()=>({}))):null;
  const initial={initialData:{authenticated,storeProducts:{p:original}},initialUI:{locale:"vi",cart:{p:1},cartProductState:{p:"ready"},cartProductNotice:{},accountFetchState:{},toastSequence:0,busyKeys:[],error:""},ACCOUNT_SERVICE_RESOURCES:initialResources};
  const provider=load("src/state/NFVContext.tsx",name=>{
   if(name==="@/store/store-limits")return load("src/store/store-limits.ts",()=>({}));
@@ -30,13 +32,13 @@ function providerHarness({authenticated=false,initialResources=[],initialPage="h
   if(name==="@/auth/auth-service")return {isUnauthorized:error=>error?.status===401};
   if(name==="@/account/shipping-service")return {getShippingAddress:async()=>null};
   if(name==="./initial-state")return initial;
-  if(name==="./cart-persistence")return {loadCart:()=>initial.initialUI.cart,loadCartProducts:()=>initial.initialData.storeProducts,loadBlockedStoreProducts:()=>({})};
+  if(name==="./cart-persistence")return persistence??{loadCart:()=>initial.initialUI.cart,loadCartProducts:()=>initial.initialData.storeProducts,loadBlockedStoreProducts:()=>({})};
   if(name==="@/store/store-product-snapshots")return snapshots;
   if(name==="@/store/cart-product-refresh")return coordinator;
   return {};
  });
  const render=()=>{cursor=0;effects=[];const value=provider.NFVProvider({children:null,initialPage}).props.value;for(const effect of layoutEffects.splice(0))effect();return value};
- return {auth,render,responses,original,resourceRequests,redemptions,hydrateCart:()=>effects[0](),validateCart:()=>effects[3](),startAccountLoad:()=>effects.at(-1)()};
+ return {auth,render,responses,original,resourceRequests,redemptions,hydrateCart:()=>effects[0](),validateCart:()=>effects[3](),persistAvailability:()=>effects[5](),startAccountLoad:()=>effects.at(-1)()};
 }
 
 test("closed cart adds no detail requests and opening immediately marks rows as loading",async()=>{
@@ -431,8 +433,8 @@ test("a cart with 50 products rejects a new product, allows existing quantities 
  context.updateCart("p49",-1);context=h.render();context.addCart(extra);context=h.render();assert.equal(context.ui.cart.extra,1);assert.equal(Object.keys(context.ui.cart).length,50);
 });
 
-function catalogCardHarness(){
- const provider=providerHarness(),jsx=(type,props)=>({type,props});
+function catalogCardHarness(options){
+ const provider=providerHarness(options),jsx=(type,props)=>({type,props});
  const all=tree=>Array.isArray(tree)?tree.flatMap(all):!tree||typeof tree!=="object"?[]:[tree,...all(tree.props?.children)];
  function load(path,resolve=()=>({})){
   const exports={};
@@ -458,7 +460,7 @@ function catalogCardHarness(){
  const {ProductDetail}=load("src/screens/store/ProductDetail.tsx",resolve);
  const render=product=>all(ProductCard({product,locale:"vi"}));
  const renderDetail=product=>all(ProductDetail({product,locale:"vi"}));
- return {context:provider.render,responses:provider.responses,hydrateCart:provider.hydrateCart,render,renderDetail,ui,buttons:tree=>all(tree).filter(node=>node.type==="button")};
+ return {context:provider.render,responses:provider.responses,hydrateCart:provider.hydrateCart,persistAvailability:provider.persistAvailability,render,renderDetail,ui,buttons:tree=>all(tree).filter(node=>node.type==="button")};
 }
 
 test("catalog quick-add keeps the shared add button and adds one unit per click",()=>{
@@ -493,6 +495,19 @@ test("catalog card displays sold-out status when the latest cart stock is zero",
  assert.equal(h.context().ui.cart.p,1);
 });
 
+test("a cached zero-stock product stays viewable with disabled detail purchase controls",()=>{
+ const h=catalogCardHarness();
+ const product={id:"sold-out",slug:"cai-ngot",name:"Cải ngọt",category:{id:"c",slug:"rau",name:"Rau"},available_quantity:0,retail_price_vnd:25000,unit_size:"500.000",unit_label:"g",primary_image:null,csa_quota_group:null};
+ const card=h.render(product);
+ assert.ok(card.some(node=>node.props.href==="/store/cai-ngot/vi"));
+ assert.ok(card.some(node=>node.props.children==="Hết hàng"));
+ assert.equal(card.some(node=>node.type===h.ui.Button),false);
+ const detail=h.renderDetail(product);
+ assert.ok(detail.some(node=>node.type==="h1"&&node.props.children===product.name));
+ for(const control of [h.ui.Button,h.ui.Quantity])assert.equal(detail.find(node=>node.type===control).props.disabled,true);
+ assert.equal(h.responses.length,0);
+});
+
 test("catalog blocks a confirmed unavailable product even after removal from the cart",async()=>{
  const h=catalogCardHarness(),context=h.context();
  const product={...context.data.storeProducts.p,name:"Cải ngọt",unit_size:"500.000",unit_label:"g",primary_image:null,csa_quota_group:null};
@@ -505,6 +520,34 @@ test("catalog blocks a confirmed unavailable product even after removal from the
  h.context().addCart(product,1,{openCart:false});
  assert.equal(h.context().ui.cart.p,undefined);
  assert.equal(h.context().ui.toastTone,"error");
+});
+
+test("an unavailable product stays blocked after reload even when the catalog and detail cache still show stock",async()=>{
+ const stale={id:"p",slug:"rau",name:"Cải ngọt",category:{id:"c",slug:"rau",name:"Rau"},available_quantity:10,retail_price_vnd:40000,unit_size:"1.000",unit_label:"kg",primary_image:null,csa_quota_group:null};
+ const storage=new Map([["nfv-cart-v1",JSON.stringify({p:1})],["nfv-cart-products-v1",JSON.stringify({p:stale})]]);
+ const initial=catalogCardHarness({storage});
+ initial.context();initial.hydrateCart();initial.context().retryCartProduct("p");
+ initial.responses[0].resolve({ok:false,status:404});
+ await tick();
+ assert.equal(initial.context().storeAvailability.p,null);
+ initial.persistAvailability();
+
+ const restored=catalogCardHarness({storage});
+ restored.context();restored.hydrateCart();restored.context().cacheStoreProducts([stale]);
+ const checkBlocked=()=>{
+  const card=restored.render(stale),detail=restored.renderDetail(stale);
+  assert.ok(card.some(node=>node.props.children==="Ngừng bán"));
+  assert.equal(card.some(node=>node.type===restored.ui.Button),false);
+  assert.equal(detail.find(node=>node.type===restored.ui.Button).props.disabled,true);
+  restored.context().addCart(stale,1,{openCart:false});
+  assert.equal(restored.context().ui.cart.p,1);
+ };
+ checkBlocked();
+ assert.equal(restored.responses.length,1);
+ assert.equal(restored.responses[0].url,"/api/store/products/rau?locale=vi&retry=1");
+ restored.responses[0].resolve({ok:false,status:404});
+ await tick();
+ checkBlocked();
 });
 
 test("a restock is verified once before the catalog enables a previously sold-out product",async()=>{

@@ -14,7 +14,7 @@ const compile=(path,jsx=false)=>ts.transpileModule(source(path),{compilerOptions
 
 function runModule(path,requireStub=()=>({}),extra={}){
  const exp={};
- vm.runInNewContext(compile(path),{exports:exp,require:id=>id.endsWith("/csa-units.ts")?runModule("src/lib/csa-units.ts"):requireStub(id),URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
+ vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:id=>id.endsWith("/csa-units.ts")?runModule("src/lib/csa-units.ts"):requireStub(id),URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
  return exp;
 }
 
@@ -50,7 +50,7 @@ function loadService({origin="http://127.0.0.1:8000",result={data:[]},status=200
  return {service,calls};
 }
 
-function runRoute(path,{result={data:[]},error=null}={}){
+function runRoute(path,{result={data:[]},error=null,upstream}={}){
  const validation=loadValidation();
  const calls=[];
  class StoreConfigurationError extends Error{}
@@ -71,7 +71,7 @@ function runRoute(path,{result={data:[]},error=null}={}){
  const exp={};
  vm.runInNewContext(compile(path),{exports:exp,require:id=>{
   if(id==="next/server")return {NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{...init,headers:{"Content-Type":"application/json",...(init.headers??{})}})}};
-  if(id==="@/store/store-service")return service;
+  if(id==="@/store/store-service")return upstream??service;
   if(id==="../validation"||id==="../../validation")return validation;
   throw new Error(`Unexpected import ${id}`);
  },URL,Response,Error});
@@ -153,6 +153,45 @@ test("Store service builds only public backend URLs and applies cache tags or re
  await detail.service.fetchStoreProduct("tomato","vi",{bypassCache:false});
  assert.equal(detail.calls[0].url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=vi");
  assert.deepEqual(JSON.parse(JSON.stringify(detail.calls[0].init.next)),{revalidate:300,tags:["store-product-details","store-product:tomato"]});
+});
+
+test("the public Store keeps a zero-stock product in the catalog and detail",async()=>{
+ const soldOut={...product,available_quantity:0};
+ const list=loadService({result:{data:[soldOut],meta:{page:1,page_size:12,total:1}}});
+ const detail=loadService({result:{data:{...soldOut,description:"Harvested today",suppliers:[]}}});
+ const catalog=await list.service.fetchStoreProducts({locale:"en",sort:"default",page:1,pageSize:12});
+ assert.equal(catalog.meta.total,1);
+ assert.equal(catalog.data[0].id,product.id);
+ assert.equal(catalog.data[0].available_quantity,0);
+ const {data}=await detail.service.fetchStoreProduct(product.slug,"en");
+ assert.equal(data.id,product.id);
+ assert.equal(data.available_quantity,0);
+});
+
+test("a discontinued product's fresh detail response stays a 404 through the Store BFF and page",async()=>{
+ const {service,calls}=loadService({status:404});
+ const {route}=runRoute("app/api/store/products/[slug]/route.ts",{upstream:service});
+ const response=await route.GET(new Request("http://localhost/api/store/products/tomato?locale=en&retry=1"),{params:Promise.resolve({slug:"tomato"})});
+ assert.equal(response.status,404);
+ assert.deepEqual(await response.json(),{error:"not_found"});
+ assert.equal(response.headers.get("cache-control"),"no-store");
+
+ const notFound=new Error("not_found");
+ const publicRequest=runModule("src/lib/public-request.ts");
+ const page=runModule("app/store/[segment]/[locale]/page.tsx",id=>{
+  if(id==="next/navigation")return {notFound:()=>{throw notFound}};
+  if(id==="@/lib/public-request")return publicRequest;
+  if(id==="@/store/store-service")return service;
+  return {};
+ });
+ const pageInput={params:Promise.resolve({segment:"tomato",locale:"en"}),searchParams:Promise.resolve({retry:"1"})};
+ await assert.rejects(()=>page.default(pageInput),error=>error===notFound);
+ assert.deepEqual(Object.keys(await page.generateMetadata(pageInput)),[]);
+ assert.equal(calls.length,3);
+ for(const call of calls){
+  assert.equal(call.url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=en");
+  assert.equal(call.init.cache,"no-store");
+ }
 });
 
 test("Store BFF routes reject invalid input before touching upstream",async()=>{

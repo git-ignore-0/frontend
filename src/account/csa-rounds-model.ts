@@ -20,7 +20,7 @@ type RecordValue=Record<string,unknown>;
 function invalid():never {throw new AccountApiError("invalid_response",502);}
 export function csaRecord(value:unknown):RecordValue {if(!value||typeof value!=="object"||Array.isArray(value))return invalid();return value as RecordValue;}
 function text(value:unknown):string {if(typeof value!=="string"||!value)return invalid();return value;}
-function uuid(value:unknown):string {const result=text(value);if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result))return invalid();return result;}
+function uuid(value:unknown):string {const result=text(value);if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result))return invalid();return result.toLowerCase();}
 function date(value:unknown):string {const result=text(value);if(!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(result)||!Number.isFinite(Date.parse(result)))return invalid();return result;}
 export function csaInteger(value:unknown,min=0):number {if(typeof value!=="number"||!Number.isSafeInteger(value)||value<min)return invalid();return value;}
 function nullable<T>(value:unknown,parse:(v:unknown)=>T):T|null {return value===null?null:parse(value);}
@@ -54,8 +54,27 @@ export function parseCsaProduct(value:unknown):CsaProduct {
   if(row.selection_mode!==undefined&&row.selection_mode!=="held_only")return invalid();
   return {id:uuid(row.id),name:text(row.name),unitSize,unitLabel:text(row.unit_label),imageUrl:row.primary_image===null?null:text(csaRecord(row.primary_image).url),availableQuantity:csaInteger(row.available_quantity),quotaGroupId:uuid(group.id),quotaGroupName:text(group.name),quotaCost:points(group.cost,.01),...(row.selection_mode==="held_only"?{heldOnly:true as const}:{})};
 }
+export function parseCsaProducts(value: unknown, selection: CsaSelection | null): CsaProduct[] {
+  if (!Array.isArray(value)) return invalid();
+  const products = value.map(parseCsaProduct);
+  if (new Set(products.map(product => product.id)).size !== products.length) return invalid();
+  const savedLines = new Map(selection?.lines.map(line => [line.productId, line]));
+  for (const product of products) {
+    if (!product.heldOnly) continue;
+    const saved = savedLines.get(product.id);
+    if (!saved || product.availableQuantity < 1 || product.availableQuantity > saved.quantity ||
+      product.quotaGroupId !== saved.quotaGroupId || product.quotaCost !== saved.quotaCost) return invalid();
+  }
+  return products;
+}
 export function parseCsaQuota(value:unknown):CsaRoundProducts["quota"] {
-  if(!Array.isArray(value))return invalid();return value.map(value=>{const row=csaRecord(value);return {groupId:uuid(row.product_id),availableUnits:points(row.available_units)};});
+  if (!Array.isArray(value)) return invalid();
+  const quota = value.map(value => {
+    const row = csaRecord(value);
+    return {groupId: uuid(row.product_id), availableUnits: points(row.available_units)};
+  });
+  if (new Set(quota.map(row => row.groupId)).size !== quota.length) return invalid();
+  return quota;
 }
 export function selectionAccess({round,selection,eligible,serverNow}:{round:CsaRound;selection:CsaSelection|null;eligible:boolean;serverNow:number}):{mode:"readonly"|"select"|"edit"|"reselect";deadline:string|null} {
   const readonly={mode:"readonly" as const,deadline:null};

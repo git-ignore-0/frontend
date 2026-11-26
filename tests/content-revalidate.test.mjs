@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import {existsSync,readFileSync} from "node:fs";
 import {spawnSync} from "node:child_process";
+import {createRequire} from "node:module";
 import {dirname,join,resolve} from "node:path";
 import test from "node:test";
 import {fileURLToPath,pathToFileURL} from "node:url";
+import vm from "node:vm";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const helperPath=join(root,"src/lib/revalidate-request.ts");
@@ -89,6 +92,40 @@ test("Next revalidation route delegates only verified tags to the cache API",()=
   assert.match(source,/\{expire:0\}/);
   assert.match(source,/CONTENT_REVALIDATE_SECRET/);
   assert.match(source,/payload_too_large/);
+});
+
+test("a signed Farm stock change expires Store list variants and only the affected detail tag",async()=>{
+  const require=createRequire(import.meta.url);
+  const ts=require("typescript");
+  const secret="test-store-webhook-secret-with-32-characters";
+  const tags=["store-product:tomato","store-products"];
+  const invalidated=[];
+  function load(path,imports){
+    const exports={};
+    const {outputText}=ts.transpileModule(readFileSync(path,"utf8"),{
+      compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
+    });
+    vm.runInNewContext(outputText,{exports,Buffer,process:{env:{CONTENT_REVALIDATE_SECRET:secret}},require:name=>imports[name]});
+    return exports;
+  }
+  const route=load(routePath,{
+    "next/cache":{revalidateTag:(tag,{expire})=>invalidated.push({tag,expire})},
+    "next/server":{NextResponse:Response},
+    "@/lib/revalidate-request":load(helperPath,{"node:crypto":crypto}),
+  });
+  const timestamp=String(Math.floor(Date.now()/1000));
+  const body=JSON.stringify({tags});
+  const signature=crypto.createHmac("sha256",secret).update(`${timestamp}.`).update(body).digest("hex");
+  const request=body=>new Request("https://site.test/api/revalidate",{method:"POST",body,headers:{
+    "x-nfv-timestamp":timestamp,"x-nfv-signature":`sha256=${signature}`,
+  }});
+  const rejected=await route.POST(request(JSON.stringify({tags:["store-product-details"]})));
+  assert.equal(rejected.status,401);
+  assert.deepEqual(invalidated,[]);
+  const response=await route.POST(request(body));
+  assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{revalidated:tags});
+  assert.deepEqual(invalidated,tags.map(tag=>({tag,expire:0})));
 });
 
 test("every cached workshop collection uses the global workshops tag",()=>{

@@ -12,13 +12,13 @@ function loader(stubs,globals={}){const cache=new Map();return function load(pat
 const line={productId:'p',quantity:1,name:'Tomato',unitLabel:'kg',quotaGroupId:'g',quotaCost:1};
 const selection={id:'s',roundId:'r',membershipId:'m',state:'selecting',revision:3,orderId:null,reopenUntil:null,serverTime:'2026-11-20T08:00:00Z',lines:[line]};
 const bundle={round:{id:'r',sequence:1,name:'Round',opensAt:'2026-11-20T07:00:00Z',closesAt:'2026-11-21T08:00:00Z',deliveryDate:'2026-11-22',status:'open',serverTime:'2026-11-20T08:00:00Z',cancellationReason:null},selection,products:[{id:'p',name:'Tomato',quotaGroupId:'g',quotaGroupName:'Vegetables',quotaCost:1,availableQuantity:10,unitSize:'1.000',unitLabel:'kg',imageUrl:null}],quota:[{groupId:'g',availableUnits:4}]};
-function selectionHarness(){const h=hooks(),events={},auth={status:'authenticated',session:{subject:'member'},expire(){}},context={data:{csa:{active:{status:'active'}}},async refreshResource(){}},calls={get:0,save:[],confirm:[]};let latest=bundle;
+function selectionHarness(checkpoint){const h=hooks(),events={},auth={status:'authenticated',session:{subject:'member'},expire(){}},context={data:{csa:{active:{status:'active'}}},async refreshResource(){}},calls={get:0,save:[],confirm:[]};let latest=bundle;
  const services={async getRoundProducts(){calls.get++;return latest},async getRoundSelection(){return latest.selection},async getRoundsPage(){throw Error('unexpected fallback')},async saveRoundSelection(input){calls.save.push(input);const saved={...selection,revision:4,lines:input.lines.map(l=>({...line,...l}))};latest={...latest,selection:saved};return saved},async confirmRoundSelection(input){calls.confirm.push(input);return {...selection,revision:4,state:'confirmed'}}};
  const load=loader({react:h.react,'@/auth/AuthProvider':{useAuth:()=>auth},'@/state/NFVContext':{useNFV:()=>context},'@/account/csa-rounds-service':services,'../../account/csa-rounds-service.ts':services,'@/store/store-order-service':{},'./useCsaServerClock':{useCsaServerClock:()=>Date.parse(bundle.round.serverTime)}},{window:{addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}},document:{visibilityState:'visible',addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}}});
  services.isCsaMutationOutcomeUnknown=load(resolve(root,'src/account/csa-rounds-service.ts')).isCsaMutationOutcomeUnknown;
  const {useCsaRoundSelection}=load(resolve(root,'src/screens/account-csa/useCsaRoundSelection.ts'));let value;
  let route=['r','vi'];
- function render(){value=h.render(()=>useCsaRoundSelection(...route));h.flush();return value}
+ function render(){value=h.render(()=>useCsaRoundSelection(...route,checkpoint));h.flush();return value}
  async function settle(){for(let i=0;i<4;i++){render();await tick()}return value}
  return {h,calls,events,settle,render,services,auth,context,load,get value(){return value},latest(value){latest=value},route(roundId,locale){route=[roundId,locale]}};
 }
@@ -497,6 +497,50 @@ test('a product stopped during editing allows corrections above the saved hold w
   } finally {h.h.dispose();}
 });
 
+test('CSA stock conflict and later availability changes retain the Product and require a valid draft', async () => {
+  const h = selectionHarness();
+  const product = bundle.products[0];
+  const save = h.services.saveRoundSelection;
+  try {
+    let view = await h.settle();
+    view.changeQuantity(product.id, 4);
+    h.services.saveRoundSelection = async input => {
+      h.calls.save.push(input);
+      h.latest({...bundle, products: [{...product, availableQuantity: 2}]});
+      throw apiError(h, 'csa_stock_insufficient', 409);
+    };
+    await view.submit();
+    view = await h.settle();
+    assert.equal(view.error.code, 'csa_stock_insufficient');
+    assert.equal(view.current.selection.revision, selection.revision);
+    assert.equal(view.current.products[0].id, product.id);
+    assert.equal(view.current.products[0].availableQuantity, 2);
+    assert.equal(view.draft[product.id], 4);
+    assert.equal(h.calls.get, 2);
+    await view.submit();
+    assert.equal(h.calls.save.length, 1);
+
+    h.latest({...bundle, products: [{...product, availableQuantity: 3}]});
+    h.events.focus();
+    view = await h.settle();
+    assert.equal(h.calls.get, 3);
+    assert.equal(view.current.products[0].availableQuantity, 3);
+    assert.equal(view.draft[product.id], 4);
+    await view.submit();
+    assert.equal(h.calls.save.length, 1);
+
+    view.changeQuantity(product.id, 3);
+    h.services.saveRoundSelection = save;
+    await view.submit();
+    view = await h.settle();
+    assert.equal(h.calls.save.length, 2);
+    assert.equal(h.calls.save[1].expectedRevision, selection.revision);
+    assert.equal(h.calls.save[1].lines[0].productId, product.id);
+    assert.equal(h.calls.save[1].lines[0].quantity, 3);
+    assert.equal(view.current.selection.revision, selection.revision + 1);
+  } finally {h.h.dispose();}
+});
+
 test('a forbidden mutation immediately clears private round data without history requests', async () => {
   const h = selectionHarness(); h.latest(heldBundle);
   try {
@@ -511,4 +555,64 @@ test('a forbidden mutation immediately clears private round data without history
     assert.equal(v.error.status, 403);
     assert.equal(h.calls.get, 1);
   } finally {h.h.dispose();}
+});
+
+
+test('same-account AuthGate remount restores only unsent CSA edits after fresh stock and revision checks',async()=>{
+ const checkpoint={current:null},first=selectionHarness(checkpoint);
+ try{
+  let value=await first.settle();
+  value.changeQuantity('p',3);
+  await first.settle();
+ }finally{first.h.dispose()}
+
+ const next=selectionHarness(checkpoint);
+ try{
+  next.latest({...bundle,selection:{...selection,revision:4},products:[{...bundle.products[0],availableQuantity:1}]});
+  let value=await next.settle();
+  assert.equal(next.calls.get,1);
+  assert.equal(value.draft.p,3);
+  assert.equal(value.needsReview,true);
+  await value.submit(false);
+  assert.equal(next.calls.save.length,0);
+  value.acceptReview();
+  value=await next.settle();
+  await value.submit(false);
+  assert.equal(next.calls.save.length,0,'current stock still caps the restored draft');
+  value.changeQuantity('p',1);
+  value=await next.settle();
+  assert.equal(value.dirty,false);
+ }finally{next.h.dispose()}
+});
+
+test('AuthGate remount does not restore an in-flight CSA intent or a draft belonging to another account',async()=>{
+ const checkpoint={current:null},first=selectionHarness(checkpoint);
+ let pending,attempt;
+ try{
+  const value=await first.settle();
+  value.changeQuantity('p',3);
+  pending=deferred();
+  first.services.saveRoundSelection=input=>{first.calls.save.push(input);return pending.promise};
+  attempt=value.submit(false);
+  assert.equal(first.calls.save.length,1);
+ }finally{first.h.dispose()}
+ try{
+  const replacement=selectionHarness(checkpoint);
+  try{
+   let value=await replacement.settle();
+   assert.equal(value.draft.p,1);
+   value.changeQuantity('p',4);
+   await replacement.settle();
+  }finally{replacement.h.dispose()}
+  const other=selectionHarness(checkpoint);
+  try{
+   other.auth.session={subject:'other-member'};
+   const value=await other.settle();
+   assert.equal(value.draft.p,1);
+   assert.equal(other.calls.save.length,0);
+  }finally{other.h.dispose()}
+ }finally{
+  pending.resolve({...selection,revision:4});
+  await attempt;
+ }
 });

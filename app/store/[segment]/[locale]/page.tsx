@@ -1,5 +1,6 @@
 import type {Metadata} from "next";
 import {notFound} from "next/navigation";
+import {cache} from "react";
 import {NFVApp} from "../../../NFVApp";
 import {parseRetryCacheBypass} from "@/lib/public-request";
 import {storeProductMetadata} from "@/lib/public-metadata";
@@ -12,7 +13,11 @@ const SLUG=/^[a-z0-9_-]+$/i;
 function validLocale(value:string):value is StoreLocale{return value==="vi"||value==="en"}
 function validSlug(value:string){return value.length<=180&&SLUG.test(value)}
 function retryState(value:Record<string,string|string[]|undefined>){const params=new URLSearchParams();for(const [key,item] of Object.entries(value)){if(typeof item==="string")params.append(key,item);else item?.forEach(entry=>params.append(key,entry))}if([...params.keys()].some(key=>key!=="retry")||params.getAll("retry").length>1)return null;return parseRetryCacheBypass(params)}
-async function loadProduct(slug:string,locale:StoreLocale,bypassCache:boolean){try{return (await fetchStoreProduct(slug,locale,{bypassCache})).data}catch(error){if(error instanceof StoreUpstreamError&&error.status===404)notFound();throw error}}
+// The timeout signal opts the request out of Next's fetch deduplication.
+const loadProduct=cache(async (slug:string,locale:StoreLocale,bypassCache:boolean)=>{
+ try{return (await fetchStoreProduct(slug,locale,{bypassCache})).data}
+ catch(error){if(error instanceof StoreUpstreamError&&error.status===404)notFound();throw error}
+});
 
 export async function generateMetadata({params,searchParams}:RouteProps):Promise<Metadata>{
  const {segment:slug,locale}=await params;if(!validLocale(locale)||!validSlug(slug))return {};

@@ -179,6 +179,7 @@ test("a discontinued product's fresh detail response stays a 404 through the Sto
  const notFound=new Error("not_found");
  const publicRequest=runModule("src/lib/public-request.ts");
  const page=runModule("app/store/[segment]/[locale]/page.tsx",id=>{
+  if(id==="react")return require("react");
   if(id==="next/navigation")return {notFound:()=>{throw notFound}};
   if(id==="@/lib/public-request")return publicRequest;
   if(id==="@/store/store-service")return service;
@@ -191,6 +192,55 @@ test("a discontinued product's fresh detail response stays a 404 through the Sto
  for(const call of calls){
   assert.equal(call.url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=en");
   assert.equal(call.init.cache,"no-store");
+ }
+});
+
+test("product page and metadata share a fresh request without sharing data across renders or locales",async()=>{
+ const detail={...product,description:"Harvested today",suppliers:product.suppliers.map(supplier=>({...supplier,location:"Đà Lạt"}))};
+ const {service,calls}=loadService({result:{data:detail}});
+ const serverReact=require(join(dirname(require.resolve("react/package.json")),"cjs/react.react-server.development.js"));
+ const internals=serverReact.__SERVER_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+ const jsx=(type,props)=>({type,props});
+ const page=runModule("app/store/[segment]/[locale]/page.tsx",id=>{
+  if(id==="react")return serverReact;
+  if(id==="react/jsx-runtime")return {jsx};
+  if(id==="@/lib/public-request")return runModule("src/lib/public-request.ts");
+  if(id==="@/lib/public-metadata")return {storeProductMetadata:data=>({title:data.name})};
+  if(id==="@/store/store-service")return service;
+  return {};
+ });
+ const original=internals.A;
+ function openRender(){
+  // The RSC dispatcher owns one React cache for the current render.
+  const values=new Map();
+  internals.A={getCacheForType(factory){
+   if(!values.has(factory))values.set(factory,factory());
+   return values.get(factory);
+  }};
+ }
+ function input(locale,retry="1"){
+  return {params:Promise.resolve({segment:product.slug,locale}),searchParams:Promise.resolve(retry?{retry}:{})};
+ }
+ try{
+  openRender();
+  const [metadata,tree]=await Promise.all([page.generateMetadata(input("en")),page.default(input("en"))]);
+  assert.equal(metadata.title,product.name);
+  assert.equal(tree.props.children.props.product.id,product.id);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].init.cache,"no-store");
+  assert.ok(calls[0].init.signal instanceof AbortSignal);
+
+  await page.default(input("vi"));
+  await page.default(input("en",""));
+  assert.equal(calls.length,3);
+  assert.match(calls[1].url,/locale=vi$/);
+  assert.deepEqual(Array.from(calls[2].init.next.tags),["store-product-details",`store-product:${product.slug}`]);
+
+  openRender();
+  await page.default(input("en"));
+  assert.equal(calls.length,4);
+ }finally{
+  internals.A=original;
  }
 });
 
@@ -229,4 +279,40 @@ test("Store catalog accepts fractional CSA costs while stock and VND remain inte
  }
  for(const cost of ["0.25",NaN,Infinity,.001,-.25]) assert.throws(()=>model.parseStorePage({data:[{...product,csa_quota_group:{...csaQuotaGroup,cost}}],meta:{page:1,page_size:12,total:1}}));
  for(const field of ["available_quantity","retail_price_vnd"])assert.throws(()=>model.parseStorePage({data:[{...product,[field]:.25}],meta:{page:1,page_size:12,total:1}}));
+});
+
+test("Store BFF preserves zero and restored stock for the same Product across supplier changes",async()=>{
+ const farmA={...product.suppliers[0],name:"Bình Minh",location:"Đà Lạt"};
+ const farmB={id:"bcc839eb-b0e7-47e8-ad13-6d7bc70c41c6",name:"Tân Lập",location:"Lâm Đồng"};
+ // Response-consumption fixtures. The Backend lifecycle suite owns the stock calculation.
+ for(const [stock,farms] of [[10,[farmA,farmB]],[4,[farmB]],[0,[]],[3,[farmA]]]){
+  for(const locale of ["vi","en"]){
+   const card={...product,name:locale==="vi"?"Cà chua":"Tomato",requested_locale:locale,content_locale:locale,
+    available_quantity:stock,suppliers:farms.map(({id,name})=>({id,name}))};
+   const detail={...card,description:"Harvested today",suppliers:farms};
+   const meta={page:1,page_size:12,total:1};
+   const listUpstream=loadService({result:{data:[card],meta}});
+   const detailUpstream=loadService({result:{data:detail}});
+   const listRoute=runRoute("app/api/store/products/route.ts",{upstream:listUpstream.service}).route;
+   const detailRoute=runRoute("app/api/store/products/[slug]/route.ts",{upstream:detailUpstream.service}).route;
+   const list=await listRoute.GET(new Request(`http://localhost/api/store/products?locale=${locale}`));
+   const item=await detailRoute.GET(new Request(`http://localhost/api/store/products/${product.slug}?locale=${locale}&retry=1`),{params:Promise.resolve({slug:product.slug})});
+   assert.equal(list.status,200);
+   assert.equal(item.status,200);
+   assert.equal(item.headers.get("cache-control"),"no-store");
+   const listing=await list.json();
+   const view=await item.json();
+   assert.deepEqual(listing.meta,meta);
+   assert.equal(listing.data.length,1);
+   assert.deepEqual(listing.data[0].suppliers,card.suppliers);
+   assert.deepEqual(view.data.suppliers,farms);
+   for(const row of [listing.data[0],view.data]){
+    for(const key of ["id","slug","sku","retail_price_vnd","unit_size","unit_label"]){
+     assert.equal(row[key],product[key]);
+    }
+    assert.equal(row.requested_locale,locale);
+    assert.equal(row.available_quantity,stock);
+   }
+  }
+ }
 });

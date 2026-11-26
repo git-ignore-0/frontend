@@ -5,10 +5,10 @@ import {useAuth} from '@/auth/AuthProvider';
 import {useNFV} from '@/state/NFVContext';
 import {AccountApiError} from '@/account/account-api';
 import {getRoundProducts, getRoundSelection, getRoundsPage, isCsaMutationOutcomeUnknown} from '@/account/csa-rounds-service';
-import {selectionAccess, type CsaProduct, type CsaRoundProducts, type CsaSelection} from '@/account/csa-rounds-model';
+import {selectionAccess, type CsaRoundProducts, type CsaSelection} from '@/account/csa-rounds-model';
 import {getStoreOrder} from '@/store/store-order-service';
 import type {Locale} from '@/types';
-import {draftLines, isSelectionDraftValid, quantityLimits, sameDraft, selectionProducts, usedPoints} from './csa-rounds-presentation';
+import {draftLines, isSelectionDraftValid, quantityLimits, sameDraft, selectionProducts, usedPoints, type SelectionProduct} from './csa-rounds-presentation';
 import {CsaConfirmationError, submitCsaSelection} from './csa-round-submit';
 import {useCsaServerClock} from './useCsaServerClock';
 
@@ -61,16 +61,33 @@ async function snapshot(
   }
 }
 
+type SavedRevision = Pick<CsaSelection, 'id' | 'membershipId' | 'revision' | 'state'>;
+
+export type CsaDraftCheckpoint = {
+  current: {
+    key: string;
+    quantities: Record<string, number>;
+    products: SelectionProduct[];
+    selection: SavedRevision | null;
+  } | null;
+};
+
+function savedRevision(selection: CsaSelection | null): SavedRevision | null {
+  if (!selection) return null;
+  const {id, membershipId, revision, state} = selection;
+  return {id, membershipId, revision, state};
+}
+
 type MutationNotice = 'saveUncertain' | 'confirmUncertain' | 'confirmFailed';
 
-export function useCsaRoundSelection(roundId: string, locale: Locale) {
+export function useCsaRoundSelection(roundId: string, locale: Locale, checkpointRef?: CsaDraftCheckpoint) {
   const auth = useAuth();
   const {data, refreshResource} = useNFV();
   const owner = auth.status === 'authenticated' ? auth.session?.subject : null;
   const key = `${owner ?? ''}:${roundId}:${locale}`;
   const [loaded, setLoaded] = useState<{key: string; data: SelectionSnapshot} | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
-  const [draftProducts, setDraftProducts] = useState<CsaProduct[]>([]);
+  const [draftProducts, setDraftProducts] = useState<SelectionProduct[]>([]);
   const [actionError, setActionError] = useState<unknown>(null);
   const [readError, setReadError] = useState<unknown>(null);
   const [notice, setNotice] = useState<MutationNotice | null>(null);
@@ -99,6 +116,10 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
     reloadRequired.current = required;
     setNeedsReload(required);
   }, []);
+
+  const forgetCheckpoint = useCallback(() => {
+    if (checkpointRef?.current?.key === key) checkpointRef.current = null;
+  }, [checkpointRef, key]);
 
   const clearSnapshot = useCallback(() => {
     snapshotRef.current = null;
@@ -139,17 +160,26 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
       const next = await snapshot(roundId, locale, historyPage.current, isCurrent);
       if (!next || !isCurrent()) return;
       const previous = snapshotRef.current;
-      const saved = previous?.selection;
       const latest = next.selection;
+      const pending = !previous && checkpointRef?.current?.key === key ? checkpointRef.current : null;
+      const retained = pending && !next.catalogError &&
+        (!pending.selection || pending.selection.membershipId === latest?.membershipId) ? pending : null;
+      if (pending && !retained) forgetCheckpoint();
+      const saved = previous?.selection ?? retained?.selection;
       if (saved && latest?.id === saved.id && latest.revision < saved.revision) {
         throw new AccountApiError('invalid_response', 502);
       }
-      const review = !!previous && !replaceDraft && (
+      const review = (!!retained || (!!previous && !replaceDraft)) && (
         saved?.id !== latest?.id || saved?.revision !== latest?.revision || saved?.state !== latest?.state
       );
-      applySnapshot(next, replaceDraft || !previous || !!next.catalogError);
+      if (retained) {
+        setDraftProducts(retained.products);
+        updateDraft(retained.quantities);
+      }
+      applySnapshot(next, !retained && (replaceDraft || !previous || !!next.catalogError));
       requireReload(false);
       if (next.catalogError) {
+        forgetCheckpoint();
         setReadError(next.catalogError);
         setNeedsReview(false);
       } else if (review) {
@@ -163,6 +193,7 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
       if (!isCurrent()) return;
       setReadError(caught);
       if (caught instanceof AccountApiError && [401, 403, 404, 409].includes(caught.status)) {
+        forgetCheckpoint();
         clearSnapshot();
         setActionError(null);
         if (caught.status === 401) auth.expire();
@@ -175,7 +206,7 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
         setLoading(false);
       }
     }
-  }, [owner, roundId, locale, key, auth, applySnapshot, clearSnapshot, requireReload]);
+  }, [owner, roundId, locale, key, auth, checkpointRef, applySnapshot, clearSnapshot, forgetCheckpoint, requireReload, updateDraft]);
 
   const loadRef = useRef(load);
   useLayoutEffect(() => {loadRef.current = load;}, [load]);
@@ -249,12 +280,30 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
       const limits = quantityLimits(current.products, latest, current.quota, totals);
       if (quantity > (limits[id] ?? 0)) return;
     }
-    updateDraft({...latest, [id]: quantity});
+    const quantities = {...latest, [id]: quantity};
+    updateDraft(quantities);
+    if (!checkpointRef) return;
+    if (sameDraft(quantities, current.selection?.lines ?? [])) {
+      forgetCheckpoint();
+      return;
+    }
+    checkpointRef.current = {
+      key,
+      quantities,
+      products: selectionProducts(current, draftProducts)
+        .filter(product => (quantities[product.id] ?? 0) > 0)
+        .map(({id, name, unitLabel, quotaGroupId, quotaCost, quotaGroupName}) =>
+          ({id, name, unitLabel, quotaGroupId, quotaCost, quotaGroupName})),
+      selection: savedRevision(current.selection),
+    };
   }
 
   function acceptReview() {
     if (!current || snapshotRef.current !== current || keyRef.current !== key ||
         reading.current || mutation.current || reloadRequired.current) return;
+    if (checkpointRef?.current?.key === key) {
+      checkpointRef.current = {...checkpointRef.current, selection: savedRevision(current.selection)};
+    }
     setNeedsReview(false);
     setNotice(null);
     setActionError((previous: unknown) => previous instanceof AccountApiError && previous.code === 'csa_selection_stale' ? null : previous);
@@ -279,6 +328,8 @@ export function useCsaRoundSelection(roundId: string, locale: Locale) {
     if ((!lines.length && (confirm || !current.selection)) || !isSelectionDraftValid(lines, limits)) return;
     const generation = lifecycle.current;
     const isCurrent = () => generation === lifecycle.current && keyRef.current === key;
+    // A submitted intent must be recovered from the server after an auth remount.
+    forgetCheckpoint();
     mutation.current = true;
     setBusy(true);
     setActionError(null);

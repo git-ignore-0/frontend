@@ -12,7 +12,8 @@ const snapshot={round,selection,products:[],quota:[]};
 const h={current:snapshot,draft:{[id]:1},draftProducts:[],access:{mode:'readonly'},loading:false,busy:false,error:null,needsReload:false,dirty:false,setDraft(){},load(){},submit(){}};
 function load(file){const out={};file=path.resolve(file);vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:out,Date,URL,URLSearchParams,require(name){
  if(name==='react/jsx-runtime')return jsx;
- if(name==='react')return {useRef:v=>({current:v}),useEffect(){}};
+ if(name==='react')return {useRef:v=>({current:v}),useEffect(){},useLayoutEffect:effect=>effect()};
+ if(name==='@/auth/AuthProvider')return {useAuth:()=>({status:'authenticated',session:{subject:'member'}})};
  if(name.endsWith('.css'))return {default:{}};
  if(name==='@/components/UI')return {ActionLink:'ActionLink',Button:'Button',DataState:'DataState',Status:'Status'};
  if(name==='@/components/store/StorePrimitives')return {StorePageHeading:'StorePageHeading',StoreSection:'StoreSection'};

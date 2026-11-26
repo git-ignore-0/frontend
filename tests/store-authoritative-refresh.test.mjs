@@ -424,6 +424,28 @@ test("repeat refreshes retain price and stock notices until buyer acknowledgemen
  }
 });
 
+test("refresh keeps the requested quantity through partial, zero and reduced restored supply",async()=>{
+ const h=providerHarness();
+ h.render();h.hydrateCart();
+ h.render().updateCart("p",4);
+ h.render().patch({cartOpen:true});
+ h.render();h.validateCart();
+ for(const [index,stock] of [7,0,3].entries()){
+  if(index)h.render().retryCartProduct("p");
+  assert.equal(h.responses.length,index+1);
+  assert.equal(h.responses[index].url,"/api/store/products/rau?locale=vi&retry=1");
+  h.responses[index].resolve({ok:true,status:200,json:async()=>({...h.original,available_quantity:stock})});
+  await tick();
+  const context=h.render();h.validateCart();
+  assert.equal(context.ui.cart.p,5);
+  assert.equal(context.ui.cartProductState.p,"ready");
+  assert.equal(context.ui.cartProductNotice.p,"stock_changed");
+  assert.equal(context.storeAvailability.p,stock);
+  assert.equal(context.data.storeProducts.p.id,h.original.id);
+  assert.equal(h.responses.length,index+1);
+ }
+});
+
 test("a cart with 50 products rejects a new product, allows existing quantities and accepts a replacement",()=>{
  const h=providerHarness();let context=h.render();
  const cart=Object.fromEntries(Array.from({length:50},(_,i)=>[i?`p${i}`:"p",1]));context.patch({cart});context=h.render();

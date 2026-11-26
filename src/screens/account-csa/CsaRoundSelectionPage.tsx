@@ -1,5 +1,7 @@
 "use client";
 
+import {useLayoutEffect, useRef} from 'react';
+import {useAuth} from '@/auth/AuthProvider';
 import {ActionLink, Button, DataState, Status} from '@/components/UI';
 import {StorePageHeading, StoreSection} from '@/components/store/StorePrimitives';
 import {AuthGate} from '@/components/auth/AuthGate';
@@ -11,17 +13,17 @@ import {AccountApiError} from '@/account/account-api';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
 import {copyText} from '@/data/account-copy';
 import type {Locale} from '@/types';
-import {useCsaRoundSelection} from './useCsaRoundSelection';
+import {useCsaRoundSelection, type CsaDraftCheckpoint} from './useCsaRoundSelection';
 import {CsaRoundProductList} from './CsaRoundProductList';
 import {CsaRoundSelectionSummary} from './CsaRoundSelectionSummary';
 import {draftLines, isSelectionDraftValid, usedPoints, selectionProducts, quantityLimits} from './csa-rounds-presentation';
 import {csaSelectionCopy} from './csa-selection-copy';
 import styles from './csa-rounds.module.css';
 
-function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
+function Selection({roundId, locale, checkpointRef}: {roundId: string; locale: Locale; checkpointRef: CsaDraftCheckpoint}) {
   const c = csaRoundsCopy(locale);
   const copy = csaSelectionCopy(locale);
-  const state = useCsaRoundSelection(roundId, locale);
+  const state = useCsaRoundSelection(roundId, locale, checkpointRef);
   const {current, draft, changeQuantity, loading, busy, error, notice, access, needsReload, needsReview} = state;
   const parent = {href: `/account/${locale}?tab=csa`, label: c.back};
 
@@ -136,5 +138,12 @@ function Selection({roundId, locale}: {roundId: string; locale: Locale}) {
 }
 
 export function CsaRoundSelectionPage(props: {roundId: string; locale: Locale}) {
-  return <AuthGate><Selection key={`${props.roundId}:${props.locale}`} {...props}/></AuthGate>;
+  const auth = useAuth();
+  const checkpointRef = useRef<CsaDraftCheckpoint['current']>(null);
+  const context = `${props.roundId}:${props.locale}`;
+  const subject = auth.status === 'authenticated' ? auth.session?.subject : auth.lastConfirmedSubject;
+  useLayoutEffect(() => {
+    if (checkpointRef.current?.key !== `${subject ?? ''}:${context}`) checkpointRef.current = null;
+  }, [subject, context]);
+  return <AuthGate><Selection key={context} {...props} checkpointRef={checkpointRef}/></AuthGate>;
 }

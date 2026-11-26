@@ -31,8 +31,12 @@ function selectionScreen(readState) {
  const file=resolve(root,'src/screens/account-csa/CsaRoundSelectionPage.tsx');
  const out={};
  const modules=new Map([[resolve(root,'src/account/account-api.ts'),accountApi]]);
+ const auth={status:'authenticated',session:{subject:'member'},lastConfirmedSubject:'member'};
+ let checkpoint;
  vm.runInNewContext(ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText,{exports:out,require(name){
   if(name==='react/jsx-runtime')return jsx;
+  if(name==='react')return {useRef:initial=>checkpoint??={current:initial},useLayoutEffect:effect=>effect()};
+  if(name==='@/auth/AuthProvider')return {useAuth:()=>auth};
   if(name==='./useCsaRoundSelection')return {useCsaRoundSelection:readState};
   if(name==='@/account/account-api')return accountApi;
   if(name==='@/components/auth/AuthGate')return {AuthGate:'AuthGate'};
@@ -42,11 +46,12 @@ function selectionScreen(readState) {
   if(!existsSync(path))path+=existsSync(path+'.ts')?'.ts':'.tsx';
   return load(path,modules);
  }});
+ const page=(roundId='r',locale='vi')=>out.CsaRoundSelectionPage({roundId,locale});
  function render(locale='vi'){
-  const node=out.CsaRoundSelectionPage({roundId:'r',locale}).props.children;
+  const node=page('r',locale).props.children;
   return node.type(node.props);
  }
- return {render};
+ return {render,page,auth};
 }
 test('selection keeps schedule, quota and review visible in the shared page layout',()=>{
  let current=bundle,dirty=false,busy=false,error=null,shippingAddress=null;
@@ -268,4 +273,22 @@ test('held and missing draft removal controls remain visible but disabled during
  const buttons=nodes(tree).filter(n=>n.type==='Button');
  assert.equal(buttons.length,2);
  assert.ok(buttons.every(n=>n.props.disabled));
+});
+
+
+test('the CSA route keeps only the same-session draft outside AuthGate and retires it on owner or route change',()=>{
+ const {page,auth}=selectionScreen(()=>{throw new Error('AuthGate owns mounting the private view')});
+ const initial=page();
+ assert.equal(initial.type,'AuthGate');
+ const checkpoint=initial.props.children.props.checkpointRef;
+ checkpoint.current={key:'member:r:vi',quantities:{p:2}};
+ auth.status='checking';auth.session=null;
+ assert.equal(page().props.children.props.checkpointRef,checkpoint);
+ assert.equal(checkpoint.current.quantities.p,2);
+ auth.status='authenticated';auth.session={subject:'another-member'};
+ page();
+ assert.equal(checkpoint.current,null);
+ checkpoint.current={key:'another-member:r:vi',quantities:{p:3}};
+ page('another-round');
+ assert.equal(checkpoint.current,null);
 });

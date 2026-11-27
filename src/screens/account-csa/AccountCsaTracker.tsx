@@ -1,12 +1,14 @@
 "use client";
 
-import {useRef,useState} from "react";
+import {useLayoutEffect,useRef,useState} from "react";
 import {Button,FormField,FormInput,Icon,Section} from "@/components/UI";
 import {copyText} from "@/data/account-copy";
 import {formatDate,formatDateTime,formatExclusiveEndDate} from "@/lib/date-format";
 import {useNFV} from "@/state/NFVContext";
 import {csaMoney} from "@/screens/csa/csa-packages-model";
 import {handlePhonePaste,normalizeLocalVietnamPhone} from "@/lib/phone-number";
+import {saveContractPdf} from "@/account/csa-contract-pdf";
+import {browserSessionEpoch} from "@/auth/public-session-context";
 import {CsaTrackerApiError,downloadTrackedCsaContract,getTrackedCsaContract,isTrackerSessionExpired,lookupCsaContract,trackerContractMatchesResult,type CsaContractLocale,type CsaTrackerContract,type CsaTrackerResult} from "@/account/csa-tracker-service";
 
 type Locale="vi"|"en";
@@ -58,13 +60,38 @@ export function AccountCsaTracker(){
   const [referenceCode,setReferenceCode]=useState(""),[phone,setPhone]=useState(""),[submitted,setSubmitted]=useState(false),[loading,setLoading]=useState(false);
   const [result,setResult]=useState<CsaTrackerResult|null>(null),[contract,setContract]=useState<CsaTrackerContract|null>(null),[contractLoading,setContractLoading]=useState(false),[errorKey,setErrorKey]=useState<TrackerErrorKey>("");
   const [downloading,setDownloading]=useState<Set<string>>(new Set()),[downloadErrors,setDownloadErrors]=useState<Record<string,string>>({});
-  const lookupInFlight=useRef(false),lookupAttempt=useRef(0),contractAttempt=useRef(0),downloadGeneration=useRef(0),downloadsInFlight=useRef(new Set<string>());
+  const lookupInFlight=useRef(false),lookupAttempt=useRef(0),contractAttempt=useRef(0),downloadsInFlight=useRef(new Map<string,AbortController>());
+  useLayoutEffect(()=>()=>{lookupAttempt.current+=1;contractAttempt.current+=1;for(const controller of downloadsInFlight.current.values())controller.abort();},[]);
   const normalizedPhone=normalizeLocalVietnamPhone(phone),validReference=Boolean(referenceCode.trim()),error=errorKey?L(errorKey):"";
-  const resetLookup=(nextError:TrackerErrorKey="")=>{lookupAttempt.current+=1;contractAttempt.current+=1;downloadGeneration.current+=1;downloadsInFlight.current.clear();setReferenceCode("");setPhone("");setSubmitted(false);setLoading(false);setResult(null);setContract(null);setContractLoading(false);setErrorKey(nextError);setDownloading(new Set());setDownloadErrors({});};
+  const resetLookup=(nextError:TrackerErrorKey="")=>{lookupAttempt.current+=1;contractAttempt.current+=1;for(const controller of downloadsInFlight.current.values())controller.abort();downloadsInFlight.current.clear();setReferenceCode("");setPhone("");setSubmitted(false);setLoading(false);setResult(null);setContract(null);setContractLoading(false);setErrorKey(nextError);setDownloading(new Set());setDownloadErrors({});};
   const handleTrackerError=(caught:unknown,fallback:TrackerErrorKey)=>{if(isTrackerSessionExpired(caught)){resetLookup("csa.trackerSessionExpired");return;}setErrorKey(caught instanceof CsaTrackerApiError?trackerErrorKey(caught):fallback);};
   const loadApprovedContract=async(expected:CsaTrackerResult)=>{const attempt=++contractAttempt.current;setContractLoading(true);setErrorKey("");try{const value=await getTrackedCsaContract();if(!trackerContractMatchesResult(expected,value))throw new CsaTrackerApiError("invalid_response",502);if(attempt===contractAttempt.current)setContract(value);}catch(caught){if(attempt===contractAttempt.current)handleTrackerError(caught,"csa.trackerContractUnavailable");}finally{if(attempt===contractAttempt.current)setContractLoading(false);}};
   const performLookup=async()=>{setSubmitted(true);setErrorKey("");if(!validReference||!normalizedPhone||lookupInFlight.current)return;lookupInFlight.current=true;const attempt=++lookupAttempt.current;setLoading(true);setResult(null);setContract(null);try{const value=await lookupCsaContract({referenceCode:referenceCode.trim().toUpperCase(),phone:normalizedPhone});if(attempt!==lookupAttempt.current)return;setResult(value);if(value.status==="approved")await loadApprovedContract(value);}catch(caught){if(attempt===lookupAttempt.current)handleTrackerError(caught,"csa.trackerGenericError");}finally{if(attempt===lookupAttempt.current)setLoading(false);lookupInFlight.current=false;}};
-  const download=async(pdfLocale:CsaContractLocale,versionId?:string)=>{const key=`${versionId??"current"}:${pdfLocale}`,generation=downloadGeneration.current;if(!contract||downloadsInFlight.current.has(key))return;const version=versionId?(contract.currentVersion?.id===versionId?contract.currentVersion:contract.versions.find(item=>item.id===versionId)):null;if(versionId&&!version?.availableLocales.includes(pdfLocale)||!versionId&&!contract.availablePdfLocales.includes(pdfLocale))return;downloadsInFlight.current.add(key);setDownloading(new Set(downloadsInFlight.current));setDownloadErrors(current=>({...current,[key]:""}));try{const file=await downloadTrackedCsaContract(pdfLocale,versionId);if(generation!==downloadGeneration.current)return;const url=URL.createObjectURL(file.blob),link=document.createElement("a");link.href=url;link.download=file.filename;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(caught){if(generation!==downloadGeneration.current)return;if(isTrackerSessionExpired(caught))resetLookup("csa.trackerSessionExpired");else setDownloadErrors(current=>({...current,[key]:L(trackerErrorKey(caught))}));}finally{if(generation===downloadGeneration.current){downloadsInFlight.current.delete(key);setDownloading(new Set(downloadsInFlight.current));}}};
+  const download=async(pdfLocale:CsaContractLocale,versionId?:string)=>{
+    if(!result||!contract||!trackerContractMatchesResult(result,contract))return;
+    const version=contract.currentVersion?.id===versionId?contract.currentVersion:contract.versions.find(item=>item.id===versionId);
+    if(!version?.availableLocales.includes(pdfLocale))return;
+    const key=`${version.id}:${pdfLocale}`;
+    if(downloadsInFlight.current.has(key))return;
+    const controller=new AbortController(),epoch=browserSessionEpoch();
+    const isCurrent=()=>!controller.signal.aborted&&downloadsInFlight.current.get(key)===controller&&epoch===browserSessionEpoch();
+    downloadsInFlight.current.set(key,controller);
+    setDownloading(new Set(downloadsInFlight.current.keys()));
+    setDownloadErrors(current=>({...current,[key]:""}));
+    try{
+      const file=await downloadTrackedCsaContract(pdfLocale,contract.referenceCode,version,controller.signal);
+      if(isCurrent())saveContractPdf(file);
+    }catch(caught){
+      if(!isCurrent())return;
+      if(isTrackerSessionExpired(caught)||caught instanceof CsaTrackerApiError&&caught.status===403)resetLookup("csa.trackerSessionExpired");
+      else setDownloadErrors(current=>({...current,[key]:L(trackerErrorKey(caught))}));
+    }finally{
+      if(!controller.signal.aborted&&downloadsInFlight.current.get(key)===controller){
+        downloadsInFlight.current.delete(key);
+        setDownloading(new Set(downloadsInFlight.current.keys()));
+      }
+    }
+  };
   if(result)return <AccountCsaTrackerResult locale={locale} result={result} contract={contract} contractLoading={contractLoading} error={error} downloading={downloading} downloadErrors={downloadErrors} onRetryContract={()=>void performLookup()} onReset={()=>resetLookup()} onDownload={(pdfLocale,versionId)=>void download(pdfLocale,versionId)}/>;
   return <div className="benefits-page csa-tracker-page"><Section title={L("csa.trackerTitle")} description={L("csa.trackerIntro")} className="benefit-section"><form className="acc-form-grid csa-tracker-form" noValidate aria-busy={loading} onSubmit={event=>{event.preventDefault();void performLookup();}}><FormField label={L("csa.trackerReference")}><FormInput name="reference_code" autoComplete="off" spellCheck={false} maxLength={32} value={referenceCode} disabled={loading} aria-invalid={submitted&&!validReference} placeholder={L("csa.trackerReferencePlaceholder")} onChange={event=>setReferenceCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g,""))}/>{submitted&&!validReference&&<span className="help-error" role="alert">{L("csa.trackerRequired")}</span>}</FormField><FormField label={L("profile.phone")}><FormInput name="phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} disabled={loading} aria-invalid={submitted&&!normalizedPhone} placeholder={L("csa.trackerPhonePlaceholder")} onChange={event=>setPhone(event.target.value)} onPaste={event=>handlePhonePaste(event,setPhone)}/>{submitted&&!normalizedPhone&&<span className="help-error" role="alert">{L("profile.invalidPhone")}</span>}</FormField><div className="csa-tracker-form-actions"><Button type="submit" loading={loading}>{loading?L("csa.trackerLookingUp"):L("csa.trackerLookup")}</Button></div></form>{error&&<div className="csa-tracker-form-error"><p className="help-error" role="alert">{error}</p>{errorKey!=="csa.trackerSessionExpired"&&<Button small variant="outline" onClick={()=>void performLookup()}>{L("common.retry")}</Button>}</div>}</Section></div>;
 }

@@ -18,12 +18,11 @@ test("workshop sitemap loader returns only indexable localized workshop records"
   run(`
     import assert from 'node:assert/strict';
     const api=await import(${JSON.stringify(pathToFileURL(helperPath).href)});
-    const rows=[
-      {id:'1',slug:'soil-life',title:'Soil life',summary:'A',start_at:'2026-10-20T00:00:00Z',end_at:'2026-10-20T01:00:00Z',status:'completed',is_fallback:false},
-      {id:'2',slug:'fallback',title:'Fallback',summary:'B',start_at:'2026-10-21T00:00:00Z',end_at:'2026-10-21T01:00:00Z',status:'upcoming',is_fallback:true},
-      {id:'broken',slug:'',title:'Broken',start_at:'bad',status:'upcoming'},
-    ];
-    const fetcher=async()=>({ok:true,json:async()=>({data:rows,meta:{total:3,page_size:50}})});
+    const row={id:'11111111-1111-4111-8111-111111111111',slug:'soil-life',title:'Soil life',summary:'A',start_at:'2026-10-20T00:00:00Z',end_at:'2026-10-20T01:00:00Z',status:'completed',event_timezone:'Asia/Ho_Chi_Minh',requested_locale:'en',content_locale:'en',default_locale:'en',available_locales:['en'],is_fallback:false,registration_url:null};
+    const fallback={...row,id:'22222222-2222-4222-8222-222222222222',slug:'fallback',content_locale:'vi',default_locale:'vi',available_locales:['vi'],is_fallback:true};
+    const fetcher=async url=>({ok:true,json:async()=>new URL(url).searchParams.get('period')==='past'
+      ?{data:[row,fallback],meta:{page:1,total:2,page_size:50}}
+      :{data:[{id:'broken'}],meta:{page:1,total:1,page_size:50}}});
     assert.deepEqual(await api.getSitemapWorkshops('https://api.example','en',fetcher),[{slug:'soil-life'}]);
   `);
 });
@@ -48,8 +47,8 @@ test("workshop sitemap loader follows backend pagination beyond ten pages",()=>{
       const parsed=new URL(url);
       if(parsed.searchParams.get('period')==='past') throw new Error('past unavailable');
       const page=Number(parsed.searchParams.get('page'));upcomingCalls++;
-      const row={id:String(page),slug:'workshop-'+page,title:'Workshop '+page,summary:'A',start_at:'2026-10-20T00:00:00Z',end_at:'2026-10-20T01:00:00Z',status:'completed',is_fallback:false};
-      return {ok:true,json:async()=>({data:[row],meta:{total:550,page_size:50}})};
+      const row={id:'11111111-1111-4111-8111-'+String(page).padStart(12,'0'),slug:'workshop-'+page,title:'Workshop '+page,summary:'A',start_at:'2026-10-20T00:00:00Z',end_at:'2026-10-20T01:00:00Z',status:'upcoming',event_timezone:'Asia/Ho_Chi_Minh',requested_locale:'en',content_locale:'en',default_locale:'en',available_locales:['en'],is_fallback:false,registration_url:null};
+      return {ok:true,json:async()=>({data:[row],meta:{page,total:550,page_size:50}})};
     };
     const items=await api.getSitemapWorkshops('https://api.example','en',fetcher);
     assert.equal(upcomingCalls,11);

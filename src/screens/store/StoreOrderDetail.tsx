@@ -6,6 +6,7 @@ import {ResponsiveDialog} from "@/components/overlays/OverlayPrimitives";
 import {useEffect,useLayoutEffect,useRef,useState} from "react";
 import {useNFV} from "@/state/NFVContext";
 import {useAuth} from "@/auth/AuthProvider";
+import {AccountApiError,isPublicAccessDenied} from "@/account/account-api";
 import {useStoreSession} from "@/store/use-store-session";
 import {Button,DataState,Icon,MoneyLine,Status,Photo} from "@/components/UI";
 import {StoreSection,StorePageHeading,StoreProductRow,StoreRecipientSummary,StoreSummaryAmounts} from "@/components/store/StorePrimitives";
@@ -38,7 +39,7 @@ const duration=(ms:number)=>`${String(Math.floor(ms/3600000)).padStart(2,"0")}:$
 
 const deadlineKey=(order:StoreOrder)=>`${order.id}:${order.status}:${order.expiresAt}`;
 
-export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getStoreOrder,readOnly=false,returnTo="orders"}:{id:string;locale:Locale;initialOrder?:StoreOrder;onLoaded?:(order:StoreOrder)=>void;loadOrder?:(id:string)=>Promise<StoreOrder>;readOnly?:boolean;returnTo?:"csa"|"orders"}){
+export function StoreOrderDetail({id,locale,initialOrder,onLoaded,onRetired,loadOrder=getStoreOrder,readOnly=false,returnTo="orders"}:{id:string;locale:Locale;initialOrder?:StoreOrder;onLoaded?:(order:StoreOrder)=>void;onRetired?:()=>void;loadOrder?:(id:string)=>Promise<StoreOrder>;readOnly?:boolean;returnTo?:"csa"|"orders"}){
  const storeRequest=useStoreSession();
  const {copyToClipboard}=useNFV();
  const copy=COPY[locale],settings=useSiteSettings(locale),contact=contactPresentation(settings),auth=useAuth();
@@ -54,7 +55,12 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
  const intent=useRef<{kind:"report"|"cancel"|"request";refund:boolean;key:string}|null>(null);
  const intentOwner=useRef(key);
  const accept=(value:StoreOrder)=>{const time=clock();setReceivedAt(time);setNow(time);setOrder(value);setOrderKey(key);onLoaded?.(value);setState("ready");setError("")};
- const load=async(background=false)=>{if(activeRequest.current==="mutation"||background&&activeRequest.current)return;const seq=++requestSeq.current;activeRequest.current="load";if(!background)setState("loading");try{const value=await storeRequest(()=>loadOrder(id));if(seq===requestSeq.current)accept(value)}catch{if(seq===requestSeq.current)setState("error")}finally{if(seq===requestSeq.current)activeRequest.current=null}};
+ const retireOrder=(reason:unknown)=>{
+  if(!isPublicAccessDenied(reason)&&!(reason instanceof AccountApiError&&reason.status===404))return false;
+  setOrder(undefined);setAddressNames(null);setDialog(null);intent.current=null;setRetryIntent(null);setUnresolved(false);setState("error");onRetired?.();
+  return true;
+ };
+ const load=async(background=false)=>{if(activeRequest.current==="mutation"||background&&activeRequest.current)return;const seq=++requestSeq.current;activeRequest.current="load";if(!background)setState("loading");try{const value=await storeRequest(()=>loadOrder(id));if(seq===requestSeq.current)accept(value)}catch(reason){if(seq===requestSeq.current&&!retireOrder(reason))setState("error")}finally{if(seq===requestSeq.current)activeRequest.current=null}};
  // Pause during verification. A same-owner check keeps any unfinished mutation's exact key.
  useLayoutEffect(()=>{
   if(intentOwner.current!==key){intentOwner.current=key;intent.current=null;setDialog(null);}
@@ -102,7 +108,7 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,loadOrder=getS
   const mutation=++mutationSeq.current,seq=++requestSeq.current;activeRequest.current="mutation";setBusy(kind);setError("");
   const pending=intent.current??{kind,refund,key:kind==="report"?"":crypto.randomUUID()};intent.current=pending;
   try{const value=await storeRequest(()=>kind==="report"?reportStoreTransfer(order.id):kind==="request"?requestStoreRefund(order.id,pending.key):cancelStoreOrder(order.id,pending.key,pending.refund));if(seq!==requestSeq.current)return;accept(value);intent.current=null;setRetryIntent(null);setUnresolved(false);setDialog(null);}
-  catch(caught){if(seq!==requestSeq.current)return;const status=(caught as {status?:number}).status;setError(copy.failed);if(!status||status>=500){setUnresolved(true);setRetryIntent(pending)}else{intent.current=null;setRetryIntent(null);setUnresolved(false);if(status===409){setDialog(null);if(remaining(order,receivedAt,clock())===0)expiredRefresh.current=deadlineKey(order);activeRequest.current=null;await load(true);}}}
+  catch(caught){if(seq!==requestSeq.current||retireOrder(caught))return;const status=(caught as {status?:number}).status;setError(copy.failed);if(!status||status>=500){setUnresolved(true);setRetryIntent(pending)}else{intent.current=null;setRetryIntent(null);setUnresolved(false);if(status===409){setDialog(null);if(remaining(order,receivedAt,clock())===0)expiredRefresh.current=deadlineKey(order);activeRequest.current=null;await load(true);}}}
   // Read sequencing must not strand this mutation lock or unlock a replacement order.
   finally{if(mutation===mutationSeq.current){if(activeRequest.current==="mutation")activeRequest.current=null;setBusy("");}}
  };

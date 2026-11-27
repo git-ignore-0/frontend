@@ -23,7 +23,7 @@ export async function verifyCartProduct(
       if(!isCurrent())return null;
       if(response.status===404)continue;
       if(!response.ok)throw Error("refresh_failed");
-      const product=parseStoreProductDetail(await response.json());
+      const product=parseStoreProductDetail(await response.json(),{slug,locale});
       if(!isCurrent())return null;
       if(product.id===id)return product;
     }catch(error){

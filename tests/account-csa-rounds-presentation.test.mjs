@@ -1,8 +1,9 @@
 import test from 'node:test';
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
+import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
 const url=pathToFileURL(new URL('../src/screens/account-csa/csa-rounds-presentation.ts',import.meta.url).pathname).href;
-const run=code=>execFileSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{stdio:'pipe'});
+const run=code=>{const result=spawnSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{encoding:'utf8'});assert.equal(result.status,0,result.stderr||result.error?.message);};
 test('round collection expands only multiple rows and uses total across pages',()=>run(`
  import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
  assert.equal(m.roundsExpanded(1,false),true);assert.equal(m.roundsExpanded(21,false),false);assert.equal(m.roundsExpanded(21,true),true);

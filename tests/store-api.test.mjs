@@ -33,13 +33,21 @@ function loadValidation(){
  });
 }
 
+test("catalog response rejects an unexpected page or repeated product identity",()=>{
+ const {parseStorePage}=loadModel();
+ const expected={page:2,pageSize:24,locale:"en"};
+ assert.throws(()=>parseStorePage({data:[],meta:{page:1,page_size:24,total:100}},expected));
+ assert.throws(()=>parseStorePage({data:[],meta:{page:2,page_size:24,total:Number.MAX_SAFE_INTEGER+1}},expected));
+ assert.throws(()=>parseStorePage({data:[product,product],meta:{page:2,page_size:24,total:100}},expected));
+});
+
 function loadService({origin="http://127.0.0.1:8000",result={data:[]},status=200}={}){
  const model=loadModel();
  const request=runModule("src/store/store-request.ts");
  const calls=[];
  const fetcher=async(url,init)=>{
   calls.push({url:String(url),init});
-  return {ok:status>=200&&status<300,status,json:async()=>result};
+  return {ok:status>=200&&status<300,status,json:async()=>typeof result==="function"?result(url):result};
  };
  const service=runModule("src/store/store-service.ts",id=>{
   if(id==="@/lib/public-workshop")return {getPublicContentOrigin:()=>origin};
@@ -145,11 +153,11 @@ test("Store request validation rejects missing locale, duplicates and unbounded 
 });
 
 test("Store service builds only public backend URLs and applies cache tags or retry bypass",async()=>{
- const list=loadService({result:{data:[product],meta:{page:1,page_size:12,total:1}}});
+ const list=loadService({result:{data:[product],meta:{page:2,page_size:12,total:13}}});
  await list.service.fetchStoreProducts({locale:"en",search:"tomato",sort:"price_asc",page:2,pageSize:12},{bypassCache:false});
  assert.equal(list.calls[0].url,"http://127.0.0.1:8000/api/v1/public/store-products?locale=en&search=tomato&sort=price_asc&page=2&page_size=12");
  assert.deepEqual(JSON.parse(JSON.stringify(list.calls[0].init.next)),{revalidate:300,tags:["store-products"]});
- const detail=loadService({result:{data:{...product,description:"Full",suppliers:[{...product.suppliers[0],location:"Da Lat"}]}}});
+ const detail=loadService({result:{data:{...product,requested_locale:"vi",is_fallback:true,description:"Full",suppliers:[{...product.suppliers[0],location:"Da Lat"}]}}});
  await detail.service.fetchStoreProduct("tomato","vi",{bypassCache:false});
  assert.equal(detail.calls[0].url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=vi");
  assert.deepEqual(JSON.parse(JSON.stringify(detail.calls[0].init.next)),{revalidate:300,tags:["store-product-details","store-product:tomato"]});
@@ -197,7 +205,7 @@ test("a discontinued product's fresh detail response stays a 404 through the Sto
 
 test("product page and metadata share a fresh request without sharing data across renders or locales",async()=>{
  const detail={...product,description:"Harvested today",suppliers:product.suppliers.map(supplier=>({...supplier,location:"Đà Lạt"}))};
- const {service,calls}=loadService({result:{data:detail}});
+ const {service,calls}=loadService({result:url=>({data:{...detail,requested_locale:url.searchParams.get("locale"),is_fallback:url.searchParams.get("locale")!=="en"}})});
  const serverReact=require(join(dirname(require.resolve("react/package.json")),"cjs/react.react-server.development.js"));
  const internals=serverReact.__SERVER_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
  const jsx=(type,props)=>({type,props});

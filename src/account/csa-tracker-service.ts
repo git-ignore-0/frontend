@@ -1,3 +1,5 @@
+import {contractPdfFilename,readContractPdf,type CsaContractFile} from "./csa-contract-pdf.ts";
+
 export type CsaTrackerStatus="pending"|"payment_confirmed"|"approved"|"rejected"|"expired";
 export type CsaTrackerRefundStatus="not_applicable"|"pending"|"completed";
 export type CsaContractLocale="vi"|"en";
@@ -82,12 +84,22 @@ export function trackerContractMatchesResult(result:Pick<CsaTrackerResult,"contr
   return result.contract?.id===contract.id&&result.contract.referenceCode===contract.referenceCode;
 }
 export async function getTrackedCsaContract():Promise<CsaTrackerContract>{return trackerContract(await trackerJson("contract"));}
-export async function downloadTrackedCsaContract(locale:CsaContractLocale,versionId?:string):Promise<{blob:Blob;filename:string}>{
-  let response:Response;try{response=await fetch(`${basePath}/contract/pdf?locale=${locale}${versionId?`&version_id=${encodeURIComponent(versionId)}`:""}`,{method:"GET",credentials:"same-origin",cache:"no-store"});}catch{throw new CsaTrackerApiError("request_failed",0);}
+export async function downloadTrackedCsaContract(locale:CsaContractLocale,referenceCode:string,version:Pick<CsaContractVersion,"id"|"versionNumber">,signal?:AbortSignal):Promise<CsaContractFile>{
+  let response:Response;
+  try{
+    response=await fetch(`${basePath}/contract/pdf?locale=${locale}&version_id=${encodeURIComponent(version.id)}`,{method:"GET",credentials:"same-origin",cache:"no-store",signal});
+  }catch{
+    signal?.throwIfAborted();
+    throw new CsaTrackerApiError("request_failed",0);
+  }
   if(!response.ok)throw await responseError(response);
-  if(!response.headers.get("content-type")?.startsWith("application/pdf"))throw new CsaTrackerApiError("csa_contract_pdf_unavailable",502);
-  const raw=response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i)?.[1]??`csa-contract.${locale}.pdf`;
-  const filename=raw.replace(/[\\/\r\n]/g,"-").trim()||`csa-contract.${locale}.pdf`;
-  return {blob:await response.blob(),filename};
+  try{
+    const file=await readContractPdf(response,contractPdfFilename(referenceCode,locale,version.versionNumber));
+    signal?.throwIfAborted();
+    return file;
+  }catch{
+    signal?.throwIfAborted();
+    throw new CsaTrackerApiError("csa_contract_pdf_unavailable",502);
+  }
 }
 export function isTrackerSessionExpired(error:unknown):boolean{return error instanceof CsaTrackerApiError&&error.code==="csa_tracker_session_expired";}

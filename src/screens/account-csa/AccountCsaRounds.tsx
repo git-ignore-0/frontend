@@ -5,6 +5,7 @@ import {Button, DataState, Icon, Section} from '@/components/UI';
 import {useNFV} from '@/state/NFVContext';
 import {useStoreSession} from '@/store/use-store-session';
 import {useAuth} from '@/auth/AuthProvider';
+import {AccountApiError, isPublicAccessDenied} from '@/account/account-api';
 import {getRoundsPage, getRoundSelection} from '@/account/csa-rounds-service';
 import type {CsaRound, CsaSelection} from '@/account/csa-rounds-model';
 import {csaRoundsCopy, csaRoundError} from '@/data/csa-rounds-copy';
@@ -26,7 +27,7 @@ export function AccountCsaRounds() {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState<RoundsPage | null>(null);
-  const key = `${owner ?? ''}:${ui.locale}:${page}`;
+  const key = `${auth.session?.binding ?? owner ?? ''}:${ui.locale}:${page}`;
   const result = loaded?.key === key ? loaded : null;
   const loadedKey = useRef<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -51,7 +52,15 @@ export function AccountCsaRounds() {
         setLoaded({...next, receivedAt: performance.now(), epoch: current, key});
       }
     } catch (caught) {
-      if (epoch.current === current) setError(caught);
+      if (epoch.current !== current) return;
+      if (isPublicAccessDenied(caught)) {
+        selectionEpoch.current += 1;
+        selectionRequests.current.clear();
+        loadedKey.current = null;
+        setLoaded(null);
+        setSelections({});
+      }
+      setError(caught);
     }
   }, [page, ready, owner, activePane, key, request]);
 
@@ -87,7 +96,9 @@ export function AccountCsaRounds() {
       const selection = await request(()=>getRoundSelection(id),undefined,isCurrent);
       if (isCurrent()) setSelections(rows => ({...rows, [id]: {loading: false, selection, receivedAt: performance.now()}}));
     } catch (caught) {
-      if (isCurrent()) setSelections(rows => ({...rows, [id]: {...rows[id], loading: false, error: caught}}));
+      if (!isCurrent()) return;
+      const retired = isPublicAccessDenied(caught) || caught instanceof AccountApiError && caught.status === 404;
+      setSelections(rows => ({...rows, [id]: {...(retired ? {} : rows[id]), loading: false, error: caught}}));
     }
   }, [ready, activePane, result?.epoch, request]);
 

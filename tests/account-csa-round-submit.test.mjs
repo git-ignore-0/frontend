@@ -1,7 +1,8 @@
 import test from 'node:test';
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
+import assert from 'node:assert/strict';
 const url=new URL('../src/screens/account-csa/csa-round-submit.ts',import.meta.url).href;
-const run=code=>execFileSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{stdio:'pipe'});
+const run=code=>{const result=spawnSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{encoding:'utf8'});assert.equal(result.status,0,result.stderr||result.error?.message);};
 test('reselection saves before confirming using the returned revision',()=>run(`
  import assert from 'node:assert/strict';const {submitCsaSelection}=await import(${JSON.stringify(url)});const calls=[];
  const result=await submitCsaSelection({roundId:'r',selection:{id:'s',revision:3,lines:[]},lines:[{productId:'p',quantity:1}],locale:'vi',confirm:true},

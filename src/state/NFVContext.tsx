@@ -3,6 +3,7 @@ import {createContext, useCallback, useContext, useEffect, useLayoutEffect, useM
 import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen, Order} from "@/types";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
+import {isPublicAccessDenied} from "@/account/account-api";
 import {localeFromPath,localScreenFromPath,navigationHrefForPage} from "@/data/main-navigation";
 import {accountRouteState} from "@/lib/account-navigation";
 import {syncBrowserRoute} from "@/lib/browser-navigation";
@@ -32,6 +33,15 @@ type Ctx = {
   updateCart:(id:string,delta:number)=>void; acknowledgeCartProduct:(id:string)=>void; retryCartProduct:(id:string)=>void; markCartProductsUnavailable:(ids:readonly string[])=>void; beginCheckout:()=>void;
   loadWards:(province:string,force?:boolean)=>Promise<void>; refreshResource:(resource:Resource)=>Promise<void>;
 };
+const privateResource:Partial<Record<keyof Backend,Resource>>={
+  getShippingAddress:"address",saveShippingAddress:"address",getCSA:"csa",getCsaUsagePage:"csa",
+  getRewards:"rewards",getRewardHistoryPage:"rewards",redeemGift:"rewards",
+  getReferrals:"referrals",getReferralsPage:"referrals",applyReferralCode:"referrals",
+};
+const actionResource:Readonly<Record<string,Resource>>={
+  "save:address":"address","gift:redeem":"rewards","referral:apply":"referrals",
+  "page:csa":"csa","page:referrals":"referrals","page:rewards":"rewards","page:redemptions":"rewards",
+};
 const Context=createContext<Ctx|null>(null);
 const CATALOG_RECHECK_INTERVAL_MS=30_000;
 function openCartForValidation(state:UIState):UIState {
@@ -60,6 +70,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   useLayoutEffect(()=>()=>{authEpoch.current+=1},[auth.status,auth.session]);
   const giftIntentOwner=useRef<string|null>(null);
   const resourceSequences=useRef(new Map<Resource,number>());
+  const resourceRetirements=useRef(new Map<Resource,number>());
   const beginResourceRequest=useCallback((resource:Resource)=>{
     const sequence=(resourceSequences.current.get(resource)??0)+1,epoch=authEpoch.current;
     resourceSequences.current.set(resource,sequence);
@@ -127,8 +138,16 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   },[cartRefresh]);
   useEffect(()=>{if(cartReady)saveBlockedStoreProducts(window.sessionStorage,storeAvailability)},[cartReady,storeAvailability]);
   useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,ui.toastSequence,patch]);
+  const retireResource=useCallback((resource:Resource)=>{
+    resourceSequences.current.set(resource,(resourceSequences.current.get(resource)??0)+1);
+    resourceRetirements.current.set(resource,(resourceRetirements.current.get(resource)??0)+1);
+    setData(state=>resource==="address"?{...state,shippingAddress:null,addresses:[]}:{...state,[resource]:null});
+    setUI(state=>({...state,accountFetchState:{...state.accountFetchState,[resource]:"error"},
+      ...(resource==="address"?{addressEditing:false}:resource==="rewards"?{giftIntent:null}:{})}));
+  },[]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
     const epoch=authEpoch.current;
+    const resource=privateResource[method],sequence=resource&&resourceSequences.current.get(resource);
     try {
       if(method==="getRewards")return await rewardsService.getRewards(ui.locale) as T;
       if(method==="getRewardGiftsPage")return await rewardsService.getRewardGiftsPage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
@@ -148,13 +167,21 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(typeof fn!=="function")throw new Error(ui.locale==="en"?`API is not connected: ${method}`:`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
     }
-    catch(error){if(epoch===authEpoch.current&&isUnauthorized(error))expire();throw error;}
-  },[expire,ui.locale]);
+    catch(error){
+      if(epoch===authEpoch.current){
+        if(isUnauthorized(error))expire();
+        else if(resource&&resourceSequences.current.get(resource)===sequence&&isPublicAccessDenied(error))retireResource(resource);
+      }
+      throw error;
+    }
+  },[expire,retireResource,ui.locale]);
   const act=useCallback(async<T,>(key:string,task:()=>Promise<T>,success?:string,onCurrentResult?:(result:T|undefined)=>void):Promise<T|undefined>=>{
     const epoch=authEpoch.current;
+    const resource=actionResource[key],accessRevision=resource&&resourceRetirements.current.get(resource);
     if(activeActions.current.get(key)===epoch)return undefined;
     activeActions.current.set(key,epoch);
-    const current=()=>epoch===authEpoch.current&&activeActions.current.get(key)===epoch;
+    const current=()=>epoch===authEpoch.current&&activeActions.current.get(key)===epoch&&
+      (!resource||resourceRetirements.current.get(resource)===accessRevision);
     setUI(s=>({...s,busyKeys:[...s.busyKeys.filter(item=>item!==key),key],error:""}));
     try {
       const result=await task();

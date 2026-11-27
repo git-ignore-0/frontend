@@ -81,7 +81,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/account/administrative-units-service")return {resolveAdministrativeAddressNames:services.resolveAdministrativeAddressNames??(async()=>({provinceName:"Tỉnh thử",wardName:"Phường thử"}))};
   if(name==="@/account/shipping-address-model")return load("src/account/shipping-address-model.ts");
   if(name==="@/components/account/GuestBuyerFields")return {GuestBuyerFields:"GuestBuyerFields"};
-  if(name==="@/account/account-api")return {AccountApiError:ApiError};
+  if(name==="@/account/account-api")return {AccountApiError:ApiError,isPublicAccessDenied:error=>error instanceof ApiError&&error.status===403&&error.code!=="invalid_origin"};
   if(name==="@/hooks/useSiteSettings")return {useSiteSettings:()=>null};
   if(name==="@/lib/contact-settings")return {contactPresentation:()=>({})};
   if(name==="@/lib/format")return {money:String};

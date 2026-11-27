@@ -24,3 +24,18 @@ test('new workflow and refund metadata are strict even without payment',()=>{
  assert.equal(parseStoreOrder({...raw,refund_status:'refunded',refunded_at:time,refund_note:'Bank returned',refund_amount_vnd:'45000'}).refundAmountVnd,45000);
 });
 test('locale actor UUID and timestamps are validated at order boundary',()=>{for(const [field,value] of [['locale','fr'],['payment_received_by','admin'],['server_time','now'],['server_time','2027-02-30T01:00:00Z'],['expires_at','2027-01-01'],['approved_at',9],['payment_received_at','2027-01-01T10:00:00']])assert.throws(()=>parseStoreOrder({...raw,[field]:value}));assert.equal(parseStoreOrder({...raw,payment_received_by:id,payment_received_at:time}).paymentReceivedBy,id)});
+
+test('Store order identity and line quantities must match the wire contract',()=>{
+ const line={id,product_id:id,sku:'NFV-1',name:'Greens',unit_size:'0.250',unit_label:'pack',unit_price_vnd:'10000',quantity:2,quota_group_id:id,quota_cost:.25,quota_quantity:1,quota_units:.25,cash_quantity:1,cash_subtotal_vnd:'10000'};
+ const order={...raw,can_buy_again:false,lines:[line],subtotal_vnd:'10000',shipping_fee_vnd:'0',total_vnd:'10000'};
+ assert.equal(parseStoreOrder(order).lines[0].quotaUnits,.25);
+ for(const invalid of [{...order,id:'arbitrary'},{...order,lines:[{...line,product_id:'arbitrary'}]},{...order,lines:[{...line,quota_group_id:'arbitrary'}]},{...order,lines:[{...line,quantity:'2'}]},{...order,lines:[{...line,quota_quantity:2}]},{...order,lines:[line,line]}])assert.throws(()=>parseStoreOrder(invalid));
+ assert.throws(()=>parseStoreOrder({...raw,csa:{round,selection:{...selection,order_id:id}}}));
+});
+
+test('Store order does not publish payment details with mismatched QR fields',()=>{
+ const payment={status:'unconfirmed',bank_bin:'970422',bank_name:'Bank',account_number:'0123',account_name:'Customer',transfer_content:'SO1',qr_payload:{acqId:'970422',accountNo:'0123',accountName:'Customer',amount:10000,addInfo:'SO1'},received_at:null,refunded_at:null,refund_amount_vnd:null,refund_note:''};
+ const order={...raw,can_buy_again:false,status:'payment_pending',payment_status:'unconfirmed',shipping_fee_vnd:'10000',total_vnd:'10000',payment};
+ assert.equal(parseStoreOrder(order).payment.qrPayload.amount,10000);
+ for(const qr of [{...payment.qr_payload,amount:'10000'},{...payment.qr_payload,amount:1},{...payment.qr_payload,accountNo:'9999'}])assert.throws(()=>parseStoreOrder({...order,payment:{...payment,qr_payload:qr}}));
+});

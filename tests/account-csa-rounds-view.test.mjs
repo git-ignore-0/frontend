@@ -12,7 +12,7 @@ const treeNodes=tree=>!tree||typeof tree!=='object'?[]:[tree,...[tree.props?.chi
 const copy={title:'Rounds',rounds:'rounds',show:'Expand',hide:'Collapse',loading:'Loading',previous:'Previous',next:'Next',retry:'Retry'};
 const round={id:'r',name:'Round',serverTime:'2026-11-20T08:00:00Z'};
 function listHarness(total,hasMembership=true,selectionRequest=async()=>null,listRequest=null){const h=hooks(),calls={list:0,selection:0},owner='member',events={},auth={status:'authenticated',session:{subject:'member'},expire(){calls.expired=(calls.expired??0)+1}},ui={locale:'vi',page:'account',accountTab:'csa',accountHubOpen:false};
- const imports={react:h.react,'@/components/UI':{Button:'Button',DataState:'DataState',Icon:'Icon',Section:'Section'},'@/state/NFVContext':{useNFV:()=>({ui,data:{csa:{active:hasMembership?{status:'active'}:null}},accountSessionKey:owner})},'@/auth/AuthProvider':{useAuth:()=>auth},'@/account/csa-rounds-service':{async getRoundsPage(){calls.list++;if(listRequest)return listRequest();return {items:total?[round,...(total>1?[{...round,id:'s'}]:[])]:[],total,pageSize:20}},async getRoundSelection(id){calls.selection++;return selectionRequest(id)}},'@/data/csa-rounds-copy':{csaRoundsCopy:()=>copy,csaRoundError:()=> 'Failed'},'./csa-rounds-presentation':{roundsExpanded:(n,open)=>n===1||n>1&&open},'./CsaRoundItem':{CsaRoundItem:'RoundItem'}};
+ const imports={'@/account/account-api':{AccountApiError:class extends Error{},isPublicAccessDenied:e=>e?.status===403&&e?.code!=='invalid_origin'},react:h.react,'@/components/UI':{Button:'Button',DataState:'DataState',Icon:'Icon',Section:'Section'},'@/state/NFVContext':{useNFV:()=>({ui,data:{csa:{active:hasMembership?{status:'active'}:null}},accountSessionKey:owner})},'@/auth/AuthProvider':{useAuth:()=>auth},'@/account/csa-rounds-service':{async getRoundsPage(){calls.list++;if(listRequest)return listRequest();return {items:total?[round,...(total>1?[{...round,id:'s'}]:[])]:[],total,pageSize:20}},async getRoundSelection(id){calls.selection++;return selectionRequest(id)}},'@/data/csa-rounds-copy':{csaRoundsCopy:()=>copy,csaRoundError:()=> 'Failed'},'./csa-rounds-presentation':{roundsExpanded:(n,open)=>n===1||n>1&&open},'./CsaRoundItem':{CsaRoundItem:'RoundItem'}};
  h.react.useLayoutEffect=h.react.useEffect;
  imports['@/store/use-store-session']=moduleAt('src/store/use-store-session.ts',{react:h.react,'@/auth/AuthProvider':{useAuth:()=>auth},'@/auth/auth-service':{isUnauthorized:e=>e?.status===401}});
  const {AccountCsaRounds}=moduleAt('src/screens/account-csa/AccountCsaRounds.tsx',imports,events);let tree;async function settle(){for(let i=0;i<5;i++){tree=h.render(AccountCsaRounds);h.flush();await new Promise(r=>setImmediate(r))}return tree};return {h,calls,settle,events,ui,auth};}
@@ -134,4 +134,37 @@ test('late 401 from replaced session or unmounted rounds cannot expire current a
   await v.settle();if(dispose)v.h.dispose();else {v.auth.session={subject:'member'};await v.settle()}
   reject(Object.assign(Error('old session'),{status:401}));await v.settle();assert.equal(v.calls.expired??0,0);v.h.dispose();
  }
+});
+
+
+test('403 during list refresh clears stale rows and drops an in-flight selection',async()=>{
+ let count=0,resolveSelection;
+ const v=listHarness(1,true,()=>new Promise(resolve=>{resolveSelection=resolve}),async()=>{
+  if(++count>1)throw Object.assign(Error('denied'),{status:403});
+  return {items:[round],total:1,pageSize:20};
+ });
+ try{
+  assert.ok(treeNodes(await v.settle()).find(n=>n.type==='RoundItem'));
+  v.events.focus();let tree=await v.settle();
+  assert.equal(treeNodes(tree).filter(n=>n.type==='RoundItem').length,0);
+  resolveSelection({id:'secret',lines:[]});tree=await v.settle();
+  assert.equal(treeNodes(tree).filter(n=>n.type==='RoundItem').length,0);
+  assert.ok(treeNodes(tree).find(n=>n.type==='DataState'&&n.props.kind==='error'));
+ }finally{v.h.dispose()}
+});
+
+test('selection permission denial retires only the matching round history',async()=>{
+ let count=0;
+ const v=listHarness(1,true,async()=>{
+  if(++count>1)throw Object.assign(Error('denied'),{status:403});
+  return {id:'selection',state:'locked',lines:[]};
+ });
+ try{
+  let item=treeNodes(await v.settle()).find(n=>n.type==='RoundItem');
+  assert.equal(item.props.selection.id,'selection');
+  item.props.onRetry();
+  item=treeNodes(await v.settle()).find(n=>n.type==='RoundItem');
+  assert.equal(item.props.selection,undefined);
+  assert.equal(item.props.error.status,403);
+ }finally{v.h.dispose()}
 });

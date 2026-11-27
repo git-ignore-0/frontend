@@ -46,7 +46,7 @@ test("reward service preserves backend error codes and submits the caller idempo
     };
     const result=await service.redeemGift({giftId:'reward-1',idempotencyKey:'11111111-1111-4111-8111-111111111111',locale:'en'});
     assert.deepEqual(submitted.body,{reward_id:'reward-1',idempotency_key:'11111111-1111-4111-8111-111111111111'});
-    assert.equal(submitted.headers['X-NFV-Public-Request'],'1');
+    assert.equal(new Headers(submitted.headers).get('X-NFV-Public-Request'),'1');
     assert.equal(result.accepted,true);
     assert.equal(result.balance,150);
     assert.equal(result.redemption.status,'pending');

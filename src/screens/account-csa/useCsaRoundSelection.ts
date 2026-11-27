@@ -3,10 +3,9 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {useAuth} from '@/auth/AuthProvider';
 import {useNFV} from '@/state/NFVContext';
-import {AccountApiError} from '@/account/account-api';
-import {getRoundProducts, getRoundSelection, getRoundsPage, isCsaMutationOutcomeUnknown} from '@/account/csa-rounds-service';
+import {AccountApiError,isPublicAccessDenied} from '@/account/account-api';
+import {getRoundProducts, getRoundHistory, isCsaMutationOutcomeUnknown} from '@/account/csa-rounds-service';
 import {selectionAccess, type CsaRoundProducts, type CsaSelection} from '@/account/csa-rounds-model';
-import {getStoreOrder} from '@/store/store-order-service';
 import type {Locale} from '@/types';
 import {draftLines, isSelectionDraftValid, quantityLimits, sameDraft, selectionProducts, usedPoints, type SelectionProduct} from './csa-rounds-presentation';
 import {CsaConfirmationError, submitCsaSelection} from './csa-round-submit';
@@ -17,7 +16,6 @@ type SelectionSnapshot = CsaRoundProducts & {catalogError?: AccountApiError};
 async function snapshot(
   roundId: string,
   locale: Locale,
-  historyPage: {current: number | null},
   isCurrent: () => boolean,
 ): Promise<SelectionSnapshot | null> {
   try {
@@ -27,37 +25,9 @@ async function snapshot(
     // History remains viewable when the shopping endpoint refuses access.
     // Its data must never restore editing rights denied by that endpoint.
     if (!(error instanceof AccountApiError) || ![404, 409].includes(error.status)) throw error;
-    const selection = await getRoundSelection(roundId);
+    const history = await getRoundHistory(roundId);
     if (!isCurrent()) return null;
-    if (selection?.orderId) {
-      const order = await getStoreOrder(selection.orderId);
-      if (!isCurrent()) return null;
-      if (order.csa?.round.id === roundId.toLowerCase() && order.csa.selection.id === selection.id) {
-        return {round: order.csa.round, selection: order.csa.selection, products: [], quota: [], catalogError: error};
-      }
-    }
-    const cachedPage = historyPage.current;
-    const readPage = async (page: number) => {
-      const result = await getRoundsPage(page);
-      const round = result.items.find(item => item.id === roundId.toLowerCase());
-      if (round) historyPage.current = page;
-      return {result, round};
-    };
-    let lastPage = Infinity;
-    if (cachedPage !== null) {
-      const {result, round} = await readPage(cachedPage);
-      if (!isCurrent()) return null;
-      if (round) return {round, selection, products: [], quota: [], catalogError: error};
-      lastPage = Math.max(1, Math.ceil(result.total / result.pageSize));
-    }
-    for (let page = 1; page <= lastPage; page++) {
-      if (page === cachedPage) continue;
-      const {result, round} = await readPage(page);
-      if (!isCurrent()) return null;
-      if (round) return {round, selection, products: [], quota: [], catalogError: error};
-      lastPage = Math.max(1, Math.ceil(result.total / result.pageSize));
-    }
-    throw error;
+    return {...history, products: [], quota: [], catalogError: error};
   }
 }
 
@@ -83,7 +53,7 @@ type MutationNotice = 'saveUncertain' | 'confirmUncertain' | 'confirmFailed';
 export function useCsaRoundSelection(roundId: string, locale: Locale, checkpointRef?: CsaDraftCheckpoint) {
   const auth = useAuth();
   const {data, refreshResource} = useNFV();
-  const owner = auth.status === 'authenticated' ? auth.session?.subject : null;
+  const owner = auth.status === 'authenticated' ? auth.session?.binding??auth.session?.subject : null;
   const key = `${owner ?? ''}:${roundId}:${locale}`;
   const [loaded, setLoaded] = useState<{key: string; data: SelectionSnapshot} | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
@@ -97,7 +67,6 @@ export function useCsaRoundSelection(roundId: string, locale: Locale, checkpoint
   const [needsReview, setNeedsReview] = useState(false);
   const epoch = useRef(0);
   const lifecycle = useRef(0);
-  const historyPage = useRef<{current: number | null}>({current: null});
   const reading = useRef(false);
   const mutation = useRef(false);
   const reloadRequired = useRef(false);
@@ -157,7 +126,7 @@ export function useCsaRoundSelection(roundId: string, locale: Locale, checkpoint
     setLoading(true);
     setReadError(null);
     try {
-      const next = await snapshot(roundId, locale, historyPage.current, isCurrent);
+      const next = await snapshot(roundId, locale, isCurrent);
       if (!next || !isCurrent()) return;
       const previous = snapshotRef.current;
       const latest = next.selection;
@@ -192,7 +161,7 @@ export function useCsaRoundSelection(roundId: string, locale: Locale, checkpoint
     } catch (caught) {
       if (!isCurrent()) return;
       setReadError(caught);
-      if (caught instanceof AccountApiError && [401, 403, 404, 409].includes(caught.status)) {
+      if (caught instanceof AccountApiError && ([401, 404, 409].includes(caught.status)||isPublicAccessDenied(caught))) {
         forgetCheckpoint();
         clearSnapshot();
         setActionError(null);
@@ -217,7 +186,6 @@ export function useCsaRoundSelection(roundId: string, locale: Locale, checkpoint
     const generation = lifecycle;
     queueMicrotask(() => {
       if (!active) return;
-      historyPage.current = {current: null};
       reading.current = false;
       mutation.current = false;
       clearSnapshot();
@@ -347,7 +315,7 @@ export function useCsaRoundSelection(roundId: string, locale: Locale, checkpoint
       if (!isCurrent()) return;
       const confirmation = caught instanceof CsaConfirmationError ? caught : null;
       const failure = confirmation ? confirmation.reason : caught;
-      if (failure instanceof AccountApiError && [401, 403].includes(failure.status)) {
+      if (failure instanceof AccountApiError && (failure.status === 401 || isPublicAccessDenied(failure))) {
         clearSnapshot();
         setReadError(failure);
         if (failure.status === 401) auth.expire();

@@ -47,6 +47,17 @@ test('responses must belong to the requested round and selection',()=>run(`
  payload={data:[product],round,selection:{...selection,round_id:other},quota:[]};await assert.rejects(()=>service.getRoundProducts(id,'vi'),e=>e.code==='invalid_response');
 `));
 
+test('round history reads one targeted private snapshot and validates both identities',()=>run(`
+ const calls=[],other='22222222-2222-4222-8222-222222222222';let payload={data:round,selection};
+ globalThis.fetch=async(path)=>{calls.push(path);return Response.json(payload);};
+ const result=await service.getRoundHistory(id);
+ assert.equal(result.round.id,id);assert.equal(result.selection.id,id);
+ assert.deepEqual(calls,['/api/account/csa-rounds/'+id]);
+ payload={...payload,data:{...round,id:other}};await assert.rejects(()=>service.getRoundHistory(id),e=>e.code==='invalid_response');
+ payload={data:round,selection:{...selection,round_id:other}};await assert.rejects(()=>service.getRoundHistory(id),e=>e.code==='invalid_response');
+ payload={data:round,selection:null};assert.equal((await service.getRoundHistory(id)).selection,null);
+`));
+
 test('catalog reads preserve snapshot quota and the backend cap without adding own hold',()=>run(`
  const snapshotGroup='a2222222-2222-4222-8222-222222222222';
  const snapshotSelection={...selection,lines:[{...selection.lines[0],quantity:3,name:'Original pack',quota_group_id:snapshotGroup,quota_cost:'0.37'}]};

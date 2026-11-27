@@ -4,7 +4,7 @@ import {
   currentPublicSession,
   sessionTokensChanged,
 } from "@/auth/server/oauth";
-import { clearSession, readSession, writeSession } from "@/auth/server/session";
+import { clearSession, publicSessionBinding, readSession, writeSession } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store" };
@@ -15,17 +15,17 @@ function jsonError(error: string, status: number) {
 
 export async function GET() {
   const session = await readSession();
-  if (!session) return NextResponse.json({ data: { user: null } }, { headers });
+  if (!session) return NextResponse.json({ data: { user: null, binding: publicSessionBinding(null) } }, { headers });
   try {
     const current = await currentPublicSession(session);
     if (sessionTokensChanged(session, current)) await writeSession(current);
-    return NextResponse.json({ data: { user: current.user } }, { headers });
+    return NextResponse.json({ data: { user: current.user, binding: publicSessionBinding(current) } }, { headers });
   } catch (error) {
     if (error instanceof AuthServiceUnavailableError) {
       if (error.rotatedSession) await writeSession(error.rotatedSession);
       return jsonError("upstream_unavailable", 502);
     }
-    await clearSession();
+    await clearSession(session);
     return jsonError("session_expired", 401);
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import type {Locale} from "@/types";
+import {parseWorkshopCollection} from "@/lib/public-workshop";
 import type {WorkshopCollection} from "@/types/workshop";
 const EMPTY:WorkshopCollection={upcoming:[],past:[]};
 type Result=WorkshopCollection&{state:"loading"|"ready"|"error"};
@@ -20,8 +21,7 @@ export function useWorkshops(locale:Locale):Result&{retry:()=>void}{
       .then(async response=>{if(!response.ok)throw Error(`Workshops ${response.status}`);return response.json()})
       .then((body:unknown)=>{
         if(controller.signal.aborted)return;
-        const data=body&&typeof body==="object"?body as Partial<WorkshopCollection>:{};
-        setResult({upcoming:Array.isArray(data.upcoming)?data.upcoming:[],past:Array.isArray(data.past)?data.past:[],state:"ready",locale});
+        setResult({...parseWorkshopCollection(body,locale),state:"ready",locale});
       })
       .catch(()=>{if(!controller.signal.aborted)setResult({...EMPTY,state:"error",locale})});
     return ()=>controller.abort();

@@ -1,3 +1,4 @@
+import {loadStoreService} from "./helpers/load-store-service.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createRequire} from "node:module";
@@ -98,10 +99,10 @@ test("order detail distinguishes zero-total review and exposes refund, free-ship
   assert.match(detail,/contactPresentation/);
 });
 
-test("Store API errors retain backend business context for specific re-quote messages",()=>{
-  const service=read("src/store/store-order-service.ts");
+test("Store API errors retain backend business context for specific re-quote messages",async()=>{
+  const service=loadStoreService(async()=>Response.json({errors:[{code:"store_requote_required",context:{reason:"price_changed"}}]},{status:409}));
   const checkout=read("src/screens/Checkout.tsx");
-  assert.match(service,/first\?\.context/);
+  await assert.rejects(()=>service.getStoreQuote({}),error=>error.code==="store_requote_required"&&error.context.reason==="price_changed");
   const {checkoutRequoteReason}=load("src/store/checkout-intent.ts");
   assert.equal(checkoutRequoteReason({status:409,code:"store_requote_required",context:{reason:"price_changed"}}),"price_changed");
   assert.match(checkout,/price_changed/);
@@ -147,8 +148,8 @@ test("fractional quota uses exact hundredths across a shared group and mixed cas
 
 test("Store order keeps fractional quota snapshots and integer item counts",()=>{
  const {parseStoreOrder}=load("src/store/store-order-model.ts");
- const line={id:"line",product_id:"p",sku:"p",name:"Produce",unit_size:"1.000",unit_label:"kg",unit_price_vnd:45000,quantity:4,quota_group_id:"g",quota_cost:.25,quota_quantity:4,quota_units:1,cash_quantity:0,cash_subtotal_vnd:0};
- const raw={id:"o",workflow_version:1,refund_status:null,transfer_reported_by:null,approved_by:null,payment_received_at:null,payment_received_by:null,refund_requested_at:null,refund_requested_by:null,refund_request_closed_at:null,refund_request_closed_by:null,refund_request_closed_reason:null,refunded_at:null,refunded_by:null,refund_amount_vnd:null,refund_note:"",cancelled_by:null,delivered_by:null,reference_code:"S1",status:"pending_review",payment_status:"not_required",locale:"en",lines:[line],shipping_address:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"1",address:"12 Street"},subtotal_vnd:0,shipping_fee_vnd:0,shipping_discount_reason:null,total_vnd:0,payment:null,expires_at:null,server_time:"2026-11-01T01:00:00Z",transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:"",created_at:"2026-11-01T01:00:00Z",updated_at:"2026-11-01T01:00:00Z"};
+ const line={id:"11111111-1111-4111-8111-111111111111",product_id:"22222222-2222-4222-8222-222222222222",sku:"p",name:"Produce",unit_size:"1.000",unit_label:"kg",unit_price_vnd:45000,quantity:4,quota_group_id:"33333333-3333-4333-8333-333333333333",quota_cost:.25,quota_quantity:4,quota_units:1,cash_quantity:0,cash_subtotal_vnd:0};
+ const raw={id:"44444444-4444-4444-8444-444444444444",workflow_version:1,refund_status:null,transfer_reported_by:null,approved_by:null,payment_received_at:null,payment_received_by:null,refund_requested_at:null,refund_requested_by:null,refund_request_closed_at:null,refund_request_closed_by:null,refund_request_closed_reason:null,refunded_at:null,refunded_by:null,refund_amount_vnd:null,refund_note:"",cancelled_by:null,delivered_by:null,reference_code:"S1",status:"pending_review",payment_status:"not_required",locale:"en",lines:[line],shipping_address:{recipient_name:"An",phone_number:"0901234567",province_code:"66",ward_code:"1",address:"12 Street"},subtotal_vnd:0,shipping_fee_vnd:0,shipping_discount_reason:null,total_vnd:0,payment:null,expires_at:null,server_time:"2026-11-01T01:00:00Z",transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:"",created_at:"2026-11-01T01:00:00Z",updated_at:"2026-11-01T01:00:00Z"};
  assert.equal(parseStoreOrder(raw).lines[0].quotaCost,.25);
  assert.equal(parseStoreOrder({...raw,lines:[{...line,quantity:1,quota_quantity:1,quota_units:.25}]}).lines[0].quotaUnits,.25);
  for(const field of ["quota_cost","quota_units"])for(const value of [".25",.001,NaN,Infinity,-.25])assert.throws(()=>parseStoreOrder({...raw,lines:[{...line,[field]:value}]}));
@@ -156,12 +157,12 @@ test("Store order keeps fractional quota snapshots and integer item counts",()=>
 });
 
 test("checkout quota parser accepts numeric hundredths and rejects malformed balances",async()=>{
- class AccountApiError extends Error{constructor(code,status){super(code);this.status=status}}
- let value=.25;
- const service=load("src/store/store-order-service.ts",name=>name==="@/account/account-api"?{AccountApiError}:name==="./store-order-model"?load("src/store/store-order-model.ts"):{} ,{fetch:async()=>new Response(JSON.stringify({data:{products:[{product_id:"g",available_units:value,available_units_for_order:value}]}})),Response});
+ let value=.25,group="11111111-1111-4111-8111-111111111111";
+ const service=loadStoreService(async()=>Response.json({data:{products:[{product_id:group,available_units:value,available_units_for_order:value}]}}));
  assert.equal((await service.getStoreQuota("en")).products[0].availableUnits,.25);
  assert.equal((await service.getStoreQuota("en","o")).products[0].availableUnits,.25);
  for(value of ["0.25",null,.001,-.25])await assert.rejects(()=>service.getStoreQuota("en"));
+ value=.25;group=42;await assert.rejects(()=>service.getStoreQuota("en"));
 });
 
 test("quota boundary preserves decimal hundredths without changing integer fields",()=>{

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { sessionSecret } from "@/auth/server/config";
 import type { CoreUser } from "@/auth/core-user";
 import type { Locale } from "@/types";
+import { GUEST_SESSION_BINDING, PUBLIC_SESSION_MARKER, PUBLIC_SESSION_RETIRED } from "../public-session-context";
 
 export const SESSION_COOKIE = "nfv_public_session";
 export const SESSION_ID_COOKIE = "nfv_public_session_id";
@@ -15,6 +16,7 @@ export const OAUTH_FLOW_COOKIE = "nfv_public_oauth_flow";
 
 export type PublicSession = {
   sessionId?: string;
+  legacyBinding?: string;
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
@@ -62,6 +64,12 @@ const cookieOptions = {
   path: "/",
 };
 
+export function publicSessionBinding(session: PublicSession | null): string {
+  if (!session) return GUEST_SESSION_BINDING;
+  return session.sessionId ?? session.legacyBinding ?? crypto.createHmac("sha256", key())
+    .update("public-legacy-session:").update(session.refreshToken || session.accessToken).digest("base64url");
+}
+
 export async function readSession(): Promise<PublicSession | null> {
   const store = await cookies();
   const id = store.get(SESSION_ID_COOKIE)?.value;
@@ -71,9 +79,9 @@ export async function readSession(): Promise<PublicSession | null> {
     // An empty active family is a tombstone: never resurrect a late legacy cookie.
     return session?.sessionId === id ? session : null;
   }
-  return store.get(revokedCookie("legacy"))
-    ? null
-    : unseal<PublicSession>(store.get(SESSION_COOKIE)?.value);
+  if (store.get(revokedCookie("legacy"))) return null;
+  const legacy = unseal<PublicSession>(store.get(SESSION_COOKIE)?.value);
+  return legacy ? {...legacy, legacyBinding: publicSessionBinding(legacy)} : null;
 }
 
 /** Only an explicit OAuth login selects the active family. */
@@ -86,13 +94,16 @@ export async function startSession(session: PublicSession): Promise<void> {
       (name.startsWith(`${SESSION_COOKIE}_`) &&
         sessionIdPattern.test(name.slice(SESSION_COOKIE.length + 1))) ||
       (name.startsWith(`${SESSION_COOKIE}_revoked_`) &&
-        sessionIdPattern.test(name.slice(`${SESSION_COOKIE}_revoked_`.length)))
+        sessionIdPattern.test(name.slice(`${SESSION_COOKIE}_revoked_`.length))) ||
+      (name.startsWith(PUBLIC_SESSION_RETIRED) &&
+        sessionIdPattern.test(name.slice(PUBLIC_SESSION_RETIRED.length)))
     ) {
       store.delete(name);
     }
   }
   store.delete(SESSION_COOKIE);
   store.delete(revokedCookie("legacy"));
+  store.delete(PUBLIC_SESSION_RETIRED + "legacy");
   store.set(familyCookie(sessionId), seal({ ...session, sessionId }), {
     ...cookieOptions,
     maxAge: 60 * 60 * 24 * 30,
@@ -103,6 +114,8 @@ export async function startSession(session: PublicSession): Promise<void> {
     ...cookieOptions,
     maxAge: 60 * 60 * 24 * 365,
   });
+  // This nonce lets open documents retire late responses. Only the sealed cookie authenticates.
+  store.set(PUBLIC_SESSION_MARKER, sessionId, {...cookieOptions,httpOnly:false,maxAge:60*60*24*365});
 }
 
 /** Refresh responses can update their own family, never select another login. */
@@ -117,15 +130,17 @@ export async function writeSession(session: PublicSession): Promise<void> {
   });
 }
 
-export async function clearSession(): Promise<void> {
+export async function clearSession(expected?: PublicSession): Promise<void> {
   const store = await cookies();
-  const id = store.get(SESSION_ID_COOKIE)?.value;
+  const id = expected ? expected.sessionId : store.get(SESSION_ID_COOKIE)?.value;
   if (id && sessionIdPattern.test(id)) store.delete(familyCookie(id));
   // A separate marker survives late refresh writes to this family's data cookie.
-  store.set(revokedCookie(id && sessionIdPattern.test(id) ? id : "legacy"), "1", {
+  const family=id && sessionIdPattern.test(id) ? id : "legacy";
+  store.set(revokedCookie(family), "1", {
     ...cookieOptions,
     maxAge: 60 * 60 * 24 * 365,
   });
+  store.set(PUBLIC_SESSION_RETIRED + family, "1", {...cookieOptions,httpOnly:false,maxAge:60*60*24*365});
   // Keep the selector tombstone and leave unrelated in-flight OAuth flows alone.
   store.delete(SESSION_COOKIE);
 }

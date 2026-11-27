@@ -28,7 +28,8 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
       class AuthServiceUnavailableError extends Error{}
       return {AuthServiceUnavailableError,currentPublicSession:async()=>{if(authError)throw authError;return currentSession},sessionTokensChanged:()=>false};
     }
-    if(name==="@/auth/server/session")return {readSession:async()=>storedSession,clearSession:async()=>{clears.push(true)},writeSession:async()=>{}};
+    if(name==="@/auth/public-session-context")return {PUBLIC_SESSION_HEADER:"X-NFV-Public-Session",GUEST_SESSION_BINDING:"guest"};
+    if(name==="@/auth/server/session")return {publicSessionBinding:value=>value?.sessionId??(value?"member":"guest"),readSession:async()=>storedSession,clearSession:async()=>{clears.push(true)},writeSession:async()=>{}};
     if(name==="@/store/store-order-session"){
       const helpers={};
       const compiledSession=ts.transpileModule(readFileSync("src/store/store-order-session.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -37,16 +38,26 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
     }
     return {};
   }});
-  const request=(path,{method="GET",body,origin=true,marker=true,query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
+  const request=(path,{method="GET",body,origin=true,marker=true,binding=storedSession?.sessionId??(storedSession?"member":"guest"),query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
     url:`https://site.test/api/store-orders/${path.join("/")}${query}`,
-    method,
-    headers:new Headers(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),
+    method,signal:new AbortController().signal,
+    headers:new Headers({...(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),...(binding?{"x-nfv-public-session":binding}:{})}),
     cookies:{get:name=>cookieJar[name]?{value:cookieJar[name]}:name==="nfv_store_guest_orders"&&cookie?{value:cookie}:undefined},
     json:async()=>body??{},
   });
   const call=(path,options)=>exports[options?.method==="POST"?"POST":"GET"](request(path,options),{params:Promise.resolve({path})});
   return {call,calls,clears};
 }
+
+test("an old authenticated or guest checkout never uses a replacement session",async()=>{
+  for(const binding of ["session-A","guest",null]){
+    const harness=routeHarness({storedSession:{sessionId:"session-B",accessToken:"token-B"}});
+    const response=await harness.call(["checkout"],{method:"POST",body:{lines:[]},binding});
+    assert.equal(response.status,409);
+    assert.deepEqual(await response.json(),{error:"session_changed"});
+    assert.equal(harness.calls.length,0);
+  }
+});
 
 test("matching guest-order cookie remains the authority before and after OAuth login",async()=>{
   for(const storedSession of [null,{accessToken:"oauth-token"}]){

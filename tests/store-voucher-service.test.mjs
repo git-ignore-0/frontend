@@ -1,3 +1,4 @@
+import {loadStoreService} from "./helpers/load-store-service.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -10,27 +11,27 @@ const plain=value=>JSON.parse(JSON.stringify(value));
 const coupon={id:'11111111-1111-4111-8111-111111111111',code:'STORE30',discount_type:'fixed',discount_value:'30000.00',maximum_discount_amount:null,subtotal_vnd:90000,eligible_subtotal_vnd:90000,discount_amount_vnd:30000,total_vnd:90000};
 const line={product_id:'22222222-2222-4222-8222-222222222222',quantity:2,use_quota:false,expected_unit_price_vnd:45000,expected_available_quantity:10,expected_quota_quantity:0};
 const preview=()=>({delivery_date:'2026-11-14',shipping_discount_reason:null,subtotal_vnd:'90000',eligible_subtotal_vnd:'90000',discount_amount_vnd:'30000',shipping_fee_vnd:'30000',total_vnd:'90000',coupon:{...coupon},voucher_quote:'a'.repeat(40),shipping_address_updated_at:'2026-11-03T00:00:00Z',shipping_address_version:'b'.repeat(64),lines:[{...line}]});
-const order=()=>({id:'order',workflow_version:1,refund_status:null,transfer_reported_by:null,approved_by:null,payment_received_at:null,payment_received_by:null,refund_requested_at:null,refund_requested_by:null,refund_request_closed_at:null,refund_request_closed_by:null,refund_request_closed_reason:null,refunded_at:null,refunded_by:null,refund_amount_vnd:null,refund_note:"",cancelled_by:null,delivered_by:null,reference_code:'S1',status:'pending_review',payment_status:'not_required',locale:'vi',lines:[],shipping_address:{recipient_name:'A',phone_number:'1',province_code:'66',ward_code:'1',address:'Street'},subtotal_vnd:'90000',shipping_fee_vnd:'30000',shipping_discount_reason:null,total_vnd:'90000',payment:null,expires_at:null,server_time:'2026-11-01T01:00:00Z',transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:'',created_at:'2026-11-01T01:00:00Z',updated_at:'2026-11-01T01:00:00Z'});
+const order=(total='120000')=>({id:coupon.id,workflow_version:1,refund_status:null,transfer_reported_by:null,approved_by:null,payment_received_at:null,payment_received_by:null,refund_requested_at:null,refund_requested_by:null,refund_request_closed_at:null,refund_request_closed_by:null,refund_request_closed_reason:null,refunded_at:null,refunded_by:null,refund_amount_vnd:null,refund_note:"",cancelled_by:null,delivered_by:null,reference_code:'S1',status:'pending_review',payment_status:'not_required',locale:'vi',lines:[{id:coupon.id,product_id:line.product_id,sku:'SKU',name:'Product',unit_size:'1.000',unit_label:'kg',unit_price_vnd:'45000',quantity:2,quota_group_id:null,quota_cost:0,quota_quantity:0,quota_units:0,cash_quantity:2,cash_subtotal_vnd:'90000'}],shipping_address:{recipient_name:'A',phone_number:'1',province_code:'66',ward_code:'1',address:'Street'},subtotal_vnd:'90000',shipping_fee_vnd:'30000',shipping_discount_reason:null,total_vnd:total,payment:null,expires_at:null,server_time:'2026-11-01T01:00:00Z',transfer_reported_at:null,approved_at:null,delivered_at:null,cancelled_at:null,cancellation_reason:null,reconciliation_note:'',created_at:'2026-11-01T01:00:00Z',updated_at:'2026-11-01T01:00:00Z'});
 test('voucher preview posts through existing same-origin API and parses BE snapshot and expected lines',async()=>{
- let request;const service=load('src/store/store-order-service.ts',{fetch:async(path,init)=>{request={path,init};return new Response(JSON.stringify({data:preview()}));}});
+ let request;const service=loadStoreService(async(path,init)=>{request={path,init};return Response.json({data:preview()});});
  const input={delivery_date:'2026-11-14',locale:'vi',coupon_code:'STORE30',lines:[{product_id:'22222222-2222-4222-8222-222222222222',quantity:2,use_quota:false}]};
  const result=await service.getStoreQuote(input);
- assert.equal(request.path,'/api/store-orders/quote');assert.equal(request.init.method,'POST');assert.equal(request.init.credentials,'same-origin');assert.equal(request.init.headers['X-NFV-Public-Request'],'1');assert.deepEqual(JSON.parse(request.init.body),input);
+ assert.equal(request.path,'/api/store-orders/quote');assert.equal(request.init.method,'POST');assert.equal(request.init.credentials,'same-origin');assert.equal(new Headers(request.init.headers).get('X-NFV-Public-Request'),'1');assert.deepEqual(JSON.parse(request.init.body),input);
  assert.equal(result.discountAmountVnd,30000);assert.equal(result.totalVnd,90000);assert.equal(result.coupon.code,'STORE30');assert.equal(result.coupon.discountValue,'30000.00');assert.equal(result.shippingAddressUpdatedAt,'2026-11-03T00:00:00Z');assert.deepEqual(plain(result.lines),[line]);
  assert.equal(result.shippingAddressVersion,'b'.repeat(64));
 });
 test('preview rejects malformed money, snapshots, quote, and line expected fields as contract errors',async()=>{
  const malformed=[null,[],{...preview(),discount_amount_vnd:'1.5'},{...preview(),total_vnd:'9007199254740992'},{...preview(),voucher_quote:''},{...preview(),coupon:null},{...preview(),coupon:{...coupon,discount_type:'other'}},{...preview(),coupon:{...coupon,discount_value:30000}},{...preview(),coupon:{...coupon,discount_amount_vnd:'30000'}},{...preview(),lines:[]},{...preview(),lines:[{...line,use_quota:'false'}]},{...preview(),lines:[{...line,expected_unit_price_vnd:'45000'}]},{...preview(),lines:[{...line,quantity:0}]},{...preview(),lines:[{...line,expected_quota_quantity:3}]}];
- for(const data of malformed){const service=load('src/store/store-order-service.ts',{fetch:async()=>new Response(JSON.stringify({data}))});await assert.rejects(()=>service.getStoreQuote({locale:'vi',coupon_code:'X',lines:[]}),e=>e.code==='invalid_response'&&e.status===502);}
+ for(const data of malformed){const service=loadStoreService(async()=>Response.json({data}));await assert.rejects(()=>service.getStoreQuote({locale:'vi',coupon_code:'X',lines:[]}),e=>e.code==='invalid_response'&&e.status===502);}
 });
 test('preview preserves business error context, auth errors, and network uncertainty',async()=>{
  for(const [code,status] of [['coupon_invalid',400],['coupon_expired',400],['coupon_usage_exhausted',400],['coupon_scope_mismatch',400],['coupon_minimum_amount_not_met',400],['unauthorized',401]]){
- const service=load('src/store/store-order-service.ts',{fetch:async()=>new Response(JSON.stringify({errors:[{code,context:{reason:'test'}}]}),{status})});await assert.rejects(()=>service.getStoreQuote({}),e=>e.code===code&&e.status===status&&e.context.reason==='test');}
- const service=load('src/store/store-order-service.ts',{fetch:async()=>{throw Error('offline');}});await assert.rejects(()=>service.getStoreQuote({}),e=>e.code==='network_error'&&e.status===0);
+ const service=loadStoreService(async()=>Response.json({errors:[{code,context:{reason:'test'}}]},{status}));await assert.rejects(()=>service.getStoreQuote({}),e=>e.code===code&&e.status===status&&e.context.reason==='test');}
+ const service=loadStoreService(async()=>{throw Error('offline');});await assert.rejects(()=>service.getStoreQuote({}),e=>e.code==='network_error'&&e.status===0);
 });
 test('order parser defaults legacy orders and preserves coupon snapshot without consulting live voucher',()=>{
  const {parseStoreOrder}=load('src/store/store-order-model.ts');assert.equal(parseStoreOrder(order()).discountAmountVnd,0);assert.equal(parseStoreOrder(order()).coupon,null);
- const result=parseStoreOrder({...order(),discount_amount_vnd:'30000',coupon});assert.equal(result.discountAmountVnd,30000);assert.equal(result.coupon.code,'STORE30');assert.equal(result.coupon.discountType,'fixed');
+ const result=parseStoreOrder({...order('90000'),discount_amount_vnd:'30000',coupon});assert.equal(result.discountAmountVnd,30000);assert.equal(result.coupon.code,'STORE30');assert.equal(result.coupon.discountType,'fixed');
  for(const value of [null,-1,'1.5',Number.MAX_SAFE_INTEGER+1])assert.throws(()=>parseStoreOrder({...order(),discount_amount_vnd:value}));
  for(const value of [false,{}, {...coupon,discount_amount_vnd:'30000'}])assert.throws(()=>parseStoreOrder({...order(),coupon:value}));
 });
@@ -52,4 +53,34 @@ test('preview rejects invalid HMAC, address timestamps, UUIDs, duplicate lines a
  ];
  for(const value of malformed)assert.throws(()=>parseStoreCheckoutQuote(value));
  assert.equal(parseStoreCheckoutQuote({...preview(),lines:[{...line,expected_available_quantity:2147483647}]}).lines[0].expected_available_quantity,2147483647);
+});
+
+test('an internally valid order cannot satisfy a read or mutation for a different order',async()=>{
+ const original=order(),other='33333333-3333-4333-8333-333333333333';
+ const service=loadStoreService(async()=>Response.json({data:original}));
+ assert.equal((await service.getStoreOrder(original.id)).id,original.id);
+ for(const request of [()=>service.getUserStoreOrder(other),()=>service.getStoreOrder(other),()=>service.cancelStoreOrder(other,coupon.id),()=>service.reportStoreTransfer(other),()=>service.requestStoreRefund(other,coupon.id)]){
+  await assert.rejects(request,error=>error.code==='invalid_response'&&error.status===502);
+ }
+});
+
+test('Store order pagination, Buy Again identity and shipping quotes reject malformed wire values',async()=>{
+ const original=order(),other='33333333-3333-4333-8333-333333333333';
+ let payload;
+ const service=loadStoreService(async()=>Response.json(payload));
+ payload={data:[original],meta:{page:2,page_size:20,total:21}};
+ assert.equal((await service.getStoreOrders({page:2})).items.length,1);
+ for(const invalid of [{...payload,meta:{...payload.meta,total:'21'}},{...payload,meta:{...payload.meta,page:1}},{...payload,data:[original,original]}]){
+  const wrong=loadStoreService(async()=>Response.json(invalid));
+  await assert.rejects(()=>wrong.getStoreOrders({page:2}),error=>error.code==='invalid_response');
+ }
+ payload={data:{order_id:other,lines:[{product_id:line.product_id,name:'Product',quantity:2,reason:'unavailable',product:null}]}};
+ await assert.rejects(()=>service.prepareBuyAgain(original.id,'vi'),error=>error.code==='invalid_response');
+ assert.equal((await service.prepareBuyAgain(other,'vi'))[0].reason,'unavailable');
+ for(const data of [{supported:'true',shipping_fee_vnd:'0'},{supported:true,shipping_fee_vnd:null},{supported:true,shipping_fee_vnd:0},{supported:false,shipping_fee_vnd:'0'}]){
+  payload={data};
+  await assert.rejects(()=>service.getShippingQuote('66','1'),error=>error.code==='invalid_response');
+ }
+ payload={data:{supported:true,shipping_fee_vnd:'0'}};
+ assert.equal((await service.getShippingQuote('66','1')).shippingFeeVnd,0);
 });

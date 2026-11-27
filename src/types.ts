@@ -24,7 +24,7 @@ export interface CSAUsage {id?: string; date: string; orderId?: string; productN
 export interface CSA {id?:string;planName: string; planNameEn?: string; description?:string;status: string; startDate?: string; endDate?: string;extensionEndDate?:string;durationMonths?:number;monthlyPriceVnd?:string;totalPriceVnd?:string; contract?: {number?: string; signedAt?: string;status?:string; downloadUrl?: string}; quotas?: CSAQuota[]; paymentSchedule?: CSAPayment[]; payments?: CSAPayment[]; usage?: CSAUsage[]; history?: CSAUsage[];pagination?:{usage?:PageMeta}}
 export interface CSAUpcoming {kind:"membership"|"purchase_request";id:string;requestCode?:string;planName:string;status:"scheduled"|"pending"|"payment_confirmed";durationMonths:number;amount:string;currency:string;startDate?:string;endDate?:string;createdAt?:string;expiresAt?:string}
 export interface CSAOverview {active:CSA|null;frozen?:CSA|null;upcoming:CSAUpcoming[]}
-export interface Session {authenticated?: boolean; subject?: string; hasCSA?: boolean; profile?: Partial<Profile>}
+export interface Session {authenticated?: boolean; subject?: string; binding?: string; hasCSA?: boolean; profile?: Partial<Profile>}
 export interface CatalogData {products: Product[]; storeProducts:Record<string,import("./store/store-product-snapshots").StoreProductSnapshot>; categories: Category[]; provinces: string[]; wards: Record<string, string[]>; orders: Order[]; addresses: Address[]; shippingAddress: Address | null; profile: Profile; authenticated: boolean; hasCSA: boolean; csa: CSAOverview | null; rewards: Rewards | null; referrals: Referrals | null}
 export interface Backend {
  getProvinces?(): Promise<unknown>; getWards?(province: string): Promise<unknown>;

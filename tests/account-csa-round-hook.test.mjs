@@ -13,7 +13,7 @@ const line={productId:'p',quantity:1,name:'Tomato',unitLabel:'kg',quotaGroupId:'
 const selection={id:'s',roundId:'r',membershipId:'m',state:'selecting',revision:3,orderId:null,reopenUntil:null,serverTime:'2026-11-20T08:00:00Z',lines:[line]};
 const bundle={round:{id:'r',sequence:1,name:'Round',opensAt:'2026-11-20T07:00:00Z',closesAt:'2026-11-21T08:00:00Z',deliveryDate:'2026-11-22',status:'open',serverTime:'2026-11-20T08:00:00Z',cancellationReason:null},selection,products:[{id:'p',name:'Tomato',quotaGroupId:'g',quotaGroupName:'Vegetables',quotaCost:1,availableQuantity:10,unitSize:'1.000',unitLabel:'kg',imageUrl:null}],quota:[{groupId:'g',availableUnits:4}]};
 function selectionHarness(checkpoint){const h=hooks(),events={},auth={status:'authenticated',session:{subject:'member'},expire(){}},context={data:{csa:{active:{status:'active'}}},async refreshResource(){}},calls={get:0,save:[],confirm:[]};let latest=bundle;
- const services={async getRoundProducts(){calls.get++;return latest},async getRoundSelection(){return latest.selection},async getRoundsPage(){throw Error('unexpected fallback')},async saveRoundSelection(input){calls.save.push(input);const saved={...selection,revision:4,lines:input.lines.map(l=>({...line,...l}))};latest={...latest,selection:saved};return saved},async confirmRoundSelection(input){calls.confirm.push(input);return {...selection,revision:4,state:'confirmed'}}};
+ const services={async getRoundProducts(){calls.get++;return latest},async getRoundHistory(){throw Error('unexpected fallback')},async saveRoundSelection(input){calls.save.push(input);const saved={...selection,revision:4,lines:input.lines.map(l=>({...line,...l}))};latest={...latest,selection:saved};return saved},async confirmRoundSelection(input){calls.confirm.push(input);return {...selection,revision:4,state:'confirmed'}}};
  const load=loader({react:h.react,'@/auth/AuthProvider':{useAuth:()=>auth},'@/state/NFVContext':{useNFV:()=>context},'@/account/csa-rounds-service':services,'../../account/csa-rounds-service.ts':services,'@/store/store-order-service':{},'./useCsaServerClock':{useCsaServerClock:()=>Date.parse(bundle.round.serverTime)}},{window:{addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}},document:{visibilityState:'visible',addEventListener:(name,fn)=>{events[name]=fn},removeEventListener:name=>{delete events[name]}}});
  services.isCsaMutationOutcomeUnknown=load(resolve(root,'src/account/csa-rounds-service.ts')).isCsaMutationOutcomeUnknown;
  const {useCsaRoundSelection}=load(resolve(root,'src/screens/account-csa/useCsaRoundSelection.ts'));let value;
@@ -73,7 +73,7 @@ test('membership denial preserves saved history but disables editing and reports
  const h=selectionHarness();try{
   const {AccountApiError}=h.load(resolve(root,'src/account/account-api.ts'));
   h.context.data.csa.active=null;h.services.getRoundProducts=async()=>{throw new AccountApiError('csa_membership_unavailable',409)};
-  h.services.getRoundsPage=async()=>({items:[bundle.round],total:1,pageSize:20});
+  h.services.getRoundHistory=async()=>({round:bundle.round,selection});
   const v=await h.settle();assert.equal(v.current.selection.id,'s');assert.equal(v.access.mode,'readonly');assert.equal(v.error?.code,'csa_membership_unavailable');
   await v.submit(false);assert.equal(h.calls.save.length,0);
  }finally{h.h.dispose()}
@@ -81,12 +81,12 @@ test('membership denial preserves saved history but disables editing and reports
 test('valid frozen participation remains editable with a successful catalog response',async()=>{
  const h=selectionHarness();try{h.context.data.csa.active=null;const v=await h.settle();assert.equal(v.access.mode,'edit');assert.equal(v.error,null)}finally{h.h.dispose()}
 });
-test('history refresh reuses the located page instead of scanning all earlier pages again',async()=>{
+test('history fallback and refresh each read a single targeted round',async()=>{
  const h=selectionHarness();try{
-  const {AccountApiError}=h.load(resolve(root,'src/account/account-api.ts'));const pages=[];
+  const {AccountApiError}=h.load(resolve(root,'src/account/account-api.ts'));const historyIds=[];
   h.services.getRoundProducts=async()=>{throw new AccountApiError('csa_selection_locked',409)};
-  h.services.getRoundsPage=async(page)=>{pages.push(page);return {items:page===3?[bundle.round]:[],total:41,pageSize:20}};
-  await h.settle();assert.deepEqual(pages,[1,2,3]);h.events.focus();await h.settle();assert.deepEqual(pages,[1,2,3,3]);
+  h.services.getRoundHistory=async(roundId)=>{historyIds.push(roundId);return {round:bundle.round,selection}};
+  await h.settle();assert.equal(historyIds.length,1);h.events.focus();await h.settle();assert.deepEqual(historyIds,[historyIds[0],historyIds[0]]);
  }finally{h.h.dispose()}
 });
 test('permission denial during refresh clears private selection and prevents history fallback',async()=>{
@@ -404,7 +404,7 @@ test('an old account catalog denial cannot start a history request in the new ac
     const first = deferred();
     let reads = 0, history = 0;
     h.services.getRoundProducts = async () => ++reads === 1 ? first.promise : {...bundle, selection: null};
-    h.services.getRoundSelection = async () => {history++; return selection;};
+    h.services.getRoundHistory = async () => {history++; return {round:bundle.round,selection};};
     await h.settle();
     h.auth.session = {subject: 'new-member'};
     await h.settle();

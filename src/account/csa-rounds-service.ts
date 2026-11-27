@@ -23,6 +23,13 @@ export async function getRoundSelection(roundId:string):Promise<CsaSelection|nul
   const payload=await accountApi(`csa-rounds/${roundId}/selection`);
   if(payload.data===null)return null;return selectionForRound(payload.data,roundId);
 }
+export async function getRoundHistory(roundId: string): Promise<Pick<CsaRoundProducts, "round" | "selection">> {
+  const payload = await accountApi(`csa-rounds/${roundId}`);
+  const round = parseCsaRound(payload.data);
+  if (round.id !== roundId.toLowerCase()) throw new AccountApiError("invalid_response", 502);
+  const selection = payload.selection === null ? null : selectionForRound(payload.selection, roundId);
+  return {round, selection};
+}
 export async function getRoundProducts(roundId:string,locale:Locale):Promise<CsaRoundProducts> {
   const payload = await accountApi(`csa-rounds/${roundId}/products?locale=${locale}`);
   const round = parseCsaRound(payload.round);

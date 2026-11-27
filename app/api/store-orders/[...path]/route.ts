@@ -3,7 +3,8 @@ import {storeLookupIdentityHeaders} from "@/store/store-proxy-identity";
 import {storeOrderQueryAllowed,storeOrderTarget} from "@/store/order-bff";
 import {authOrigin,publicSiteOrigin} from "@/auth/server/config";
 import {AuthServiceUnavailableError,currentPublicSession,sessionTokensChanged} from "@/auth/server/oauth";
-import {clearSession,readSession,writeSession} from "@/auth/server/session";
+import {clearSession,publicSessionBinding,readSession,writeSession} from "@/auth/server/session";
+import {GUEST_SESSION_BINDING,PUBLIC_SESSION_HEADER} from "@/auth/public-session-context";
 import {readGuestOrders,STORE_GUEST_COOKIE,STORE_LOOKUP_COOKIE,guestOrderCookieName,guestOrderCookiePath,readGuestOrderToken,writeGuestOrderToken} from "@/store/store-order-session";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
@@ -22,10 +23,12 @@ async function handler(request:NextRequest,context:{params:Promise<{path:string[
  // when an unrelated (or expired) OAuth session cookie is also present.
  const useGuestAuthority=target.guestOrder&&!!orderId&&!!guestToken;
  let session=null;
- if(target.session!=="none"&&!useGuestAuthority){
+ if(target.session!=="none"){
   const stored=await readSession();
+  const binding=request.headers.get(PUBLIC_SESSION_HEADER);
+  if(binding!==publicSessionBinding(stored))return !stored&&binding&&binding!==GUEST_SESSION_BINDING?error("session_expired",401):error("session_changed",409);
   if(!stored&&target.session==="required")return error("unauthorized",401);
-  if(stored)try{session=await currentPublicSession(stored);if(sessionTokensChanged(stored,session))await writeSession(session)}catch(reason){if(reason instanceof AuthServiceUnavailableError){if(reason.rotatedSession)await writeSession(reason.rotatedSession);return error("upstream_unavailable",502)}await clearSession();return error("session_expired",401)}
+  if(stored&&!useGuestAuthority)try{session=await currentPublicSession(stored);if(sessionTokensChanged(stored,session))await writeSession(session)}catch(reason){if(reason instanceof AuthServiceUnavailableError){if(reason.rotatedSession)await writeSession(reason.rotatedSession);return error("upstream_unavailable",502)}await clearSession(stored);return error("session_expired",401)}
  }
  let body:BodyInit|undefined;
  if(method==="POST"){
@@ -41,8 +44,8 @@ async function handler(request:NextRequest,context:{params:Promise<{path:string[
  if(method==="POST")headers["Content-Type"]="application/json";
  if(useGuestAuthority&&method==="GET")headers["X-Store-Access-Token"]=guestToken;
  const lookup=cookieValue(request,STORE_LOOKUP_COOKIE);if(target.lookupCookie&&lookup)headers.Cookie=`${STORE_LOOKUP_COOKIE}=${lookup}`;
- let upstream:Response;try{const url=new URL(target.path,authOrigin());url.search=requestUrl.search;upstream=await fetch(url,{method,headers,body,cache:"no-store",signal:AbortSignal.timeout(10_000)})}catch(reason){const timeout=reason instanceof DOMException&&["AbortError","TimeoutError"].includes(reason.name);return error(timeout?"upstream_timeout":"upstream_unavailable",timeout?504:502)}
- if(session&&upstream.status===401)await clearSession();
+ let upstream:Response;try{const url=new URL(target.path,authOrigin());url.search=requestUrl.search;upstream=await fetch(url,{method,headers,body,cache:"no-store",signal:AbortSignal.any([request.signal,AbortSignal.timeout(10_000)])})}catch(reason){const timeout=reason instanceof DOMException&&["AbortError","TimeoutError"].includes(reason.name);return error(timeout?"upstream_timeout":"upstream_unavailable",timeout?504:502)}
+ if(session&&upstream.status===401)await clearSession(session);
  const responseHeaders=new Headers(privateHeaders);responseHeaders.set("Content-Type",upstream.headers.get("content-type")||"application/json");
  if(target.lookupCookie)for(const value of setCookies(upstream.headers)){const rewritten=rewriteLookupCookie(value);if(rewritten)responseHeaders.append("Set-Cookie",rewritten)}
  if(path[0]==="checkout"&&upstream.ok&&!session){

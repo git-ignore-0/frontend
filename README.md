@@ -1,15 +1,9 @@
 # Natural Farming Vietnam Frontend
 
-Next.js frontend application for the Natural Farming Vietnam public site.
+Website Next.js song ngữ cho nội dung công khai, Workshop, Account, Store và CSA.
 
-## Local development
+- [Kiến trúc, route và luồng dữ liệu](../docs/public-frontend.md)
+- [Setup local](../docs/development-deployment.md#4-public-frontend-local)
+- [Build và deploy](../docs/development-deployment.md#11-nextjs-production)
 
-```bash
-cp .env.example .env.local
-npm ci
-npm run dev
-```
-
-The local `.env.local` is configured consistently with `frontendv2` and is excluded from Git.
-
-Canonical workspace documentation is maintained in [`../docs/README.md`](../docs/README.md).
+Runtime và scripts xem trong [package.json](package.json). Dependencies được khóa trong [package-lock.json](package-lock.json).

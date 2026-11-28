@@ -34,6 +34,7 @@ jobs:
           npm test
           bash tests/prepare-cpanel-deploy.test.sh
           bash tests/deploy-test-ftps.test.sh
+          bash tests/smoke-test.test.sh
           python3 tests/test_deploy_worker.py
       - name: Use hosting Node version for build
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -56,22 +57,4 @@ jobs:
           TEST_FTP_PASSWORD: ${{ secrets.TEST_FTP_PASSWORD }}
         run: bash scripts/deploy-test-ftps.sh
       - name: Smoke test FEv1 test
-        run: |
-          curl --fail --silent --show-error --retry 6 --retry-delay 10 \
-            --retry-all-errors --max-time 30 \
-            https://test.naturalfarmingvietnam.com/vi \
-            --output "$RUNNER_TEMP/frontend-test.html"
-          grep -q '/_next/static/' "$RUNNER_TEMP/frontend-test.html"
-          curl --fail --silent --show-error --retry 6 --retry-delay 10 \
-            --retry-all-errors --max-time 30 \
-            'https://test.naturalfarmingvietnam.com/api/site-settings?locale=vi' \
-            --output "$RUNNER_TEMP/frontend-settings.json"
-          node --input-type=module - <<'JS'
-          import assert from 'node:assert/strict';
-          import fs from 'node:fs';
-          const settings = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/frontend-settings.json`, 'utf8'));
-          assert(settings && typeof settings === 'object', 'FEv1 could not load backend settings');
-          assert.equal(typeof settings.is_email_enabled, 'boolean');
-          assert.equal(typeof settings.is_phone_enabled, 'boolean');
-          assert(Array.isArray(settings.links), 'Invalid settings response');
-          JS
+        run: bash scripts/smoke-test.sh

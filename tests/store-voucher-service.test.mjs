@@ -49,10 +49,11 @@ test('preview rejects invalid HMAC, address timestamps, UUIDs, duplicate lines a
   ...['x'.repeat(65),'store30','BAD SPACE'].map(code=>({...preview(),coupon:{...coupon,code}})),
   {...preview(),lines:[{...line,product_id:'invalid'}]},
   {...preview(),lines:[{...line},{...line}]},
-  {...preview(),lines:[{...line,expected_available_quantity:2147483648}]},
+  ...[-1,0.25,"3000000000",null,Number.MAX_SAFE_INTEGER+1].map(expected_available_quantity=>({...preview(),lines:[{...line,expected_available_quantity}]})),
  ];
  for(const value of malformed)assert.throws(()=>parseStoreCheckoutQuote(value));
- assert.equal(parseStoreCheckoutQuote({...preview(),lines:[{...line,expected_available_quantity:2147483647}]}).lines[0].expected_available_quantity,2147483647);
+ for(const stock of [0,1,999,1000,2147483647,2147483648,3000000000,Number.MAX_SAFE_INTEGER])
+  assert.equal(parseStoreCheckoutQuote({...preview(),lines:[{...line,expected_available_quantity:stock}]}).lines[0].expected_available_quantity,stock);
 });
 
 test('an internally valid order cannot satisfy a read or mutation for a different order',async()=>{

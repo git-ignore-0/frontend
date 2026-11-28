@@ -100,7 +100,7 @@ export function parseStoreCheckoutQuote(value:unknown):StoreCheckoutQuote{
  const productIds=new Set<string>();
  for(const line of result.lines){
   const id=line.product_id.toLowerCase();
-  if(!uuidPattern.test(id)||productIds.has(id)||line.expected_available_quantity>2147483647)throw Error("invalid_response");
+  if(!uuidPattern.test(id)||productIds.has(id))throw Error("invalid_response");
   productIds.add(id);
  }
  if((c&&(result.subtotalVnd!==c.subtotalVnd||result.eligibleSubtotalVnd!==c.eligibleSubtotalVnd||result.discountAmountVnd!==c.discountAmountVnd||result.totalVnd!==c.totalVnd))||result.discountAmountVnd>result.subtotalVnd||result.eligibleSubtotalVnd>result.subtotalVnd||result.totalVnd-result.shippingFeeVnd!==result.subtotalVnd-result.discountAmountVnd||result.lines.reduce((sum,line)=>sum+(line.quantity-line.expected_quota_quantity)*line.expected_unit_price_vnd,0)!==result.subtotalVnd)throw Error("invalid_response");

@@ -1620,6 +1620,22 @@ test('stored dated request replays unchanged after its day is outside the curren
  const storage=new Map(),sent=[];const first=checkout({storage,services:{createStoreCheckout:async payload=>{sent.push(payload);throw Error('offline')}}});first.render('Checkout');await first.settle();await confirm(first).props.onClick();first.dispose();
  let calendarReads=0;const resumed=checkout({storage,services:{getStoreDeliveryDates:async()=>{calendarReads++;throw Error('offline')},getStoreQuote:async()=>{throw Error('must not requote replay')},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});resumed.render('Checkout');await resumed.settle();assert.equal(calendarReads,0);await confirm(resumed).props.onClick();assert.equal(JSON.stringify(sent[0]),JSON.stringify(sent[1]));assert.equal(sent[1].delivery_date,'2026-11-01');resumed.dispose();
 });
+test('checkout with three billion available replays the exact request after stock runs out',async()=>{
+ const storage=new Map(),sent=[],stock=3_000_000_000;
+ const first=checkout({storage,context:{data:{authenticated:false,storeProducts:{[PRODUCT_ID]:{...product,available_quantity:stock}}}},services:{createStoreCheckout:async payload=>{sent.push(payload);throw Error('offline')}}});
+ try{
+  first.render('Checkout');await first.settle();await confirm(first).props.onClick();
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].lines[0].expected_available_quantity,stock);
+ }finally{first.dispose()}
+ const resumed=checkout({storage,context:{data:{authenticated:false,storeProducts:{[PRODUCT_ID]:{...product,available_quantity:0}}}},services:{getStoreQuote:async()=>{throw Error('must not requote replay')},createStoreCheckout:async payload=>{sent.push(payload);return order()},storeOrderHref:()=>'/done'}});
+ try{
+  resumed.render('Checkout');await resumed.settle();await confirm(resumed).props.onClick();
+  assert.equal(sent.length,2);
+  assert.equal(JSON.stringify(sent[1]),JSON.stringify(sent[0]));
+  assert.equal(resumed.context.ui.cart[PRODUCT_ID],undefined);
+ }finally{resumed.dispose()}
+});
 test('a replacement session cannot submit a quote requested by the previous session',async()=>{
  const old=deferred(),sent=[];let reads=0;
  const r=voucherCheckout({services:{getStoreQuote:input=>++reads===1?old.promise:Promise.resolve(authoritativeQuote(input,{fee:30000})),createStoreCheckout:async p=>{sent.push(p);return order()},storeOrderHref:()=>'/done'}});

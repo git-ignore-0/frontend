@@ -29,7 +29,7 @@ export function isCheckoutPayload(value:unknown,guest:boolean):value is StoreChe
  const products=new Set<string>();
  for(const line of value.lines){
   if(!record(line)||!exactKeys(line,["product_id","quantity","use_quota","expected_unit_price_vnd","expected_available_quantity","expected_quota_quantity"]))return false;
-  if(!uuid(line.product_id)||products.has(line.product_id)||!integer(line.quantity,1,STORE_MAX_LINE_QUANTITY)||typeof line.use_quota!=="boolean"||!integer(line.expected_unit_price_vnd,1)||!integer(line.expected_available_quantity,0,2147483647)||!integer(line.expected_quota_quantity,0,line.quantity))return false;
+  if(!uuid(line.product_id)||products.has(line.product_id)||!integer(line.quantity,1,STORE_MAX_LINE_QUANTITY)||typeof line.use_quota!=="boolean"||!integer(line.expected_unit_price_vnd,1)||!integer(line.expected_available_quantity)||!integer(line.expected_quota_quantity,0,line.quantity))return false;
   products.add(line.product_id);
  }
  if(guest){

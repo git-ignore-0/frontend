@@ -139,6 +139,18 @@ test("Store runtime parsers reject malformed envelopes, money, locale and unsafe
  assert.throws(()=>model.parseStoreProductDetail({data:product}));
 });
 
+test("catalog and product detail keep the full safe-integer availability from the API",()=>{
+ const model=loadModel();
+ const detail={...product,description:"",suppliers:[{...product.suppliers[0],location:"Da Lat"}]};
+ for(const available_quantity of [0,1,999,1000,2147483647,2147483648,3000000000,Number.MAX_SAFE_INTEGER]){
+  assert.equal(model.parseStorePage({data:[{...product,available_quantity}],meta:{page:1,page_size:12,total:1}}).data[0].available_quantity,available_quantity);
+  assert.equal(model.parseStoreProductDetail({data:{...detail,available_quantity}}).available_quantity,available_quantity);
+ }
+ for(const available_quantity of [-1,1.5,"3000000000",Number.MAX_SAFE_INTEGER+1]){
+  assert.throws(()=>model.parseStoreProductDetail({data:{...detail,available_quantity}}));
+ }
+});
+
 test("Store request validation applies exact defaults and accepts bounded filters",()=>{
  const validation=loadValidation();
  const parsed=validation.parseStoreListRequest(new URL("http://localhost/api/store/products?locale=en&search=%20tomato%20&category_id=e55e4778-0528-4594-a4bf-cab97007c50f&csa_eligible=true&price_min=10000&price_max=50000&sort=price_asc&page=2&page_size=24&retry=3").searchParams);

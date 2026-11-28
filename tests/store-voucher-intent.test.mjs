@@ -44,6 +44,26 @@ test("a saved address version is retained when replaying the exact member reques
  assert.equal(intent.isCheckoutPayload({...guestPayload,shipping_address_version:version},true),false);
 });
 
+test("guest and member intents preserve authoritative safe-integer stock and reject invalid values",()=>{
+ for(const recipient of [undefined,guest]){
+  for(const stock of [2147483647,2147483648,3000000000,Number.MAX_SAFE_INTEGER]){
+   const quote=live(),store=storage(),owner=recipient?"guest":"A";
+   quote.lines[0].expected_available_quantity=stock;
+   quote.shippingAddressUpdatedAt=recipient?null:address;
+   quote.shippingAddressVersion=recipient?undefined:addressVersion;
+   const payload=checkoutPayload({quote,locale:"vi",idempotencyKey,guest:recipient});
+   intent.saveCheckoutIntent(store,{owner,payload});
+   assert.equal(JSON.stringify(intent.readCheckoutIntent(store,owner).payload),JSON.stringify(payload));
+   assert.equal(payload.lines[0].expected_available_quantity,stock);
+   assert.equal(payload.idempotency_key,idempotencyKey);
+   for(const invalid of [-1,3.5,"3000000000",Number.MAX_SAFE_INTEGER+1]){
+    const bad={...payload,lines:[{...payload.lines[0],expected_available_quantity:invalid}]};
+    assert.equal(intent.isCheckoutPayload(bad,!!recipient),false);
+   }
+  }
+ }
+});
+
 test("persisted voucher retry preserves payload and key across locale, voucher and live data changes",()=>{
  const store=storage(),voucher=preview();
  const payload=checkoutPayload({quote:voucher,locale:"vi",idempotencyKey});

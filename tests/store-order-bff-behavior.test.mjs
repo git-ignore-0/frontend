@@ -38,16 +38,34 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
     }
     return {};
   }});
-  const request=(path,{method="GET",body,origin=true,marker=true,binding=storedSession?.sessionId??(storedSession?"member":"guest"),query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
+  const request=(path,{method="GET",body,raw,origin=true,marker=true,binding=storedSession?.sessionId??(storedSession?"member":"guest"),query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
     url:`https://site.test/api/store-orders/${path.join("/")}${query}`,
     method,signal:new AbortController().signal,
     headers:new Headers({...(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),...(binding?{"x-nfv-public-session":binding}:{})}),
     cookies:{get:name=>cookieJar[name]?{value:cookieJar[name]}:name==="nfv_store_guest_orders"&&cookie?{value:cookie}:undefined},
-    json:async()=>body??{},
+    json:async()=>raw===undefined?body??{}:JSON.parse(raw),
+    text:async()=>raw??JSON.stringify(body??{}),
   });
   const call=(path,options)=>exports[options?.method==="POST"?"POST":"GET"](request(path,options),{params:Promise.resolve({path})});
   return {call,calls,clears};
 }
+
+test("checkout leaves quantity precision validation to Backend without rounding the JSON",async()=>{
+ const raw='{"lines":[{"expected_available_quantity":9007199254740990.6}]}';
+ const body={errors:[{code:"validation_error"}]};
+ const h=routeHarness({upstream:()=>Response.json(body,{status:400})});
+ const response=await h.call(["checkout"],{method:"POST",raw});
+ assert.equal(response.status,400);
+ assert.deepEqual(await response.json(),body);
+ assert.equal(h.calls[0].init.body,raw);
+});
+
+test("checkout rejects browser-provided order access tokens before forwarding",async()=>{
+ const h=routeHarness();
+ const response=await h.call(["checkout"],{method:"POST",body:{lines:[],access_token:"unexpected"}});
+ assert.equal(response.status,400);
+ assert.equal(h.calls.length,0);
+});
 
 test("an old authenticated or guest checkout never uses a replacement session",async()=>{
   for(const binding of ["session-A","guest",null]){
@@ -192,7 +210,7 @@ test("voucher BFF preserves backend errors and maps transport failure without in
 test("quote and checkout preserve Backend stock conflicts for both guest and member",async()=>{
  for(const [route,upstreamPath,code] of [["quote","store-quotes","store_stock_changed"],["checkout","store-checkouts","store_requote_required"]]){
   for(const storedSession of [null,{accessToken:"owner-token"}]){
-   const error={errors:[{code,context:{reason:"stock_changed",product_id:UUID,available_quantity:6}}]};
+   const error={errors:[{code,context:{reason:"stock_changed",product_id:UUID,available_quantity:3_000_000_000}}]};
    const harness=routeHarness({storedSession,upstream:()=>Response.json(error,{status:409})});
    const body={locale:"vi",lines:[{product_id:UUID,quantity:7,use_quota:false}]};
    const response=await harness.call([route],{method:"POST",body});

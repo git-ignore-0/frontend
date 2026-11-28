@@ -31,7 +31,15 @@ async function handler(request:NextRequest,context:{params:Promise<{path:string[
   if(stored&&!useGuestAuthority)try{session=await currentPublicSession(stored);if(sessionTokensChanged(stored,session))await writeSession(session)}catch(reason){if(reason instanceof AuthServiceUnavailableError){if(reason.rotatedSession)await writeSession(reason.rotatedSession);return error("upstream_unavailable",502)}await clearSession(stored);return error("session_expired",401)}
  }
  let body:BodyInit|undefined;
- if(method==="POST"){
+ if(method==="POST"&&path[0]==="checkout"){
+  const raw=await request.text().catch(()=>null);
+  try{
+   const parsed=raw===null?null:JSON.parse(raw);
+   if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||Object.hasOwn(parsed,"access_token"))return error("invalid_request",400);
+  }catch{return error("invalid_request",400)}
+  // Forward the original JSON so a fractional value cannot round to an integer in transit.
+  body=raw??undefined;
+ }else if(method==="POST"){
   const parsed=await request.json().catch(()=>null);if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return error("invalid_request",400);
   const sanitized={...(parsed as Record<string,unknown>)};
   if(target.guestOrder)delete sanitized.access_token;

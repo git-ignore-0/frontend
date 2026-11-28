@@ -13,6 +13,16 @@ test('Store order preserves optional CSA round and selection with no buy again',
 test('malformed or mismatched CSA snapshots cannot silently become retail orders',()=>{
  for(const csa of [{round,selection:{...selection,revision:-1}},{round,selection:{...selection,round_id:other}},{round:{...round,delivery_date:'bad'},selection},{}])assert.throws(()=>parseStoreOrder({...raw,csa}));
 });
+test('historical Store orders require an explicit boolean and a delivered retail snapshot',()=>{
+ const delivered={...raw,workflow_version:2,status:'delivered',delivery_date:'2026-11-01'};
+ assert.equal(parseStoreOrder(delivered).isHistorical,false);
+ assert.equal(parseStoreOrder({...delivered,is_historical:false}).isHistorical,false);
+ assert.equal(parseStoreOrder({...delivered,is_historical:true}).isHistorical,true);
+ for(const is_historical of [null,1,'true','false'])assert.throws(()=>parseStoreOrder({...delivered,is_historical}));
+ for(const invalid of [{delivery_date:null},{status:'pending_delivery'},{csa:{round,selection}}]){
+  assert.throws(()=>parseStoreOrder({...delivered,is_historical:true,...invalid}));
+ }
+});
 test('new workflow and refund metadata are strict even without payment',()=>{
  for(const status of ['pending_review','payment_pending','payment_review','pending_delivery','delivered','cancelled']){
   const result=parseStoreOrder({...raw,status,workflow_version:2,refund_status:'pending',refund_requested_at:time,refund_amount_vnd:'0'});

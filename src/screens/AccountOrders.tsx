@@ -10,7 +10,8 @@ import {useStoreSession} from "@/store/use-store-session";
 import {currentLookupStoreOrder,getStoreOrders,lookupStoreOrder} from "@/store/store-order-service";
 import type {StoreOrder,StoreOrderStatus} from "@/store/store-order-model";
 import {StoreOrderDetail} from "@/screens/store/StoreOrderDetail";
-import {storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
+import {HISTORICAL_ORDER_DATES,storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
+import {formatDate} from "@/lib/date-format";
 import {money} from "@/lib/format";
 import {formatUnitSize} from "@/store/store-format";
 import {handlePhonePaste,normalizeLocalVietnamPhone} from "@/lib/phone-number";
@@ -122,7 +123,11 @@ export function OrdersView({active=true}:{active?:boolean}={}){
  return <StoreSection title={copy.title} className="store-commerce store-orders"><Tabs label={copy.title} value={status??"all"} items={[{value:"all",label:copy.all},...STATUSES.map(value=>({value,label:storeOrderStatusLabel({status:value,workflowVersion:2},ui.locale)}))]} onChange={value=>selectStatus(value==="all"?undefined:value as StoreOrderStatus)}/>{refreshError&&<DataState compact kind="error" title={copy.stale} action={{label:copy.retry,onClick:()=>void refresh()}}/>}{viewState==="loading"?<DataState kind="loading" title={copy.loading}/>:viewState==="error"?<DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/>:items.length?<><div className="store-order-list">{items.map(order=><article className="store-order-card" key={order.id} aria-labelledby={`store-order-${order.id}`}>
  <a className="store-order-card-link" href={`/store/orders/${order.id}/${ui.locale}`} aria-label={`${copy.view} ${order.referenceCode}`} onClick={event=>{if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate("order-detail",{productId:order.id,tab:"orders"})}}>
  <div className="store-order-top">
-  <div className="store-order-identity"><h3 className="store-order-id" id={`store-order-${order.id}`}>{order.referenceCode}</h3><span className="store-order-date">{copy.placed} <time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></span><span className="store-order-date">{ui.locale==="vi"?"Ngày giao hàng":"Delivery date"}: {order.csa?deliveryDateLabel(order.csa.round.deliveryDate):deliveryDateLabel(order.deliveryDate)}</span></div>
+  <div className="store-order-identity">
+   <h3 className="store-order-id" id={`store-order-${order.id}`}>{order.referenceCode}</h3>
+   <span className="store-order-date">{order.isHistorical?HISTORICAL_ORDER_DATES[ui.locale].recorded:copy.placed} <time dateTime={order.createdAt}>{order.isHistorical?formatDate(order.createdAt):new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></span>
+   <span className="store-order-date">{order.isHistorical?HISTORICAL_ORDER_DATES[ui.locale].delivery:ui.locale==="vi"?"Ngày giao hàng":"Delivery date"}: {deliveryDateLabel(order.csa?.round.deliveryDate??order.deliveryDate)}</span>
+  </div>
   <Status status={order.status==="payment_pending"||order.status==="pending_review"||order.status==="payment_review"?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,ui.locale)}/>
  </div>
  <div className="store-order-body"><ul className="store-order-preview" aria-label={ui.locale==="vi"?"Sản phẩm trong đơn":"Order products"}>{order.lines.map(line=><li key={line.id}><span className="store-product-image"><Photo src={line.imageUrl??undefined} alt={line.name} locale={ui.locale}/></span><div><strong>{line.name}</strong><span>{line.quantity} × {formatUnitSize(line.unitSize)} {line.unitLabel}</span></div></li>)}</ul></div>

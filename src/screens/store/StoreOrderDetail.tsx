@@ -1,6 +1,6 @@
 "use client";
 import {deliveryDateLabel} from "@/store/store-delivery";
-import {storeOrderActions,storeOrderStatusSummary,storeOrderDeadlineLabel,storeOrderHasDeadline,storeShippingDiscountReason} from "@/store/store-order-presentation";
+import {HISTORICAL_ORDER_DATES,storeOrderActions,storeOrderStatusSummary,storeOrderDeadlineLabel,storeOrderHasDeadline,storeShippingDiscountReason} from "@/store/store-order-presentation";
 
 import {ResponsiveDialog} from "@/components/overlays/OverlayPrimitives";
 import {useEffect,useLayoutEffect,useRef,useState} from "react";
@@ -139,7 +139,9 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,onRetired,load
  if(auth.status==="error")return <div className="container order-detail-page store-commerce"><DataState kind="error" title={locale==="vi"?"Không thể kiểm tra phiên đăng nhập":"Could not verify your session"} description={auth.error} action={{label:copy.retry,onClick:()=>void auth.refresh()}}/></div>;
  if(initialLoading)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="loading" title={copy.loading}/></div></div>;
  if(!order)return <div className="container order-detail-page store-commerce"><div className="order-detail-initial-loading"><DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/></div></div>;
- const actions=storeOrderActions(order),qr=storePaymentQrUrl(order),totals=storeOrderTotals(order),events=[{label:copy.created,time:order.createdAt},{label:copy.transfer,time:order.transferReportedAt},{label:copy.approved,time:order.approvedAt},{label:locale==="vi"?"Đã nhận tiền":"Payment received",time:order.paymentReceivedAt},{label:order.workflowVersion===2?(locale==="vi"?"Mở đối soát":"Reconciliation opened"):(locale==="vi"?"Yêu cầu hoàn tiền":"Refund requested"),time:order.refundRequestedAt},{label:locale==="vi"?"Kết thúc yêu cầu hoàn":"Refund request closed",time:order.refundRequestClosedAt},{label:locale==="vi"?"Đã hoàn tiền":"Refunded",time:order.refundedAt},{label:copy.delivered,time:order.deliveredAt},{label:copy.cancelled,time:order.cancelledAt}].filter(item=>item.time).sort((a,b)=>Date.parse(a.time!)-Date.parse(b.time!));
+ const actions=storeOrderActions(order),qr=storePaymentQrUrl(order),totals=storeOrderTotals(order),events=order.isHistorical?[]:[{label:copy.created,time:order.createdAt},{label:copy.transfer,time:order.transferReportedAt},{label:copy.approved,time:order.approvedAt},{label:locale==="vi"?"Đã nhận tiền":"Payment received",time:order.paymentReceivedAt},{label:order.workflowVersion===2?(locale==="vi"?"Mở đối soát":"Reconciliation opened"):(locale==="vi"?"Yêu cầu hoàn tiền":"Refund requested"),time:order.refundRequestedAt},{label:locale==="vi"?"Kết thúc yêu cầu hoàn":"Refund request closed",time:order.refundRequestClosedAt},{label:locale==="vi"?"Đã hoàn tiền":"Refunded",time:order.refundedAt},{label:copy.delivered,time:order.deliveredAt},{label:copy.cancelled,time:order.cancelledAt}].filter(item=>item.time).sort((a,b)=>Date.parse(a.time!)-Date.parse(b.time!));
+ const statusBadge=<Status status={["payment_pending","pending_review","payment_review"].includes(order.status)?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,locale)}/>;
+ const deliveryDate=order.csa?.round.deliveryDate??order.deliveryDate;
  const contactLine=(contact.phone||contact.email)&&<p className="store-order-contact">{copy.contact}: {contact.phone&&<a href={contact.phoneHref}>{contact.phone}</a>}{contact.phone&&contact.email?" · ":null}{contact.email&&<a href={`mailto:${contact.email}`}>{contact.email}</a>}</p>;
  const resolvedAddress=addressNames?.key===addressKey?addressNames.value:null;
  const csaCanReselect=!!order.csa&&order.status!=="cancelled"&&order.status!=="delivered"&&order.csa.round.status!=="cancelled"&&order.csa.selection.state==="reselecting"&&!!order.csa.selection.reopenUntil&&Date.parse(order.csa.selection.reopenUntil)>Date.parse(order.serverTime)+(now-receivedAt)&&Date.parse(`${order.csa.round.deliveryDate}T00:00:00+07:00`)>Date.parse(order.serverTime)+(now-receivedAt);
@@ -152,18 +154,19 @@ export function StoreOrderDetail({id,locale,initialOrder,onLoaded,onRetired,load
   <StorePageHeading title={`${copy.order} ${order.referenceCode}`} locale={locale} parent={{href:returnTo==="csa"?`/account/${locale}?tab=csa#csa-points-history`:`/account/${locale}?tab=orders`,label:returnTo==="csa"?(locale==="vi"?"Lịch sử điểm":"Points history"):(locale==="vi"?"Đơn hàng của tôi":"My orders")}} titleAction={<button type="button" className="icon-btn" aria-label={locale==="vi"?"Sao chép mã đơn hàng":"Copy order code"} title={locale==="vi"?"Sao chép mã đơn hàng":"Copy order code"} onClick={()=>void copyToClipboard(order.referenceCode)}><Icon name="copy" size={15}/></button>}/>
   <div className="store-order-flow">
    <StoreSection title={copy.status} className="store-order-status">
-    <details className="store-order-history-toggle">
+    {order.isHistorical?<div className="store-order-current-status">{statusBadge}</div>:<details className="store-order-history-toggle">
      <summary>
       <span className="store-order-current-status">
-       <Status status={["payment_pending","pending_review","payment_review"].includes(order.status)?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,locale)}/>
+       {statusBadge}
        {events.at(-1)?.time&&<time dateTime={events.at(-1)!.time!}>{formatDateTime(events.at(-1)!.time!)}</time>}
       </span>
       <span className="store-history-control"><span className="store-history-expand">{locale==="vi"?"Xem lịch sử":"View history"}</span><span className="store-history-collapse">{locale==="vi"?"Thu gọn":"Collapse"}</span><Icon name="chev" size={14}/></span>
      </summary>
      <ol className="store-order-history" aria-label={copy.history}>{events.map(item=><li key={item.label}><span>{item.label}</span><time dateTime={item.time!}>{formatDateTime(item.time!)}</time></li>)}</ol>
-    </details>
+    </details>}
     <dl className="store-order-meta">
-     <div className="store-info-row"><dt>{locale==="vi"?"Ngày giao hàng":"Delivery date"}</dt><dd><time dateTime={order.csa?.round.deliveryDate??order.deliveryDate??undefined}>{deliveryDateLabel(order.csa?.round.deliveryDate??order.deliveryDate)}</time></dd></div>
+     <div className="store-info-row"><dt>{order.isHistorical?HISTORICAL_ORDER_DATES[locale].delivery:locale==="vi"?"Ngày giao hàng":"Delivery date"}</dt><dd><time dateTime={deliveryDate??undefined}>{deliveryDateLabel(deliveryDate)}</time></dd></div>
+     {order.isHistorical&&<div className="store-info-row"><dt>{HISTORICAL_ORDER_DATES[locale].recorded}</dt><dd><time dateTime={order.createdAt}>{formatDateTime(order.createdAt)}</time></dd></div>}
      {left!==null&&<div className="store-info-row"><dt>{storeOrderDeadlineLabel(order,locale)}</dt><dd>{left>0?duration(left):copy.expired}</dd></div>}
     </dl>
     {order.csa&&<div className="store-order-csa">

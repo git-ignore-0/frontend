@@ -3,6 +3,11 @@ import type {StoreLocale} from "./store-model";
 
 export type StoreOrderAddressNames={provinceName:string;wardName:string};
 
+export const HISTORICAL_ORDER_DATES={
+  vi:{delivery:"Ngày giao thực tế",recorded:"Ngày ghi nhận"},
+  en:{delivery:"Actual delivery date",recorded:"Recorded on"},
+} as const;
+
 export function storeOrderTotals(order:StoreOrder){
   return {
     goodsValueVnd:order.lines.reduce((sum,line)=>sum+line.quantity*line.unitPriceVnd,0),

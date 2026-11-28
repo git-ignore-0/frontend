@@ -17,6 +17,7 @@
 # TypeScript
 *.tsbuildinfo
 __pycache__/
+/.ruff_cache/
 
 # Local environment files
 .env*

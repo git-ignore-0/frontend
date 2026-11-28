@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import type {PublicWorkshop} from "@/types/workshop";
-import {fetchPublicWorkshopJson,parsePublicWorkshops,getPublicContentOrigin} from "@/lib/public-workshop";
+import {fetchPublicWorkshopJson,parsePublicWorkshopPage,getPublicContentOrigin} from "@/lib/public-workshop";
 
 type PublicHomeData={workshops:PublicWorkshop[]};
 const EMPTY:PublicHomeData={workshops:[]};
@@ -14,6 +14,6 @@ export async function GET(request:Request){
   const workshopUrl=`${origin}/api/v1/public/workshops?locale=${locale}&period=upcoming&page_size=50&page=1`;
   try{
     const workshopsBody=await fetchPublicWorkshopJson(workshopUrl,{tags:["workshops"]});
-    return json({workshops:parsePublicWorkshops(workshopsBody,3)});
+    return json({workshops:parsePublicWorkshopPage(workshopsBody,1,50,locale).items.slice(0,3)});
   }catch{return json(EMPTY);}
 }

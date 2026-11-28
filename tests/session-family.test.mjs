@@ -32,7 +32,9 @@ function harness() {
               ? {
                   sessionSecret: () => "test-only-session-secret-32-characters",
                 }
-              : {},
+              : name === "../public-session-context"
+                ? {GUEST_SESSION_BINDING:"guest",PUBLIC_SESSION_MARKER:"nfv_public_context",PUBLIC_SESSION_RETIRED:"nfv_public_context_revoked_"}
+                : {},
   });
   const begin = (task) => {
     const snapshot = new Map(browser),
@@ -166,6 +168,20 @@ test("a refresh response cannot restore a family after logout", async () => {
   await old.result;
   old.apply();
   assert.equal(await h.run(() => h.session.readSession()), null);
+});
+
+test("removing the browser revocation marker leaves the server tombstone authoritative", async () => {
+  const h=harness();
+  await h.run(()=>h.session.startSession(payload("A")));
+  const login=await h.run(()=>h.session.readSession());
+  const logout=h.begin(()=>h.session.clearSession(login));
+  await logout.result;
+  logout.apply();
+  const serverMarker=`nfv_public_session_revoked_${login.sessionId}`;
+  assert.equal(logout.writes.find(cookie=>cookie.name===serverMarker).options.httpOnly,true);
+  h.browser.delete(`nfv_public_context_revoked_${login.sessionId}`);
+  await h.run(()=>h.session.writeSession({...login,accessToken:"late-A"}));
+  assert.equal(await h.run(()=>h.session.readSession()),null);
 });
 
 test("legacy logout blocks its delayed refresh and a later login still works", async () => {

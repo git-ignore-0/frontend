@@ -5,6 +5,7 @@ import * as service from "./auth-service";
 import type {AuthSnapshot} from "./auth-types";
 import {retainBuyAgainOwner} from "@/store/buy-again-session";
 import {sameAuthSession} from "./session-equality";
+import {onPageSessionRetired,retirePageSession} from "./public-session-context";
 
 type AuthState=AuthSnapshot & {revision:number;lastConfirmedSubject:string|null};
 const initial:AuthState={status:"checking",session:null,error:"",revision:0,lastConfirmedSubject:null};
@@ -27,15 +28,20 @@ export function AuthProvider({children}:{children:ReactNode}){
     // Retain only the owner key for local drafts while the session is unverified.
     setSnapshot(previous=>showChecking||previous.status==="authenticated"?{...previous,status:"checking",session:null,error:"",revision:version}:previous);
     try {
-      const session=await service.getSession();
+      const session=await service.getSession(()=>version===revision.current);
       if(version===revision.current)setSnapshot(previous=>{
         const status=session?"authenticated":"guest";
         if(!showChecking&&previous.status===status&&sameAuthSession(previous.session,session))return previous;
         return {status,session,error:"",revision:version,lastConfirmedSubject:session?.subject??null};
       });
     } catch(error){
+      if(error&&typeof error==="object"&&"code" in error&&error.code==="session_changed"){
+        window.location.reload();
+        return;
+      }
       if(version!==revision.current)return;
       if(service.isUnauthorized(error)){
+        retirePageSession();
         setSnapshot({...initial,status:"expired",error:"Phiên đăng nhập đã hết hạn.",revision:version});
         return;
       }
@@ -43,6 +49,11 @@ export function AuthProvider({children}:{children:ReactNode}){
       setSnapshot(previous=>showChecking||previous.status==="checking"?{...previous,status:"error",session:null,error:message,revision:version}:previous);
     }
   },[]);
+
+  useEffect(()=>onPageSessionRetired(()=>{
+    const version=++revision.current;
+    setSnapshot({...initial,status:"expired",error:"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",revision:version});
+  }),[]);
 
   useEffect(()=>{
     let active=true;
@@ -62,6 +73,7 @@ export function AuthProvider({children}:{children:ReactNode}){
     // A 401 from the previous account cannot cancel or expire a newer verification.
     if(authenticatedRevision!==revision.current)return;
     const version=++revision.current;
+    retirePageSession();
     setSnapshot({...initial,status:"expired",error:"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",revision:version});
   },[authenticatedRevision]);
   useEffect(()=>{

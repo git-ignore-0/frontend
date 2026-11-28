@@ -2,10 +2,13 @@
 import {PagedList} from "@/components/account/PagedList";
 import {ReferralShareDialog} from "@/components/account/ReferralShareDialog";
 /* eslint-disable @next/next/no-img-element -- exact v61 gift-image DOM and unknown backend image URLs. */
-import {useEffect,useRef,useState, type FormEvent, type ReactNode} from "react";
+import {useEffect,useLayoutEffect,useRef,useState, type FormEvent, type ReactNode} from "react";
 import {IconButton} from "@/components/overlays/OverlayPrimitives";
 import {useOverlayDialog} from "@/components/overlays/useOverlayDialog";
 import {ActionLink,Button,DataState,Icon,Section,localized} from "@/components/UI";
+import {downloadMembershipContract,saveContractPdf} from "@/account/csa-contract-pdf";
+import {AccountApiError,isPublicAccessDenied} from "@/account/account-api";
+import {capturePageSession,isPageSessionCurrent} from "@/auth/public-session-context";
 import {useNFV} from "@/state/NFVContext";
 import {copyText} from "@/data/account-copy";
 import {AccountCsaRounds} from "@/screens/account-csa/AccountCsaRounds";
@@ -39,7 +42,7 @@ export function BenefitsView({kind,active=true}:{active?:boolean;kind:Exclude<Ac
  const resource:Resource=kind==="csa"?"csa":kind==="referrals"?"referrals":"rewards";
  const status=ui.accountFetchState[resource];
  const L=(key:string,vars?:Record<string,string|number>)=>copyText(ui.locale,key,vars);
- if(kind==="csa")return <CSABenefits status={status}/>;
+ if(kind==="csa")return <CSABenefits status={status} active={active}/>;
  if(status==="loading")return <section className="acc-section"><DataState kind="loading" title={L("state.loadingTitle")} description={L("state.loadingDesc")}/></section>;
  if(status==="error")return <section className="acc-section"><DataState kind="error" title={L("state.failedTitle")} description={L("state.failedDesc")} action={{label:L("common.retry"),onClick:()=>void refreshResource(resource)}}/></section>;
  if(kind==="referrals")return <ReferralBenefits active={active}/>;
@@ -176,7 +179,36 @@ export function QuotaRow({quota:q}:{quota:CSAQuota}){
  const total=Math.max(0,Number(q.total)||0),remaining=Math.max(0,Number(q.remaining)||0),reserved=q.reserved,used=q.used,unit=ui.locale==="en"?(q.unitEn||q.unit||""):(q.unit||"");
  return <div className="csa-rights-row" role="row"><div className="csa-rights-product" role="cell"><strong>{localized(q as unknown as Record<string,unknown>,"productName",ui.locale)||q.name||"—"}</strong><small>{total} {unit} / {ui.locale==="en"?"cycle":"kỳ"}</small></div><div className="csa-rights-metric is-available" role="cell"><strong>{remaining}</strong><small className="mobile-only">{ui.locale==="en"?"Available":"Còn có thể đặt"}</small></div><div className="csa-rights-metric" role="cell"><strong>{reserved??"—"}</strong><small className="mobile-only">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</small></div><div className="csa-rights-metric" role="cell"><strong>{used??"—"}</strong><small className="mobile-only">{ui.locale==="en"?"Used":"Đã sử dụng"}</small></div></div>;
 }
-function CSABenefits({status}:{status?:"loading"|"ready"|"error"}){
+function MembershipContractButton({url,reference,locale,active}:{
+ url:string;reference:string;locale:"vi"|"en";active:boolean;
+}){
+ const {refreshResource}=useNFV();
+ const [busy,setBusy]=useState(false),[failed,setFailed]=useState(false);
+ const pending=useRef<AbortController|null>(null);
+ useLayoutEffect(()=>{
+  queueMicrotask(()=>{if(!pending.current)setBusy(false)});
+  return ()=>{pending.current?.abort();pending.current=null};
+ },[active,url,reference,locale]);
+ const download=async()=>{
+  if(!active||pending.current)return;
+  const controller=new AbortController(),session=capturePageSession();
+  pending.current=controller;setBusy(true);setFailed(false);
+  const current=()=>pending.current===controller&&!controller.signal.aborted&&isPageSessionCurrent(session);
+  try{
+   const file=await downloadMembershipContract(url,reference,locale,controller.signal);
+   if(current())saveContractPdf(file);
+  }catch(error){
+   if(!current())return;
+   setFailed(true);
+   if(isPublicAccessDenied(error)||error instanceof AccountApiError&&error.status===404)void refreshResource("csa");
+  }finally{
+   if(pending.current===controller){pending.current=null;setBusy(false);}
+  }
+ };
+ return <div><Button small variant="outline" className="csa-contract-action" loading={busy} onClick={()=>void download()}><Icon name="file" size={14}/>{copyText(locale,"csa.viewContract")}</Button>{failed&&<p className="help-error" role="alert">{copyText(locale,"csa.trackerPdfUnavailable")}</p>}</div>;
+}
+
+function CSABenefits({status,active}:{status?:"loading"|"ready"|"error";active:boolean}){
  const {data,ui,setData,setUI,call,act,refreshResource}=useNFV();const overview=data.csa,c=overview?.active??overview?.frozen,upcoming=overview?.upcoming||[];
  const [pageError,setPageError]=useState(false),historyEpoch=useRef(0);
  useEffect(()=>{historyEpoch.current+=1;if(window.location.hash==="#csa-points-history")document.getElementById("csa-points-history")?.scrollIntoView({block:"start"});return()=>{historyEpoch.current+=1}},[c?.id]);
@@ -201,8 +233,8 @@ function CSABenefits({status}:{status?:"loading"|"ready"|"error"}){
  };
 
  return <div className="benefits-page csa-benefits-page">{heading}<AccountCsaRounds/><AccountCsaUpcoming items={upcoming} locale={ui.locale}/>
-   {overview?.active&&overview?.frozen&&<BenefitSection title={ui.locale==="vi"?"Gói đã đóng băng":"Frozen membership"}><AccountCsaPlanSummary planName={overview.frozen.planName} statusLabel={ui.locale==="vi"?"Đã đóng băng":"Frozen"} statusTone="processing" locale={ui.locale} startDate={overview.frozen.startDate} endDate={overview.frozen.endDate} extensionEndDate={overview.frozen.extensionEndDate}/>{overview.frozen.contract?.number&&<div className="csa-contract-inline"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{overview.frozen.contract.number}</strong></div>}{overview.frozen.contract?.downloadUrl&&<ActionLink small variant="outline" href={overview.frozen.contract.downloadUrl}>{L("csa.viewContract")}</ActionLink>}</BenefitSection>}
-   <BenefitSection title={c.status==="frozen"?(ui.locale==="vi"?"Gói đã đóng băng":"Frozen membership"):L("csa.currentPlan")} className="csa-current-section"><AccountCsaPlanSummary planName={localized(c as unknown as Record<string,unknown>,"planName",ui.locale)||L("csa.current")} statusLabel={c.status==="frozen"?(ui.locale==="vi"?"Đã đóng băng":"Frozen"):L("csa."+c.status)} statusTone={c.status==="frozen"?"processing":"completed"} locale={ui.locale} durationMonths={c.durationMonths} amount={c.totalPriceVnd} startDate={c.startDate} endDate={c.endDate} extensionEndDate={c.extensionEndDate}/><div className="csa-contract-inline"><div className="csa-contract-meta"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{contract.number||L("csa.contractPending")}</strong>{contract.signedAt&&<span className="csa-contract-subtle">{L("csa.signed")} {dateLabel(contract.signedAt)}</span>}</div>{contract.downloadUrl?<ActionLink small variant="outline" className="csa-contract-action" href={contract.downloadUrl}><Icon name="file" size={14}/>{L("csa.viewContract")}</ActionLink>:<Button small variant="outline" className="csa-contract-action" disabled><Icon name="file" size={14}/>{L("csa.viewContract")}</Button>}</div>{c.status!=="frozen"&&(quotas.length?<div className="csa-rights" role="table" aria-label={L("csa.quota")}><div className="csa-rights-header" role="row"><span role="columnheader">{ui.locale==="en"?"Produce group":"Nhóm nông sản"}</span><span role="columnheader">{ui.locale==="en"?"Available":"Còn có thể đặt"}</span><span role="columnheader">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</span><span role="columnheader">{ui.locale==="en"?"Used":"Đã sử dụng"}</span></div>{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>)}</BenefitSection>
+   {overview?.active&&overview?.frozen&&<BenefitSection title={ui.locale==="vi"?"Gói đã đóng băng":"Frozen membership"}><AccountCsaPlanSummary planName={overview.frozen.planName} statusLabel={ui.locale==="vi"?"Đã đóng băng":"Frozen"} statusTone="processing" locale={ui.locale} startDate={overview.frozen.startDate} endDate={overview.frozen.endDate} extensionEndDate={overview.frozen.extensionEndDate}/>{overview.frozen.contract?.number&&<div className="csa-contract-inline"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{overview.frozen.contract.number}</strong></div>}{overview.frozen.contract?.downloadUrl&&overview.frozen.contract.number&&<MembershipContractButton key={overview.frozen.id} url={overview.frozen.contract.downloadUrl} reference={overview.frozen.contract.number} locale={ui.locale} active={active}/>}</BenefitSection>}
+   <BenefitSection title={c.status==="frozen"?(ui.locale==="vi"?"Gói đã đóng băng":"Frozen membership"):L("csa.currentPlan")} className="csa-current-section"><AccountCsaPlanSummary planName={localized(c as unknown as Record<string,unknown>,"planName",ui.locale)||L("csa.current")} statusLabel={c.status==="frozen"?(ui.locale==="vi"?"Đã đóng băng":"Frozen"):L("csa."+c.status)} statusTone={c.status==="frozen"?"processing":"completed"} locale={ui.locale} durationMonths={c.durationMonths} amount={c.totalPriceVnd} startDate={c.startDate} endDate={c.endDate} extensionEndDate={c.extensionEndDate}/><div className="csa-contract-inline"><div className="csa-contract-meta"><span className="csa-meta-key">{L("csa.contract")}</span><strong>{contract.number||L("csa.contractPending")}</strong>{contract.signedAt&&<span className="csa-contract-subtle">{L("csa.signed")} {dateLabel(contract.signedAt)}</span>}</div>{contract.downloadUrl&&contract.number?<MembershipContractButton key={c.id} url={contract.downloadUrl} reference={contract.number} locale={ui.locale} active={active}/>:<Button small variant="outline" className="csa-contract-action" disabled><Icon name="file" size={14}/>{L("csa.viewContract")}</Button>}</div>{c.status!=="frozen"&&(quotas.length?<div className="csa-rights" role="table" aria-label={L("csa.quota")}><div className="csa-rights-header" role="row"><span role="columnheader">{ui.locale==="en"?"Produce group":"Nhóm nông sản"}</span><span role="columnheader">{ui.locale==="en"?"Available":"Còn có thể đặt"}</span><span role="columnheader">{ui.locale==="en"?"Ordering":"Đang đặt hàng"}</span><span role="columnheader">{ui.locale==="en"?"Used":"Đã sử dụng"}</span></div>{quotas.map((q,i)=><QuotaRow quota={q} key={i}/>)}</div>:<Empty title={L("csa.noQuota")}/>)}</BenefitSection>
    <BenefitSection title={L("csa.usage")}><div id="csa-points-history" className="benefit-history-host csa-history-footer"><PagedList kind="csa" items={usage} emptyTitle={L("csa.noUsage")} nextCursor={page.nextCursor} total={page.nextCursor?null:usage.length} pending={ui.busyKeys.includes("page:csa")} failed={pageError} onMore={()=>void loadMore()} render={(u,i)=><CsaPointHistoryRow key={u.id||i} usage={u}/>}/></div></BenefitSection>
  </div>;
 }

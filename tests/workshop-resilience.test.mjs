@@ -21,6 +21,9 @@ function jsonResponse(body,init={}){
 
 const publicRequest={};
 vm.runInNewContext(transpile("src/lib/public-request.ts"),{exports:publicRequest,require:()=>({})});
+const workshopParser={};
+vm.runInNewContext(transpile("src/lib/public-workshop.ts"),{exports:workshopParser,require:()=>({}),URL});
+const workshopFixture={id:"11111111-1111-4111-8111-111111111111",slug:"living-soil",title:"Living soil",summary:"",start_at:"2027-01-01T01:00:00Z",end_at:"2027-01-01T02:00:00Z",event_timezone:"Asia/Ho_Chi_Minh",status:"upcoming",requested_locale:"vi",content_locale:"vi",available_locales:["vi"],default_locale:"vi",is_fallback:false,registration_url:null};
 
 function runWorkshopRoute({origin="http://127.0.0.1:8000",fetchPage}={}){
   const exports={};
@@ -34,9 +37,9 @@ function runWorkshopRoute({origin="http://127.0.0.1:8000",fetchPage}={}){
     require:id=>{
       if(id==="next/server")return {NextResponse:{json:jsonResponse}};
       if(id==="@/lib/public-workshop")return {
+        ...workshopParser,
         fetchPublicWorkshopJson,
         getPublicContentOrigin:()=>origin,
-        parsePublicWorkshops:payload=>payload.data,
       };
       if(id==="@/lib/public-request")return publicRequest;
       throw new Error(`Unexpected import ${id}`);
@@ -110,11 +113,24 @@ test("workshop BFF reports missing backend configuration",async()=>{
   assert.deepEqual(await response.json(),{error:"configuration"});
 });
 
+test("workshop BFF rejects malformed envelopes, malformed rows and inconsistent pagination",async()=>{
+  const meta={page:1,page_size:50,total:0};
+  const invalid=[{data:null,meta},{data:[{id:"broken"}],meta},{data:[workshopFixture,null],meta},{data:[],meta:{...meta,page:2}},{data:[workshopFixture,workshopFixture],meta}];
+  for(const payload of invalid){
+    const {route}=runWorkshopRoute({fetchPage:()=>payload});
+    const response=await route.GET(new Request("https://site.test/api/workshops?locale=vi"));
+    assert.equal(response.status,502,JSON.stringify(payload));
+  }
+  const {route}=runWorkshopRoute({fetchPage:()=>({data:[],meta})});
+  const response=await route.GET(new Request("https://site.test/api/workshops?locale=vi"));
+  assert.deepEqual(await response.json(),{upcoming:[],past:[]});
+});
+
 test("workshop BFF follows pagination metadata beyond page ten",async()=>{
   const {route,calls}=runWorkshopRoute({fetchPage:url=>{
     const page=Number(url.searchParams.get("page"));
     const period=url.searchParams.get("period");
-    return {data:[{id:`${period}-${page}`}],meta:{page,page_size:50,total:550}};
+    return {data:[{...workshopFixture,id:`11111111-1111-4111-8111-${String(page).padStart(12,"0")}`,slug:`${period}-${page}`,status:period==="past"?"completed":"upcoming",requested_locale:"en",is_fallback:true}],meta:{page,page_size:50,total:550}};
   }});
   const response=await route.GET(new Request("http://site.test/api/workshops?locale=en"));
   assert.equal(response.status,200);
@@ -154,6 +170,11 @@ test("workshop detail returns null only for a real upstream 404",async()=>{
 
 test("workshop detail rejects a malformed successful upstream payload",async()=>{
   const {server}=loadWorkshopServer(async()=>({data:{invalid:true}}),undefined,()=>null);
+  await assert.rejects(()=>server.getPublicWorkshop("living-soil","vi"),/Invalid public workshop payload/);
+});
+
+test("workshop detail rejects a different slug",async()=>{
+  const {server}=loadWorkshopServer(async()=>({data:{...workshopFixture,slug:"another-workshop"}}));
   await assert.rejects(()=>server.getPublicWorkshop("living-soil","vi"),/Invalid public workshop payload/);
 });
 

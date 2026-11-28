@@ -28,7 +28,8 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
       class AuthServiceUnavailableError extends Error{}
       return {AuthServiceUnavailableError,currentPublicSession:async()=>{if(authError)throw authError;return currentSession},sessionTokensChanged:()=>false};
     }
-    if(name==="@/auth/server/session")return {readSession:async()=>storedSession,clearSession:async()=>{clears.push(true)},writeSession:async()=>{}};
+    if(name==="@/auth/public-session-context")return {PUBLIC_SESSION_HEADER:"X-NFV-Public-Session",GUEST_SESSION_BINDING:"guest"};
+    if(name==="@/auth/server/session")return {publicSessionBinding:value=>value?.sessionId??(value?"member":"guest"),readSession:async()=>storedSession,clearSession:async()=>{clears.push(true)},writeSession:async()=>{}};
     if(name==="@/store/store-order-session"){
       const helpers={};
       const compiledSession=ts.transpileModule(readFileSync("src/store/store-order-session.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -37,16 +38,44 @@ function routeHarness({cookieJar={},guestOrders={},storedSession=null,currentSes
     }
     return {};
   }});
-  const request=(path,{method="GET",body,origin=true,marker=true,query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
+  const request=(path,{method="GET",body,raw,origin=true,marker=true,binding=storedSession?.sessionId??(storedSession?"member":"guest"),query="",cookie=JSON.stringify({orders:guestOrders})}={})=>({
     url:`https://site.test/api/store-orders/${path.join("/")}${query}`,
-    method,
-    headers:new Headers(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),
+    method,signal:new AbortController().signal,
+    headers:new Headers({...(origin&&method==="POST"?{origin:"https://site.test",...(marker?{"x-nfv-public-request":"1"}:{})}:{}),...(binding?{"x-nfv-public-session":binding}:{})}),
     cookies:{get:name=>cookieJar[name]?{value:cookieJar[name]}:name==="nfv_store_guest_orders"&&cookie?{value:cookie}:undefined},
-    json:async()=>body??{},
+    json:async()=>raw===undefined?body??{}:JSON.parse(raw),
+    text:async()=>raw??JSON.stringify(body??{}),
   });
   const call=(path,options)=>exports[options?.method==="POST"?"POST":"GET"](request(path,options),{params:Promise.resolve({path})});
   return {call,calls,clears};
 }
+
+test("checkout leaves quantity precision validation to Backend without rounding the JSON",async()=>{
+ const raw='{"lines":[{"expected_available_quantity":9007199254740990.6}]}';
+ const body={errors:[{code:"validation_error"}]};
+ const h=routeHarness({upstream:()=>Response.json(body,{status:400})});
+ const response=await h.call(["checkout"],{method:"POST",raw});
+ assert.equal(response.status,400);
+ assert.deepEqual(await response.json(),body);
+ assert.equal(h.calls[0].init.body,raw);
+});
+
+test("checkout rejects browser-provided order access tokens before forwarding",async()=>{
+ const h=routeHarness();
+ const response=await h.call(["checkout"],{method:"POST",body:{lines:[],access_token:"unexpected"}});
+ assert.equal(response.status,400);
+ assert.equal(h.calls.length,0);
+});
+
+test("an old authenticated or guest checkout never uses a replacement session",async()=>{
+  for(const binding of ["session-A","guest",null]){
+    const harness=routeHarness({storedSession:{sessionId:"session-B",accessToken:"token-B"}});
+    const response=await harness.call(["checkout"],{method:"POST",body:{lines:[]},binding});
+    assert.equal(response.status,409);
+    assert.deepEqual(await response.json(),{error:"session_changed"});
+    assert.equal(harness.calls.length,0);
+  }
+});
 
 test("matching guest-order cookie remains the authority before and after OAuth login",async()=>{
   for(const storedSession of [null,{accessToken:"oauth-token"}]){
@@ -175,6 +204,21 @@ test("voucher BFF preserves backend errors and maps transport failure without in
  const rejected=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>Response.json(body,{status:400})});const result=await rejected.call(["quote"],{method:"POST"});assert.equal(result.status,400);assert.deepEqual(await result.json(),body);
  for(const [reason,status,code] of [[Error("offline"),502,"upstream_unavailable"],[new DOMException("timeout","TimeoutError"),504,"upstream_timeout"]]){
   const failed=routeHarness({storedSession:{accessToken:"owner-token"},upstream:()=>{throw reason;}});const response=await failed.call(["quote"],{method:"POST"});assert.equal(response.status,status);assert.equal((await response.json()).error,code);
+ }
+});
+
+test("quote and checkout preserve Backend stock conflicts for both guest and member",async()=>{
+ for(const [route,upstreamPath,code] of [["quote","store-quotes","store_stock_changed"],["checkout","store-checkouts","store_requote_required"]]){
+  for(const storedSession of [null,{accessToken:"owner-token"}]){
+   const error={errors:[{code,context:{reason:"stock_changed",product_id:UUID,available_quantity:3_000_000_000}}]};
+   const harness=routeHarness({storedSession,upstream:()=>Response.json(error,{status:409})});
+   const body={locale:"vi",lines:[{product_id:UUID,quantity:7,use_quota:false}]};
+   const response=await harness.call([route],{method:"POST",body});
+   assert.equal(response.status,409);assert.deepEqual(await response.json(),error);
+   assert.equal(response.headers.get("Cache-Control"),"private, no-store");
+   assert.equal(harness.calls[0].url,`https://auth.test/api/v1/public/${upstreamPath}`);
+   assert.deepEqual(JSON.parse(harness.calls[0].init.body),body);
+  }
  }
 });
 

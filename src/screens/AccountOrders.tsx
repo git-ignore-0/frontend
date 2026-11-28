@@ -10,13 +10,14 @@ import {useStoreSession} from "@/store/use-store-session";
 import {currentLookupStoreOrder,getStoreOrders,lookupStoreOrder} from "@/store/store-order-service";
 import type {StoreOrder,StoreOrderStatus} from "@/store/store-order-model";
 import {StoreOrderDetail} from "@/screens/store/StoreOrderDetail";
-import {storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
+import {HISTORICAL_ORDER_DATES,storeOrderStatusLabel,storeOrderStatusSummary} from "@/store/store-order-presentation";
+import {formatDate} from "@/lib/date-format";
 import {money} from "@/lib/format";
 import {formatUnitSize} from "@/store/store-format";
 import {handlePhonePaste,normalizeLocalVietnamPhone} from "@/lib/phone-number";
 import {copyText} from "@/data/account-copy";
 import {readOrdersView,saveOrdersView} from "@/account/orders-view-state";
-import {AccountApiError} from "@/account/account-api";
+import {AccountApiError,isPublicAccessDenied} from "@/account/account-api";
 
 const C={vi:{title:"Đơn hàng nông sản",loading:"Đang tải đơn hàng…",failed:"Không thể tải đơn hàng",empty:"Chưa có đơn hàng",retry:"Thử lại",all:"Tất cả",previous:"Trước",next:"Sau",view:"Xem chi tiết",placed:"Đặt ngày",total:"Tổng thanh toán",lookup:"Kiểm tra đơn hàng",lookupIntro:"Nhập mã đơn và số điện thoại đã dùng khi đặt. Không cần đăng nhập.",reference:"Mã đơn",phone:"Số điện thoại",find:"Tra cứu",notFound:"Không tìm thấy đơn hàng với thông tin này.",limited:"Bạn đã thử quá nhiều lần. Vui lòng chờ rồi thử lại.",stale:"Chưa cập nhật được đơn hàng. Đang hiển thị dữ liệu lần tải trước.",session:"Phiên tra cứu đã hết hạn. Hãy nhập lại mã đơn và số điện thoại."},en:{title:"Produce orders",loading:"Loading orders…",failed:"Orders could not be loaded",empty:"No orders yet",retry:"Try again",all:"All",previous:"Previous",next:"Next",view:"View details",placed:"Placed on",total:"Total payment",lookup:"Check an order",lookupIntro:"Enter the order code and phone number used at checkout. No sign-in is required.",reference:"Order code",phone:"Phone number",find:"Look up",notFound:"No order was found with this information.",limited:"Too many attempts. Wait before trying again.",stale:"Orders could not be refreshed. Showing the previously loaded data.",session:"The lookup session expired. Enter the order code and phone number again."}};
 const STATUSES:StoreOrderStatus[]=["payment_pending","pending_review","payment_review","pending_delivery","delivered","cancelled"];
@@ -40,6 +41,10 @@ export function OrdersView({active=true}:{active?:boolean}={}){
   if(filter&&all&&Date.now()-all.receivedAt<60000&&all.items.length>=all.total){const filtered=all.items.filter(order=>order.status===filter);return {items:filtered,total:filtered.length,page:1,receivedAt:all.receivedAt}}
   return saved&&Date.now()-saved.receivedAt<60000?saved:undefined;
  };
+ const retire=()=>{
+  cache.current.clear();restorePages.current=1;
+  setItems([]);setTotal(0);setResultOwner(owner);setState("error");setRefreshError(false);
+ };
  const load=async()=>{
   const current=++seq.current;request.current=current;
   try{
@@ -57,7 +62,7 @@ export function OrdersView({active=true}:{active?:boolean}={}){
    restorePages.current=1;
    cache.current.set(cacheKey(status),{items:next,total:result.meta.total,page:lastPage,receivedAt:Date.now()});
    setItems(next);setTotal(result.meta.total);setPage(lastPage);setResultOwner(owner);setState("ready");setRefreshError(false);
-  }catch{if(current===seq.current){setResultOwner(owner);setState(page===1?"error":"more_error")}}
+  }catch(error){if(current===seq.current){if(isPublicAccessDenied(error))retire();else{setResultOwner(owner);setState(page===1?"error":"more_error")}}}
   finally{if(request.current===current)request.current=null}
  };
  const refresh=async()=>{
@@ -78,7 +83,7 @@ export function OrdersView({active=true}:{active?:boolean}={}){
    // A refreshed status can invalidate every filter projection. Publish loaded pages together.
    cache.current.clear();cache.current.set(cacheKey(status),{items:next,total:first.meta.total,page:lastPage,receivedAt:Date.now()});
    setItems(next);setTotal(first.meta.total);setPage(lastPage);setResultOwner(owner);setState("ready");setRefreshError(false);
-  }catch{if(current===seq.current)setRefreshError(true)}
+  }catch(error){if(current===seq.current){if(isPublicAccessDenied(error))retire();else setRefreshError(true)}}
   finally{if(request.current===current)request.current=null}
  };
  const selectStatus=(next:StoreOrderStatus|undefined)=>{if(next===status)return;restorePages.current=1;seq.current+=1;request.current=null;const saved=cachedFor(next);if(saved)cache.current.set(cacheKey(next),saved);setStatus(next);setPage(saved?.page??1);setItems(saved?.items??[]);setTotal(saved?.total??0);setResultOwner(owner);setState(saved?"ready":"loading");setRefreshError(false)};
@@ -118,7 +123,11 @@ export function OrdersView({active=true}:{active?:boolean}={}){
  return <StoreSection title={copy.title} className="store-commerce store-orders"><Tabs label={copy.title} value={status??"all"} items={[{value:"all",label:copy.all},...STATUSES.map(value=>({value,label:storeOrderStatusLabel({status:value,workflowVersion:2},ui.locale)}))]} onChange={value=>selectStatus(value==="all"?undefined:value as StoreOrderStatus)}/>{refreshError&&<DataState compact kind="error" title={copy.stale} action={{label:copy.retry,onClick:()=>void refresh()}}/>}{viewState==="loading"?<DataState kind="loading" title={copy.loading}/>:viewState==="error"?<DataState kind="error" title={copy.failed} action={{label:copy.retry,onClick:()=>{setState("loading");void load()}}}/>:items.length?<><div className="store-order-list">{items.map(order=><article className="store-order-card" key={order.id} aria-labelledby={`store-order-${order.id}`}>
  <a className="store-order-card-link" href={`/store/orders/${order.id}/${ui.locale}`} aria-label={`${copy.view} ${order.referenceCode}`} onClick={event=>{if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate("order-detail",{productId:order.id,tab:"orders"})}}>
  <div className="store-order-top">
-  <div className="store-order-identity"><h3 className="store-order-id" id={`store-order-${order.id}`}>{order.referenceCode}</h3><span className="store-order-date">{copy.placed} <time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></span><span className="store-order-date">{ui.locale==="vi"?"Ngày giao hàng":"Delivery date"}: {order.csa?deliveryDateLabel(order.csa.round.deliveryDate):deliveryDateLabel(order.deliveryDate)}</span></div>
+  <div className="store-order-identity">
+   <h3 className="store-order-id" id={`store-order-${order.id}`}>{order.referenceCode}</h3>
+   <span className="store-order-date">{order.isHistorical?HISTORICAL_ORDER_DATES[ui.locale].recorded:copy.placed} <time dateTime={order.createdAt}>{order.isHistorical?formatDate(order.createdAt):new Date(order.createdAt).toLocaleDateString(ui.locale,{day:"2-digit",month:"2-digit",year:"numeric"})}</time></span>
+   <span className="store-order-date">{order.isHistorical?HISTORICAL_ORDER_DATES[ui.locale].delivery:ui.locale==="vi"?"Ngày giao hàng":"Delivery date"}: {deliveryDateLabel(order.csa?.round.deliveryDate??order.deliveryDate)}</span>
+  </div>
   <Status status={order.status==="payment_pending"||order.status==="pending_review"||order.status==="payment_review"?"pending":order.status==="cancelled"?"cancelled":"confirmed"} label={storeOrderStatusSummary(order,ui.locale)}/>
  </div>
  <div className="store-order-body"><ul className="store-order-preview" aria-label={ui.locale==="vi"?"Sản phẩm trong đơn":"Order products"}>{order.lines.map(line=><li key={line.id}><span className="store-product-image"><Photo src={line.imageUrl??undefined} alt={line.name} locale={ui.locale}/></span><div><strong>{line.name}</strong><span>{line.quantity} × {formatUnitSize(line.unitSize)} {line.unitLabel}</span></div></li>)}</ul></div>
@@ -142,7 +151,7 @@ export function GuestOrderLookup(){
   catch(reason){if(request===sequence.current){setOrder(null);setError(reason instanceof AccountApiError&&reason.status===429?copy.limited:reason instanceof AccountApiError&&reason.status===404?copy.notFound:copy.failed)}}
   finally{if(request===sequence.current){submitting.current=false;setBusy(false)}}
  };
- if(order)return <section className="account-guest-order-result"><Button variant="outline" onClick={()=>{sequence.current+=1;setOrder(null)}}>{copy.lookup}</Button><StoreOrderDetail key={order.id} id={order.id} locale={ui.locale} initialOrder={order} onLoaded={setOrder} loadOrder={()=>currentLookupStoreOrder()} readOnly/></section>;
+ if(order)return <section className="account-guest-order-result"><Button variant="outline" onClick={()=>{sequence.current+=1;setOrder(null)}}>{copy.lookup}</Button><StoreOrderDetail key={order.id} id={order.id} locale={ui.locale} initialOrder={order} onLoaded={setOrder} onRetired={()=>{setOrder(null);setError(copy.session);}} loadOrder={async id=>{const current=await currentLookupStoreOrder();if(current.id!==id)throw new AccountApiError("lookup_session_changed",404);return current}} readOnly/></section>;
  return <StoreSection title={copy.lookup} className="store-commerce account-order-lookup">
   <p>{copy.lookupIntro}</p>
   <form className="form-grid" onSubmit={submit}>

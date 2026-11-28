@@ -1,8 +1,9 @@
 import test from 'node:test';
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
+import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
 const url=pathToFileURL(new URL('../src/screens/account-csa/csa-rounds-presentation.ts',import.meta.url).pathname).href;
-const run=code=>execFileSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{stdio:'pipe'});
+const run=code=>{const result=spawnSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',code],{encoding:'utf8'});assert.equal(result.status,0,result.stderr||result.error?.message);};
 test('round collection expands only multiple rows and uses total across pages',()=>run(`
  import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
  assert.equal(m.roundsExpanded(1,false),true);assert.equal(m.roundsExpanded(21,false),false);assert.equal(m.roundsExpanded(21,true),true);
@@ -48,4 +49,26 @@ test('100 distinct choices block only new products, retaining quantity edits and
  const limits=m.quantityLimits(products,draft,quota);
  assert.equal(limits['100'],0);assert.equal(limits['0'],10);
  draft['0']=0;assert.equal(m.quantityLimits(products,draft,quota)['100'],10);
+`));
+
+test('resumed selling uses the server cap for stock 0, 2 or 10 with a saved hold of 3',()=>run(`
+ import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
+ const product={id:'p',quotaGroupId:'g',quotaCost:.25};
+ const responses=[{availableQuantity:3,heldOnly:true},{availableQuantity:3,heldOnly:true},{availableQuantity:10}];
+ const quota=[{groupId:'g',availableUnits:20}];
+ assert.deepEqual(responses.map(response=>m.quantityLimits([{...product,...response}],{p:3},quota).p),[3,3,10]);
+`));
+
+test('CSA uses its own request ceiling and preserves a draft above the refreshed contextual stock',()=>run(`
+ import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
+ const product={id:'p',quotaGroupId:'g',quotaCost:.01,availableQuantity:1500};
+ const draft={p:1500},quota=[{groupId:'g',availableUnits:30}];
+ assert.equal(m.quantityLimits([product],draft,quota).p,1500);
+ assert.equal(m.isSelectionDraftValid(m.draftLines(draft),m.quantityLimits([product],draft,quota)),true);
+ const refreshed=m.quantityLimits([{...product,availableQuantity:1200}],draft,quota);
+ assert.equal(m.isSelectionDraftValid(m.draftLines(draft),refreshed),false);
+ assert.equal(draft.p,1500);
+ assert.equal(m.isSelectionDraftValid(m.draftLines({p:1200}),refreshed),true);
+ for(const quantity of [0,-1,1.5,Infinity,Number.MAX_SAFE_INTEGER+1])assert.equal(m.isSelectionDraftValid([{productId:'p',quantity}],refreshed),false);
+ assert.equal(m.quantityLimits([{...product,availableQuantity:2147483648}],{},[{groupId:'g',availableUnits:30000000}]).p,2147483647);
 `));

@@ -18,9 +18,14 @@ test("tracker service uses lookup cookie flow then parses approved contract deta
 
 test("tracker PDF validates content type and preserves a safe response filename",()=>run(`
   import assert from 'node:assert/strict';const tracker=await import(${JSON.stringify(serviceUrl)});const calls=[];
-  globalThis.fetch=async path=>{calls.push(path);return new Response('pdf',{status:200,headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="contract-vi.pdf"'}})};
-  const file=await tracker.downloadTrackedCsaContract('vi','22222222-2222-4222-8222-222222222222');assert.equal(file.filename,'contract-vi.pdf');assert.equal(file.blob.type,'application/pdf');assert.match(calls[0],/locale=vi&version_id=22222222/);
-  globalThis.fetch=async()=>new Response('{}',{status:200,headers:{'Content-Type':'application/json'}});await assert.rejects(()=>tracker.downloadTrackedCsaContract('vi'),error=>error.code==='csa_contract_pdf_unavailable');
+  const version={id:'22222222-2222-4222-8222-222222222222',versionNumber:2},controller=new AbortController();
+  const filename='CSA-C-001.v2.vi.pdf';
+  globalThis.fetch=async(path,init)=>{calls.push(path);assert.equal(init.signal,controller.signal);return new Response('%PDF-1.5\\n%%EOF',{status:200,headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="'+filename+'"'}})};
+  const file=await tracker.downloadTrackedCsaContract('vi','CSA-C-001',version,controller.signal);assert.equal(file.filename,filename);assert.equal(file.blob.type,'application/pdf');assert.match(calls[0],/locale=vi&version_id=22222222/);
+  for(const [body,type,name] of [['{}','application/json',filename],['','application/pdf',filename],['%PDF-1.5','application/pdf',filename],['%PDF-1.5\\n%%EOF','application/pdf','OTHER.v2.vi.pdf']]){
+    globalThis.fetch=async()=>new Response(body,{headers:{'Content-Type':type,'Content-Disposition':'attachment; filename="'+name+'"'}});
+    await assert.rejects(()=>tracker.downloadTrackedCsaContract('vi','CSA-C-001',version),error=>error.code==='csa_contract_pdf_unavailable');
+  }
 `));
 
 test("tracker service maps rate limits and secure-session expiry without masking codes",()=>run(`

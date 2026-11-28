@@ -7,7 +7,8 @@ import {
   currentPublicSession,
   sessionTokensChanged,
 } from "@/auth/server/oauth";
-import { clearSession, readSession, writeSession } from "@/auth/server/session";
+import { clearSession, publicSessionBinding, readSession, writeSession } from "@/auth/server/session";
+import { PUBLIC_SESSION_HEADER, GUEST_SESSION_BINDING } from "@/auth/public-session-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +63,11 @@ async function proxy(
   let session = null;
   if (upstream.session !== "none") {
     const stored = await readSession();
+    const binding = request.headers.get(PUBLIC_SESSION_HEADER);
+    if (binding !== publicSessionBinding(stored)) {
+      return !stored && binding && binding !== GUEST_SESSION_BINDING
+        ? jsonError("session_expired", 401) : jsonError("session_changed", 409);
+    }
     if(!stored){
       if(upstream.session==="required")return jsonError("unauthorized",401);
     }else{
@@ -73,7 +79,7 @@ async function proxy(
           if (error.rotatedSession) await writeSession(error.rotatedSession);
           return jsonError("upstream_unavailable", 502);
         }
-        await clearSession();
+        await clearSession(stored);
         return jsonError("session_expired", 401);
       }
     }
@@ -95,7 +101,7 @@ async function proxy(
       },
       body: method !== "GET" ? await request.arrayBuffer() : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
     });
   } catch (error) {
     const timedOut =
@@ -103,7 +109,7 @@ async function proxy(
     return jsonError(timedOut ? "upstream_timeout" : "upstream_unavailable", timedOut ? 504 : 502);
   }
 
-  if (session && response.status === 401) await clearSession();
+  if (session && response.status === 401) await clearSession(session);
   const responseHeaders=new Headers({
     "Content-Type":response.headers.get("content-type")||"application/json",
     "Cache-Control":"private, no-store",

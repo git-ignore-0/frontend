@@ -99,7 +99,8 @@ test("cart drawer retry handler targets the failed row and keeps checkout blocke
   const exports={};
   vm.runInNewContext(compile("src/screens/Checkout.tsx"),{exports,URL,URLSearchParams,console,require:name=>{
     if(name==="react/jsx-runtime")return jsx;
-    if(name==="@/state/NFVContext")return {useNFV:()=>({data:{storeProducts:{p:product({id:"p"}),other:product({id:"other",slug:"other"})}},ui:{locale:"vi",cartOpen:true,cart:{p:2,other:1},cartProductState:{p:"error",other:"ready"},cartProductNotice:{}},patch(){},updateCart(){},acknowledgeCartProduct(){},retryCartProduct:id=>calls.push(id),beginCheckout(){calls.push("checkout")}})};
+    if(name==="@/state/NFVContext")return {useNFV:()=>({data:{storeProducts:{p:product({id:"p"}),other:product({id:"other",slug:"other"})}},ui:{locale:"vi",cartOpen:true,cart:{p:2,other:1},cartProductState:{p:"error",other:"ready"},cartProductNotice:{}},storeAvailability:{},cartHydrated:true,patch(){},updateCart(){},acknowledgeCartProduct(){},retryCartProduct:id=>calls.push(id),beginCheckout(){calls.push("checkout")}})};
+    if(name==="@/store/store-limits"){const limits={};vm.runInNewContext(compile("src/store/store-limits.ts"),{exports:limits});return limits}
     if(name==="@/components/UI")return Object.fromEntries(["Button","DataState","FormInput","FormSelect","Icon","MoneyLine","Photo","Quantity"].map(value=>[value,value]));
     if(name==="@/components/overlays/OverlayPrimitives")return {SideDrawer:"SideDrawer"};
     if(name==="@/store/store-format")return {formatUnitSize:value=>String(Number(value))};

@@ -2,6 +2,7 @@ import type {Locale} from "@/types";
 import {accountApi,AccountApiError} from "./account-api.ts";
 
 export type AdministrativeUnit={code:string;name:string};
+const pending=new Map<string,Promise<AdministrativeUnit[]>>();
 
 function unitsFrom(value:unknown):AdministrativeUnit[]{
   if(!Array.isArray(value))throw new AccountApiError("invalid_response",502);
@@ -13,14 +14,22 @@ function unitsFrom(value:unknown):AdministrativeUnit[]{
   });
 }
 
-export async function getAdministrativeProvinces(locale:Locale):Promise<AdministrativeUnit[]>{
-  const payload=await accountApi("administrative-provinces",{headers:{"Accept-Language":locale}});
-  return unitsFrom(payload.data);
+function getUnits(path:string,locale:Locale):Promise<AdministrativeUnit[]>{
+  const key=`${locale}:${path}`;
+  const current=pending.get(key);
+  if(current)return current;
+  const request=accountApi(path,{headers:{"Accept-Language":locale}})
+    .then(payload=>unitsFrom(payload.data)).finally(()=>{pending.delete(key)});
+  pending.set(key,request);
+  return request;
 }
 
-export async function getAdministrativeWards(provinceCode:string,locale:Locale):Promise<AdministrativeUnit[]>{
-  const payload=await accountApi(`administrative-wards?province=${encodeURIComponent(provinceCode)}`,{headers:{"Accept-Language":locale}});
-  return unitsFrom(payload.data);
+export function getAdministrativeProvinces(locale:Locale):Promise<AdministrativeUnit[]>{
+  return getUnits("administrative-provinces",locale);
+}
+
+export function getAdministrativeWards(provinceCode:string,locale:Locale):Promise<AdministrativeUnit[]>{
+  return getUnits(`administrative-wards?province=${encodeURIComponent(provinceCode)}`,locale);
 }
 
 export async function resolveAdministrativeAddressNames(provinceCode:string,wardCode:string,locale:Locale):Promise<{provinceName:string;wardName:string}>{

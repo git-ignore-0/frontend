@@ -67,7 +67,8 @@ function routeHarness({session=null,responseFactory,authUnavailable=false}={}){
     if(id==="@/account/bff-path")return bffModel();
     if(id==="@/auth/server/config")return {authOrigin:()=>"https://auth.example.test",publicSiteOrigin:()=>"https://site.example.test"};
     if(id==="@/auth/server/oauth")return {AuthServiceUnavailableError:StubAuthServiceUnavailableError,currentPublicSession:async value=>{if(authUnavailable)throw new StubAuthServiceUnavailableError("unavailable");return value;},sessionTokensChanged:()=>false};
-    if(id==="@/auth/server/session")return {clearSession:async()=>{},readSession:async()=>session,writeSession:async()=>{}};
+    if(id==="@/auth/public-session-context")return load("src/auth/public-session-context.ts",()=>({}));
+    if(id==="@/auth/server/session")return {publicSessionBinding:value=>value?.sessionId??(value?"member":"guest"),clearSession:async()=>{},readSession:async()=>session,writeSession:async()=>{}};
     throw new Error(`Unexpected import ${id}`);
   },{fetch:async(target,init)=>{calls.push({target:String(target),init});return responseFactory?responseFactory(target,init):new Response(JSON.stringify({data:{}}),{status:200,headers:{"Content-Type":"application/json"}});}});
   return {route,calls};
@@ -75,7 +76,7 @@ function routeHarness({session=null,responseFactory,authUnavailable=false}={}){
 
 test("optional purchase session works for guests and keeps the same-origin mutation guard",async()=>{
   const guest=routeHarness();
-  const valid=new Request("https://site.example.test/api/account/csa-payment-quotes",{method:"POST",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
+  const valid=new Request("https://site.example.test/api/account/csa-payment-quotes",{method:"POST",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","X-NFV-Public-Session":"guest","Content-Type":"application/json"},body:"{}"});
   assert.equal((await guest.route.POST(valid,{params:Promise.resolve({path:["csa-payment-quotes"]})})).status,200);
   assert.equal(guest.calls[0].init.headers.Authorization,undefined);
 
@@ -84,9 +85,21 @@ test("optional purchase session works for guests and keeps the same-origin mutat
   assert.equal(guest.calls.length,1);
 });
 
+test("a stale Account request cannot read or modify the replacement account",async()=>{
+  const harness=routeHarness({session:{sessionId:"session-B",accessToken:"stored"}});
+  for(const method of ["GET","PUT"]){
+    const request=new Request("https://site.example.test/api/account/shipping-address",{method,headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","X-NFV-Public-Session":"session-A"},...(method==="PUT"?{body:"{}"}:{})});
+    const response=await harness.route[method](request,{params:Promise.resolve({path:["shipping-address"]})});
+    assert.equal(response.status,409);
+    assert.deepEqual(await response.json(),{error:"session_changed"});
+  }
+  assert.equal(harness.calls.length,0);
+});
+
 test("saved shipping address PUT requires a session and the same-origin mutation guard",async()=>{
   const authenticated=routeHarness({session:{accessToken:"stored"}});
-  const valid=new Request("https://site.example.test/api/account/shipping-address",{method:"PUT",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
+  const addressRequest=(binding)=>new Request("https://site.example.test/api/account/shipping-address",{method:"PUT",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","X-NFV-Public-Session":binding,"Content-Type":"application/json"},body:"{}"});
+  const valid=addressRequest("member");
   assert.equal((await authenticated.route.PUT(valid,{params:Promise.resolve({path:["shipping-address"]})})).status,200);
   assert.equal(authenticated.calls[0].init.method,"PUT");
   assert.equal(authenticated.calls[0].init.headers.Authorization,"Bearer stored");
@@ -96,13 +109,13 @@ test("saved shipping address PUT requires a session and the same-origin mutation
   assert.equal(authenticated.calls.length,1);
 
   const guest=routeHarness();
-  assert.equal((await guest.route.PUT(valid,{params:Promise.resolve({path:["shipping-address"]})})).status,401);
+  assert.equal((await guest.route.PUT(addressRequest("guest"),{params:Promise.resolve({path:["shipping-address"]})})).status,401);
   assert.equal(guest.calls.length,0);
 });
 
 test("optional purchase session returns 502 when an existing session cannot be verified",async()=>{
   const harness=routeHarness({session:{accessToken:"stored"},authUnavailable:true});
-  const request=new Request("https://site.example.test/api/account/csa-payment-quotes",{method:"POST",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","Content-Type":"application/json"},body:"{}"});
+  const request=new Request("https://site.example.test/api/account/csa-payment-quotes",{method:"POST",headers:{Origin:"https://site.example.test","X-NFV-Public-Request":"1","X-NFV-Public-Session":"member","Content-Type":"application/json"},body:"{}"});
   const response=await harness.route.POST(request,{params:Promise.resolve({path:["csa-payment-quotes"]})});
   assert.equal(response.status,502);
   assert.equal(harness.calls.length,0);

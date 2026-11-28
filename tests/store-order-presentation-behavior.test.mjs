@@ -279,6 +279,24 @@ test('member and guest retail detail use saved delivery dates, legacy remains bl
  }
 });
 
+test("historical detail distinguishes delivery and recording without inventing workflow events",()=>{
+ const deliveryDate="2026-10-14",createdAt="2026-11-01T18:00:00Z";
+ for(const [locale,readOnly,status,deliveryLabel,recordedLabel,paymentLabel] of [
+  ["vi",false,"received","Ngày giao thực tế","Ngày ghi nhận","Đã nhận tiền"],
+  ["en",true,"not_required","Actual delivery date","Recorded on","No payment required"],
+ ]){
+  const value=order({workflowVersion:2,status:"delivered",isHistorical:true,deliveryDate,createdAt,paymentStatus:status,payment:null,expiresAt:null});
+  const {h,exports}=detailModule(),tree=h.render(exports.StoreOrderDetail,{id:value.id,locale,initialOrder:value,readOnly});
+  const times=all(tree).filter(node=>node.type==="time");
+  assert.deepEqual(times.map(node=>[node.props.dateTime,node.props.children]),[[deliveryDate,"14/10/2026"],[createdAt,"02/11/2026 01:00"]]);
+  const termLabels=all(tree).filter(node=>node.type==="dt").map(node=>node.props.children);
+  assert.deepEqual(termLabels,[deliveryLabel,recordedLabel]);
+  assert.equal(all(tree).find(node=>node.type==="Status").props.label,locale==="vi"?"Đã giao":"Delivered");
+  assert.ok(all(tree).some(node=>node.type==="MoneyLine"&&node.props.value===paymentLabel));
+  assert.ok(!all(tree).some(node=>node.type==="details"||node.props?.className==="store-order-actions"));
+ }
+});
+
 test("v2 before goods and read-only lookup never disclose bank details",()=>{
  for(const props of [{initialOrder:order({workflowVersion:2,status:"pending_review",payment:null})},{initialOrder:order({workflowVersion:2}),readOnly:true}]){
  const runtime=detailModule(),tree=runtime.h.render(runtime.exports.StoreOrderDetail,{id:order().id,locale:"vi",...props});

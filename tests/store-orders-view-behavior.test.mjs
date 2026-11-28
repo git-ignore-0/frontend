@@ -27,6 +27,7 @@ function viewHarness(getStoreOrders,storage){
   const hooks=hookHarness(),exports={};
   vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,console,Date,...(storage?{window:{sessionStorage:storage,addEventListener(){},removeEventListener(){},matchMedia:()=>({matches:false})},document:{visibilityState:"visible"}}:{}),require:name=>{
     if(name==="@/store/store-delivery"){const exp={};vm.runInNewContext(ts.transpileModule(readFileSync("src/store/store-delivery.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,Intl,Date});return exp;}
+    if(name==="@/lib/date-format"){const exp={};vm.runInNewContext(ts.transpileModule(readFileSync("src/lib/date-format.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,Intl,Date});return exp;}
     if(name==="@/store/store-order-presentation"){const exp={};vm.runInNewContext(ts.transpileModule(readFileSync("src/store/store-order-presentation.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exp,URLSearchParams});return exp;}
     if(name==="@/store/use-buy-again")return {useBuyAgain:()=>({start(){},busy:null,error:""})};
     if(name==="@/account/orders-view-state"){
@@ -46,7 +47,7 @@ function viewHarness(getStoreOrders,storage){
     if(name==="@/components/UI")return {Button:"Button",DataState:"DataState",FormInput:"FormInput",Status:"Status",Photo:"Photo",Tabs:({items,value,onChange})=>jsx.jsxs("div",{children:items.map(item=>jsx.jsx("button",{children:item.label,onClick:()=>onChange(item.value),"aria-pressed":value===item.value}))})};
     if(name==="@/store/store-format")return {formatUnitSize:value=>String(Number(value))};
     if(name==="@/lib/format")return {money:value=>String(value)};
-    if(name==="@/account/account-api")return {AccountApiError:class extends Error{}};
+    if(name==="@/account/account-api")return {AccountApiError:class extends Error{},isPublicAccessDenied:()=>false};
     return {};
   }});
   let tree;
@@ -65,6 +66,19 @@ test("clicking All again on page one preserves ready data and does not start a p
   h.render();h.hooks?.flush?.();await tick();h.render();
   assert.equal(h.dataState().props.title,"Chưa có đơn hàng");
   assert.equal(calls.length,1);
+  h.dispose();
+});
+
+test("account order history labels recording date only for historical orders",async()=>{
+  const historical={...order("historical","delivered"),isHistorical:true,deliveryDate:"2026-10-04"};
+  const regular={...order("regular","delivered"),deliveryDate:"2026-10-04"};
+  const h=viewHarness(async()=>({items:[historical,regular],meta:{total:2}}));
+  h.render();await h.settle();
+  const cards=all(h.tree).filter(node=>node.type==="article");
+  const dates=card=>all(card).filter(node=>node.props?.className==="store-order-date").map(label);
+  assert.deepEqual(dates(cards[0]),["Ngày ghi nhận ","Ngày giao thực tế: 04/10/2026"]);
+  assert.deepEqual(dates(cards[1]),["Đặt ngày ","Ngày giao hàng: 04/10/2026"]);
+  assert.equal(all(cards[0]).find(node=>node.type==="time").props.dateTime,historical.createdAt);
   h.dispose();
 });
 

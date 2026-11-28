@@ -29,6 +29,8 @@ function component(buttons=[],{hooks=React,service={}}={}){
     if(id==="@/lib/date-format")return dateFormat;
     if(id==="@/state/NFVContext")return {useNFV:()=>({ui:{locale:"vi"}})};
     if(id==="@/account/csa-tracker-service")return service;
+    if(id==="@/account/csa-contract-pdf")return {saveContractPdf(){}};
+    if(id==="@/auth/public-session-context")return {browserSessionEpoch:()=>null};
     if(id==="@/screens/csa/csa-packages-model")return {csaMoney:value=>`${value} VND`};
     if(id==="@/lib/phone-number")return phoneNumber;
     throw new Error(`Unexpected import ${id}`);
@@ -114,6 +116,7 @@ test("tracker rejects pasted invalid phones and sends the canonical number for l
   const state=[],lookups=[];
   let cursor=0;
   const hooks={
+    useLayoutEffect(){},
     useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value}];},
     useRef(initial){return state[cursor++]??={current:initial};},
   };
@@ -155,7 +158,7 @@ test("tracker screen has validation, duplicate-submit, retry, session-expiry and
   const tracker=source("src/screens/account-csa/AccountCsaTracker.tsx");
   assert.match(tracker,/normalizeLocalVietnamPhone\(phone\)/);
   assert.match(tracker,/lookupInFlight\.current/);
-  assert.match(tracker,/downloadGeneration\.current/);
+  assert.match(tracker,/downloadsInFlight\.current\.get\(key\)===controller/);
   assert.match(tracker,/isTrackerSessionExpired/);
   assert.match(tracker,/onRetryContract/);
   assert.match(tracker,/resetLookup/);

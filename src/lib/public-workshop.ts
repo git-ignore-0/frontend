@@ -1,38 +1,63 @@
-import type {PublicWorkshop} from "@/types/workshop";
-const VALID_STATUSES=new Set(["upcoming","ongoing","completed"]);
-const VALID_LOCALES=new Set(["vi","en"]);
-function locale(value:unknown):"vi"|"en"|undefined{return typeof value==="string"&&VALID_LOCALES.has(value)?value as "vi"|"en":undefined}
+import type {PublicWorkshop,WorkshopCollection} from "@/types/workshop";
+
+const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const locale=(value:unknown)=>value==="vi"||value==="en"?value:null;
+const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==="object"&&!Array.isArray(value);
+const timestamp=(value:unknown):value is string=>typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));
+
 function httpUrl(value:unknown):string|null{
-  if(typeof value!=="string"||!value.trim())return null;
-  try{const url=new URL(value);return ["http:","https:"].includes(url.protocol)?url.toString():null}catch{return null}
+  if(typeof value!=="string")return null;
+  try{const url=new URL(value);return ["http:","https:"].includes(url.protocol)&&!url.username&&!url.password?url.toString():null}catch{return null}
 }
-/** Parse one public projection. Detail-only fields remain optional for list payloads. */
+
 export function parsePublicWorkshop(value:unknown):PublicWorkshop|null{
-  if(!value||typeof value!=="object")return null;
-  const row=value as Record<string,unknown>;
-  if((typeof row.id!=="string"&&typeof row.id!=="number")||typeof row.slug!=="string"||!row.slug.trim()||typeof row.title!=="string"||!row.title.trim()||typeof row.start_at!=="string"||!Number.isFinite(Date.parse(row.start_at)))return null;
-  if(typeof row.status!=="string"||!VALID_STATUSES.has(row.status))return null;
-  const availableLocales=Array.isArray(row.available_locales)?row.available_locales.map(locale).filter((item):item is "vi"|"en"=>Boolean(item)):undefined;
-  return {id:String(row.id),slug:row.slug,title:row.title,summary:typeof row.summary==="string"?row.summary:"",
-    start_at:row.start_at,end_at:typeof row.end_at==="string"&&Number.isFinite(Date.parse(row.end_at))?row.end_at:row.start_at,
-    event_timezone:typeof row.event_timezone==="string"?row.event_timezone:"Asia/Ho_Chi_Minh",
-    status:row.status as PublicWorkshop["status"],is_fallback:row.is_fallback===true,
-    requested_locale:locale(row.requested_locale),content_locale:locale(row.content_locale),default_locale:locale(row.default_locale),
-    available_locales:availableLocales,registration_url:httpUrl(row.registration_url),
-    body:row.body&&typeof row.body==="object"&&!Array.isArray(row.body)?row.body as Record<string,unknown>:undefined};
+  if(!record(value))return null;
+  const {id,slug,title,summary,start_at,end_at,event_timezone,status,is_fallback,body}=value;
+  const requested=locale(value.requested_locale),content=locale(value.content_locale),defaultLocale=locale(value.default_locale);
+  const available=Array.isArray(value.available_locales)?value.available_locales.map(locale):null;
+  const registration=httpUrl(value.registration_url);
+  if(typeof id!=="string"||!ID.test(id)||typeof slug!=="string"||!/^[\w-]+$/.test(slug)||
+     typeof title!=="string"||!title.trim()||typeof summary!=="string"||
+     !timestamp(start_at)||!timestamp(end_at)||Date.parse(end_at)<Date.parse(start_at)||
+     typeof event_timezone!=="string"||!event_timezone.trim()||
+     (status!=="upcoming"&&status!=="ongoing"&&status!=="completed")||
+     !requested||!content||!defaultLocale||!available||available.some(value=>value===null)||
+     new Set(available).size!==available.length||!available.includes(content)||
+     is_fallback!==(content!==requested)||(value.registration_url!==null&&!registration)||
+     (body!==undefined&&!record(body)))return null;
+  return {id:id.toLowerCase(),slug,title,summary,start_at,end_at,event_timezone,status,is_fallback,
+    requested_locale:requested,content_locale:content,default_locale:defaultLocale,
+    available_locales:available as Array<"vi"|"en">,registration_url:registration,
+    ...(body===undefined?{}:{body})};
 }
-/** Parses the backend's {data, meta} envelope and never trusts unvalidated fields. */
-export function parsePublicWorkshops(raw:unknown,limit=500):PublicWorkshop[]{
-  const source=raw&&typeof raw==="object"&&!Array.isArray(raw)?(raw as {data?:unknown}).data:raw;
-  if(!Array.isArray(source))return [];
-  const items:PublicWorkshop[]=[];
-  for(const value of source){
-    const item=parsePublicWorkshop(value);if(!item)continue;
-    items.push(item);
-    if(items.length>=limit)break;
-  }
-  return items;
+
+function workshopRows(value:unknown,requestedLocale:"vi"|"en"):PublicWorkshop[]{
+  if(!Array.isArray(value))throw Error("Invalid public workshop list");
+  const ids=new Set<string>(),slugs=new Set<string>();
+  return value.map(row=>{
+    const workshop=parsePublicWorkshop(row);
+    if(!workshop||workshop.requested_locale!==requestedLocale||ids.has(workshop.id)||slugs.has(workshop.slug))
+      throw Error("Invalid public workshop record");
+    ids.add(workshop.id);
+    slugs.add(workshop.slug);
+    return workshop;
+  });
 }
+
+export function parsePublicWorkshopPage(value:unknown,page:number,pageSize:number,requestedLocale:"vi"|"en"){
+  if(!record(value)||!record(value.meta)||value.meta.page!==page||value.meta.page_size!==pageSize)
+    throw Error("Invalid public workshop page");
+  const {total}=value.meta;
+  if(typeof total!=="number"||!Number.isSafeInteger(total)||total<0||!Array.isArray(value.data)||value.data.length>pageSize)
+    throw Error("Invalid public workshop pagination");
+  return {items:workshopRows(value.data,requestedLocale),pageCount:Math.max(1,Math.ceil(total/pageSize))};
+}
+
+export function parseWorkshopCollection(value:unknown,requestedLocale:"vi"|"en"):WorkshopCollection{
+  if(!record(value))throw Error("Invalid public workshop collection");
+  return {upcoming:workshopRows(value.upcoming,requestedLocale),past:workshopRows(value.past,requestedLocale)};
+}
+
 /** Only a fixed, configured HTTP(S) origin may be used by public content routes. */
 export function getPublicContentOrigin():string|null{
   const value=process.env.CONTENT_API_ORIGIN;

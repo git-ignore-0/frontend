@@ -15,6 +15,9 @@ export function accountUpstreamTarget(
   if (path.length === 1 && path[0] === "csa-rounds" && method === "GET") {
     return {path:"/api/v1/csa-rounds",session:"required",query:"page"};
   }
+  if (path.length === 2 && path[0] === "csa-rounds" && uuid.test(path[1]) && method === "GET") {
+    return {path:`/api/v1/csa-rounds/${path[1]}`,session:"required",query:"none"};
+  }
   if (path.length === 3 && path[0] === "csa-rounds" && uuid.test(path[1])) {
     if (path[2] === "selection" && (method === "GET" || method === "PUT")) {
       return {path:`/api/v1/csa-rounds/${path[1]}/selection`,session:"required",query:"none"};

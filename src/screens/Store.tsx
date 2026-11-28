@@ -8,7 +8,7 @@ import {STORE_COPY} from "@/data/store-copy";
 import {money} from "@/lib/format";
 import {useNFV} from "@/state/NFVContext";
 import {formatCsaQuotaBadge,formatUnitSize} from "@/store/store-format";
-import {STORE_MAX_LINE_QUANTITY} from "@/store/store-limits";
+import {storePurchaseLimit} from "@/store/store-limits";
 import type {StoreCategory,StoreProductCard} from "@/store/store-model";
 import {DEFAULT_STORE_PAGE_SIZE,type StorePriceBand,type StoreSort} from "@/store/store-request";
 import {useStoreCatalog} from "@/store/useStoreCatalog";
@@ -31,7 +31,7 @@ export const ProductCard=memo(function ProductCard({product,locale}:{product:Sto
  const {ui,storeAvailability,addCart}=useNFV(),copy=STORE_COPY[locale];
  const count=ui.cart[product.id]??0;
  const verifiedStock=storeAvailability[product.id];
- const max=Math.min(STORE_MAX_LINE_QUANTITY,verifiedStock??product.available_quantity);
+ const max=storePurchaseLimit(verifiedStock===undefined?product.available_quantity:verifiedStock);
  const image=product.primary_image?.variants.find(variant=>variant.width>=400)?.url??product.primary_image?.url;
  return <article className="product-card">
   <a className="product-img" href={`/store/${product.slug}/${locale}`} aria-label={`${copy.view} ${product.name}`}>{product.csa_quota_group&&<span className="corner-tag">{formatCsaQuotaBadge(product.csa_quota_group,locale)}</span>}<Photo src={image??undefined} alt={product.name} locale={locale}/></a>

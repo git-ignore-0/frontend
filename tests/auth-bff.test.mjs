@@ -20,7 +20,7 @@ function load(path, requireStub, globals = {}) {
   const exports = {};
   vm.runInNewContext(code, {
     exports,
-    require: (id) => id === "../lib/phone-number.ts" ? load("src/lib/phone-number.ts", () => ({})) : requireStub(id),
+    require: (id) => id === "../lib/phone-number.ts" ? load("src/lib/phone-number.ts", () => ({})) : id === "../public-session-context" ? load("src/auth/public-session-context.ts", () => ({})) : requireStub(id),
     URL,
     URLSearchParams,
     Headers,
@@ -254,7 +254,9 @@ test("sealed auth cookies are confidential, tamper-evident and HttpOnly", async 
   assert.equal(writes[0].options.httpOnly, true);
   assert.equal(writes[0].options.sameSite, "lax");
   assert.equal(writes[0].value.includes("secret-access"), false);
-  assert.deepEqual(JSON.parse(JSON.stringify(await session.readSession())), payload);
+  const initial=await session.readSession();
+  assert.deepEqual(JSON.parse(JSON.stringify(initial)), {...payload,legacyBinding:session.publicSessionBinding(initial)});
+  assert.match(initial.legacyBinding,/^[a-zA-Z0-9_-]{43}$/);
   const sealed = writes[0].value;
   values.set("nfv_public_session", `${sealed.slice(0, -1)}${sealed.endsWith("a") ? "b" : "a"}`);
   assert.equal(await session.readSession(), null);
@@ -507,7 +509,7 @@ test("logout rejects cross-origin POSTs before clearing the session", async () =
       authOrigin: () => "http://127.0.0.1:8000",
       publicSiteOrigin: () => "http://localhost:3000",
     };
-    if (id === "@/auth/server/session") return { clearSession: async () => { clearCalls += 1; } };
+    if (id === "@/auth/server/session") return { readSession: async()=>({sessionId:"member"}), publicSessionBinding:session=>session.sessionId, clearSession: async () => { clearCalls += 1; } };
     if (id === "@/auth/server/validation") return { parseLocale: (value) => value === "en" ? "en" : "vi" };
     throw new Error(`Unexpected import ${id}`);
   });
@@ -519,7 +521,15 @@ test("logout rejects cross-origin POSTs before clearing the session", async () =
   assert.equal(rejected.status, 403);
   assert.equal(clearCalls, 0);
 
+  const stale = await logout.POST({
+    headers: new Headers({ origin: "http://localhost:3000" }),
+    formData: async()=>new URLSearchParams({sessionBinding:"previous-member"}),
+    nextUrl: new URL("http://localhost:3000/api/auth/logout?locale=en"),
+  });
+  assert.equal(stale.status,409);
+  assert.equal(clearCalls,0);
   const accepted = await logout.POST({
+    formData: async()=>new URLSearchParams({sessionBinding:"member"}),
     headers: new Headers({ origin: "http://localhost:3000" }),
     nextUrl: new URL("http://localhost:3000/api/auth/logout?locale=en"),
   });
@@ -542,6 +552,7 @@ test("session endpoint persists rotated tokens before returning the verified use
       sessionTokensChanged: () => true,
     };
     if (id === "@/auth/server/session") return {
+      publicSessionBinding: ()=>"binding",
       clearSession: async () => { throw new Error("must not clear a valid session"); },
       readSession: async () => original,
       writeSession: async (value) => { written = value; },
@@ -552,6 +563,7 @@ test("session endpoint persists rotated tokens before returning the verified use
   const response = await sessionRoute.GET();
   assert.equal(response.status, 200);
   assert.equal(response.body.data.user.name, "Verified");
+  assert.equal(response.body.data.binding,"binding");
   assert.equal(response.headers["Cache-Control"], "private, no-store");
   assert.deepEqual(JSON.parse(JSON.stringify(written)), current);
 });

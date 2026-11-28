@@ -56,7 +56,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const user=(sub,name,email)=>({sub,name,email,email_verified:true,login_phone_number:'+84901234567',phone_number:'+84901234567',date_of_birth:null,status:'active',locale:'vi',roles:['member']});
 const userA=user('11111111-1111-4111-8111-111111111111','Account A','a@example.com');
 const userB=user('22222222-2222-4222-8222-222222222222','Account B','b@example.com');
-const sessionResponse=user=>Response.json({data:{user}});
+const sessionResponse=user=>Response.json({data:{user,binding:user?.sub??"guest"}});
 
 function providerHooks(){
  const slots=[],effects=[];
@@ -89,9 +89,10 @@ function providerHooks(){
 function tabHarness({getShippingAddress=async()=>null}={}){
  const sessionRequests=[];
  const window=new EventTarget(),document=new EventTarget();
- document.visibilityState='visible';
- const load=(path,resolve)=>loadModule(path,resolve,{window,document,queueMicrotask,Error});
- const service=loadModule('src/auth/auth-service.ts',()=>load('src/auth/core-user.ts'),{
+ document.visibilityState='visible';document.cookie='';
+ const load=(path,resolve=()=>({}))=>loadModule(path,resolve,{window,document,queueMicrotask,Error});
+ const sessionContext={GUEST_SESSION_BINDING:'guest',browserSessionEpoch:()=>null,verifyPageSession:()=>true,onPageSessionRetired:()=>()=>{},retirePageSession(){}};
+ const service=loadModule('src/auth/auth-service.ts',name=>name.includes('core-user')?load('src/auth/core-user.ts'):sessionContext,{
   fetch:path=>{assert.equal(path,'/api/auth/session');return new Promise(resolve=>sessionRequests.push(resolve))},
  });
  const authHooks=providerHooks(),nfvHooks=providerHooks();
@@ -99,6 +100,7 @@ function tabHarness({getShippingAddress=async()=>null}={}){
  const {AuthProvider}=load('src/auth/AuthProvider.tsx',name=>providerImports(authHooks,name)??({
   './auth-service':service,
   './session-equality':load('src/auth/session-equality.ts'),
+  './public-session-context':sessionContext,
   '@/store/buy-again-session':{retainBuyAgainOwner(){}},
  })[name]);
  let auth;
@@ -106,6 +108,7 @@ function tabHarness({getShippingAddress=async()=>null}={}){
  const {NFVProvider}=load('src/state/NFVContext.tsx',name=>providerImports(nfvHooks,name)??({
   '@/auth/AuthProvider':{useAuth:()=>auth},
   '@/auth/auth-service':service,
+  '@/account/account-api':{isPublicAccessDenied:()=>false},
   './initial-state':initial,
   '@/store/cart-product-refresh':{createCartProductRefreshCoordinator:()=>({})},
   './cart-persistence':{loadCart:()=>({}),loadCartProducts:()=>({}),loadBlockedStoreProducts:()=>({}),saveCart(){},saveCartProducts(){},saveBlockedStoreProducts(){}},

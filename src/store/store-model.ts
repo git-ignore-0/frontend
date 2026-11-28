@@ -32,7 +32,7 @@ function image(value:unknown):StoreImage|null{
  return variants.some(item=>item===null)?null:{id:value.id,url,width:Number(value.width),height:Number(value.height),variants:variants as StoreImage["variants"]};
 }
 function localeFields(value:Record<string,unknown>){
- if(!locale(value.requested_locale)||!locale(value.content_locale)||typeof value.is_fallback!=="boolean")return null;
+ if(!locale(value.requested_locale)||!locale(value.content_locale)||value.is_fallback!==(value.requested_locale!==value.content_locale))return null;
  return {requested_locale:value.requested_locale,content_locale:value.content_locale,is_fallback:value.is_fallback};
 }
 function parseCategory(value:unknown):StoreCategory|null{
@@ -84,15 +84,33 @@ function parseProduct(value:unknown,detail:boolean):StoreProductCard|StoreProduc
  return detail?{...base,description:value.description as string,description_document:productDescriptionDocument(value.description_document),suppliers:suppliers as Array<StoreSupplier&{location:string}>}:base;
 }
 
-export function parseStoreCategories(payload:unknown):StoreCategory[]{
+function uniqueRows(rows:readonly {id:string;slug:string}[],locale?:StoreLocale){
+ return new Set(rows.map(row=>row.id.toLowerCase())).size===rows.length&&
+   new Set(rows.map(row=>row.slug)).size===rows.length&&
+   (!locale||rows.every(row=>"requested_locale" in row&&row.requested_locale===locale));
+}
+export function parseStoreCategories(payload:unknown,locale?:StoreLocale):StoreCategory[]{
  if(!record(payload)||!Array.isArray(payload.data))throw Error("Invalid Store categories envelope");
- const rows=payload.data.map(parseCategory);if(rows.some(row=>row===null))throw Error("Invalid Store category");return rows as StoreCategory[];
+ const rows=payload.data.map(parseCategory);
+ if(!rows.every(row=>row!==null)||!uniqueRows(rows,locale))throw Error("Invalid Store category");
+ return rows;
 }
-export function parseStorePage(payload:unknown):StorePage{
- if(!record(payload)||!Array.isArray(payload.data)||!record(payload.meta)||!Number.isInteger(payload.meta.page)||Number(payload.meta.page)<1||!Number.isInteger(payload.meta.page_size)||Number(payload.meta.page_size)<1||Number(payload.meta.page_size)>48||!Number.isInteger(payload.meta.total)||Number(payload.meta.total)<0)throw Error("Invalid Store page envelope");
- const rows=payload.data.map(item=>parseProduct(item,false));if(rows.some(row=>row===null))throw Error("Invalid Store product");
- return {data:rows as StoreProductCard[],meta:{page:Number(payload.meta.page),page_size:Number(payload.meta.page_size),total:Number(payload.meta.total)}};
+type ExpectedStorePage={page:number;pageSize:number;locale:StoreLocale};
+export function parseStorePage(payload:unknown,expected?:ExpectedStorePage):StorePage{
+ if(!record(payload)||!Array.isArray(payload.data)||!record(payload.meta))throw Error("Invalid Store page envelope");
+ const {page,page_size,total}=payload.meta;
+ if(typeof page!=="number"||!Number.isSafeInteger(page)||page<1||
+    typeof page_size!=="number"||!Number.isSafeInteger(page_size)||page_size<1||page_size>48||
+    typeof total!=="number"||!Number.isSafeInteger(total)||total<0||payload.data.length>page_size||
+    (expected&&(expected.page!==page||expected.pageSize!==page_size)))throw Error("Invalid Store page metadata");
+ const rows=payload.data.map(item=>parseProduct(item,false));
+ if(!rows.every(row=>row!==null)||!uniqueRows(rows,expected?.locale))throw Error("Invalid Store product");
+ return {data:rows,meta:{page,page_size,total}};
 }
-export function parseStoreProductDetail(payload:unknown):StoreProductDetail{
- if(!record(payload)){throw Error("Invalid Store detail envelope")};const row=parseProduct(payload.data,true);if(!row)throw Error("Invalid Store product detail");return row as StoreProductDetail;
+export function parseStoreProductDetail(payload:unknown,expected?:{slug?:string;locale:StoreLocale}):StoreProductDetail{
+ if(!record(payload))throw Error("Invalid Store detail envelope");
+ const row=parseProduct(payload.data,true);
+ if(!row||(expected&&(row.requested_locale!==expected.locale||(expected.slug!==undefined&&row.slug!==expected.slug))))
+   throw Error("Invalid Store product detail");
+ return row as StoreProductDetail;
 }

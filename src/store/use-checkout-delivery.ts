@@ -63,6 +63,7 @@ export function useCheckoutDelivery(input:Input){
    const value=await run(()=>getStoreQuote(request),undefined,current);
    if(!current())return null;
    if(value.deliveryDate!==date||value.lines.length!==request.lines.length||value.lines.some(line=>!request.lines.some(item=>item.product_id===line.product_id&&item.quantity===line.quantity&&item.use_quota===line.use_quota))||request.coupon_code!==value.coupon?.code||!!request.guest!==!value.shippingAddressUpdatedAt)throw Error('invalid_response');
+   if(value.lines.some(line=>line.quantity>line.expected_available_quantity))throw new AccountApiError('store_stock_changed',409,{reason:'stock_changed'});
    setResult(previous=>{
     const accepted=previous&&previous.session===session&&previous.presentationKey===presentationKey&&sameStoreCheckoutQuote(previous.value,value)?previous.value:value;
     return previous&&previous.key===key&&previous.value===accepted?previous:{key,presentationKey,session,value:accepted};

@@ -62,6 +62,7 @@ export async function getCsaUsagePage({locale,cursor}:{locale:Locale;cursor?:str
 async function optionalContract(membershipId:string,locale:Locale):Promise<CSA["contract"]>{
   try{
     const payload=await accountApi(`memberships/${membershipId}/contract`),data=record(payload.data);
+    if(string(data.membership_id).toLowerCase()!==membershipId.toLowerCase())throw new AccountApiError("invalid_response",502);
     const locales=Array.isArray(data.available_locales)?data.available_locales.filter(value=>value==="vi"||value==="en"):[];
     return {number:string(data.reference_code),signedAt:optionalString(data.issued_at),status:string(data.status),downloadUrl:locales.includes(locale)?`/api/account/memberships/${membershipId}/contract/pdf?locale=${locale}`:undefined};
   }catch(error){

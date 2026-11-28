@@ -3,6 +3,7 @@ import {createContext, useCallback, useContext, useEffect, useLayoutEffect, useM
 import type {AccountTab, Address, Backend, CatalogData, Locale, Resource, Screen, Order} from "@/types";
 import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
+import {isPublicAccessDenied} from "@/account/account-api";
 import {localeFromPath,localScreenFromPath,navigationHrefForPage} from "@/data/main-navigation";
 import {accountRouteState} from "@/lib/account-navigation";
 import {syncBrowserRoute} from "@/lib/browser-navigation";
@@ -16,7 +17,8 @@ import type {StoreProductCard} from "@/store/store-model";
 import {copyWithFeedback,type ToastTone} from "@/lib/copy-feedback";
 import {mergeStoreProductSnapshots,type StoreProductSnapshot} from "@/store/store-product-snapshots";
 import {createCartProductRefreshCoordinator} from "@/store/cart-product-refresh";
-import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
+import {isStorePurchaseQuantity,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
+import {STORE_COPY} from "@/data/store-copy";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
@@ -31,6 +33,15 @@ type Ctx = {
   recheckStoreProducts:(products:StoreProductCard[])=>void;
   updateCart:(id:string,delta:number)=>void; acknowledgeCartProduct:(id:string)=>void; retryCartProduct:(id:string)=>void; markCartProductsUnavailable:(ids:readonly string[])=>void; beginCheckout:()=>void;
   loadWards:(province:string,force?:boolean)=>Promise<void>; refreshResource:(resource:Resource)=>Promise<void>;
+};
+const privateResource:Partial<Record<keyof Backend,Resource>>={
+  getShippingAddress:"address",saveShippingAddress:"address",getCSA:"csa",getCsaUsagePage:"csa",
+  getRewards:"rewards",getRewardHistoryPage:"rewards",redeemGift:"rewards",
+  getReferrals:"referrals",getReferralsPage:"referrals",applyReferralCode:"referrals",
+};
+const actionResource:Readonly<Record<string,Resource>>={
+  "save:address":"address","gift:redeem":"rewards","referral:apply":"referrals",
+  "page:csa":"csa","page:referrals":"referrals","page:rewards":"rewards","page:redemptions":"rewards",
 };
 const Context=createContext<Ctx|null>(null);
 const CATALOG_RECHECK_INTERVAL_MS=30_000;
@@ -60,6 +71,7 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   useLayoutEffect(()=>()=>{authEpoch.current+=1},[auth.status,auth.session]);
   const giftIntentOwner=useRef<string|null>(null);
   const resourceSequences=useRef(new Map<Resource,number>());
+  const resourceRetirements=useRef(new Map<Resource,number>());
   const beginResourceRequest=useCallback((resource:Resource)=>{
     const sequence=(resourceSequences.current.get(resource)??0)+1,epoch=authEpoch.current;
     resourceSequences.current.set(resource,sequence);
@@ -127,8 +139,16 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
   },[cartRefresh]);
   useEffect(()=>{if(cartReady)saveBlockedStoreProducts(window.sessionStorage,storeAvailability)},[cartReady,storeAvailability]);
   useEffect(()=>{if(!ui.toast)return;const t=setTimeout(()=>patch({toast:""}),2200);return ()=>clearTimeout(t);},[ui.toast,ui.toastSequence,patch]);
+  const retireResource=useCallback((resource:Resource)=>{
+    resourceSequences.current.set(resource,(resourceSequences.current.get(resource)??0)+1);
+    resourceRetirements.current.set(resource,(resourceRetirements.current.get(resource)??0)+1);
+    setData(state=>resource==="address"?{...state,shippingAddress:null,addresses:[]}:{...state,[resource]:null});
+    setUI(state=>({...state,accountFetchState:{...state.accountFetchState,[resource]:"error"},
+      ...(resource==="address"?{addressEditing:false}:resource==="rewards"?{giftIntent:null}:{})}));
+  },[]);
   const call=useCallback(async<T,>(method:keyof Backend,arg?:unknown):Promise<T>=>{
     const epoch=authEpoch.current;
+    const resource=privateResource[method],sequence=resource&&resourceSequences.current.get(resource);
     try {
       if(method==="getRewards")return await rewardsService.getRewards(ui.locale) as T;
       if(method==="getRewardGiftsPage")return await rewardsService.getRewardGiftsPage({...(arg as {cursor?:string|null;limit?:number}),locale:ui.locale}) as T;
@@ -148,13 +168,21 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
       if(typeof fn!=="function")throw new Error(ui.locale==="en"?`API is not connected: ${method}`:`Chưa kết nối API: ${method}`);
       return await (arg===undefined ? (fn as ()=>Promise<T>).call(window.NFV_BACKEND) : (fn as (a:unknown)=>Promise<T>).call(window.NFV_BACKEND,arg));
     }
-    catch(error){if(epoch===authEpoch.current&&isUnauthorized(error))expire();throw error;}
-  },[expire,ui.locale]);
+    catch(error){
+      if(epoch===authEpoch.current){
+        if(isUnauthorized(error))expire();
+        else if(resource&&resourceSequences.current.get(resource)===sequence&&isPublicAccessDenied(error))retireResource(resource);
+      }
+      throw error;
+    }
+  },[expire,retireResource,ui.locale]);
   const act=useCallback(async<T,>(key:string,task:()=>Promise<T>,success?:string,onCurrentResult?:(result:T|undefined)=>void):Promise<T|undefined>=>{
     const epoch=authEpoch.current;
+    const resource=actionResource[key],accessRevision=resource&&resourceRetirements.current.get(resource);
     if(activeActions.current.get(key)===epoch)return undefined;
     activeActions.current.set(key,epoch);
-    const current=()=>epoch===authEpoch.current&&activeActions.current.get(key)===epoch;
+    const current=()=>epoch===authEpoch.current&&activeActions.current.get(key)===epoch&&
+      (!resource||resourceRetirements.current.get(resource)===accessRevision);
     setUI(s=>({...s,busyKeys:[...s.busyKeys.filter(item=>item!==key),key],error:""}));
     try {
       const result=await task();
@@ -251,8 +279,11 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
         const next={...s,toastSequence,toastTone:"error" as const,toast:ui.locale==="en"?`Your cart can contain up to ${STORE_MAX_ORDER_LINES} different products.`:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau.`};
         return openCart&&!s.cartOpen?openCartForValidation(next):next;
       }
-      const nextCount=Math.min(STORE_MAX_LINE_QUANTITY,available,count+quantity);
-      if(nextCount<=count)return openCart&&!s.cartOpen?openCartForValidation(s):s;
+      const nextCount=count+quantity;
+      if(!isStorePurchaseQuantity(quantity,available)||!isStorePurchaseQuantity(nextCount,available)){
+        const next:UIState={...s,toastSequence,toastTone:"error",toast:STORE_COPY[ui.locale].cannotAddQuantity};
+        return openCart&&!s.cartOpen?openCartForValidation(next):next;
+      }
       const cartProductNotice={...s.cartProductNotice};
       if(!count)delete cartProductNotice[product.id];
       const next:UIState={...s,
@@ -264,13 +295,22 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     });
   },[storeAvailability,ui.cart,toast,ui.locale]);
   const updateCart=useCallback((id:string,delta:number)=>{
+    if(!Number.isSafeInteger(delta)||delta===0)return;
     const count=ui.cart[id];
     if(count&&count+delta<=0)cartRefresh.cancel(id);
-    setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},limit=Math.min(STORE_MAX_LINE_QUANTITY,data.storeProducts[id]?.available_quantity??STORE_MAX_LINE_QUANTITY);cart[id]=Math.max(0,Math.min(limit,(cart[id]||0)+delta));
-      if(cart[id]===0){delete cart[id];delete applyCSA[id];delete cartProductNotice[id];}
-      return {...s,cart,applyCSA,cartProductNotice};
+    const verified=storeAvailability[id];
+    const available=verified===undefined?data.storeProducts[id]?.available_quantity:verified;
+    setUI(s=>{
+      const current=s.cart[id];
+      if(!current)return s;
+      const next=current+delta;
+      if(delta>0&&(s.cartProductState[id]!=="ready"||!isStorePurchaseQuantity(next,available)))return s;
+      if(next>0)return {...s,cart:{...s.cart,[id]:next}};
+      const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},cartProductState={...s.cartProductState};
+      delete cart[id];delete applyCSA[id];delete cartProductNotice[id];delete cartProductState[id];
+      return {...s,cart,applyCSA,cartProductNotice,cartProductState};
     });
-  },[cartRefresh,data.storeProducts,ui.cart]);
+  },[cartRefresh,data.storeProducts,storeAvailability,ui.cart]);
   const acknowledgeCartProduct=useCallback((id:string)=>setUI(s=>{const cartProductNotice={...s.cartProductNotice};delete cartProductNotice[id];return {...s,cartProductNotice}}),[]);
   const retryCartProduct=useCallback((id:string)=>{
     const cached=data.storeProducts[id];

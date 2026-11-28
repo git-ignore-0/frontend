@@ -14,7 +14,7 @@ const compile=(path,jsx=false)=>ts.transpileModule(source(path),{compilerOptions
 
 function runModule(path,requireStub=()=>({}),extra={}){
  const exp={};
- vm.runInNewContext(compile(path),{exports:exp,require:id=>id.endsWith("/csa-units.ts")?runModule("src/lib/csa-units.ts"):requireStub(id),URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
+ vm.runInNewContext(compile(path,path.endsWith(".tsx")),{exports:exp,require:id=>id.endsWith("/csa-units.ts")?runModule("src/lib/csa-units.ts"):requireStub(id),URL,URLSearchParams,AbortSignal,fetch,process:{env:{NODE_ENV:"production"}},Error,...extra});
  return exp;
 }
 
@@ -33,13 +33,21 @@ function loadValidation(){
  });
 }
 
+test("catalog response rejects an unexpected page or repeated product identity",()=>{
+ const {parseStorePage}=loadModel();
+ const expected={page:2,pageSize:24,locale:"en"};
+ assert.throws(()=>parseStorePage({data:[],meta:{page:1,page_size:24,total:100}},expected));
+ assert.throws(()=>parseStorePage({data:[],meta:{page:2,page_size:24,total:Number.MAX_SAFE_INTEGER+1}},expected));
+ assert.throws(()=>parseStorePage({data:[product,product],meta:{page:2,page_size:24,total:100}},expected));
+});
+
 function loadService({origin="http://127.0.0.1:8000",result={data:[]},status=200}={}){
  const model=loadModel();
  const request=runModule("src/store/store-request.ts");
  const calls=[];
  const fetcher=async(url,init)=>{
   calls.push({url:String(url),init});
-  return {ok:status>=200&&status<300,status,json:async()=>result};
+  return {ok:status>=200&&status<300,status,json:async()=>typeof result==="function"?result(url):result};
  };
  const service=runModule("src/store/store-service.ts",id=>{
   if(id==="@/lib/public-workshop")return {getPublicContentOrigin:()=>origin};
@@ -50,7 +58,7 @@ function loadService({origin="http://127.0.0.1:8000",result={data:[]},status=200
  return {service,calls};
 }
 
-function runRoute(path,{result={data:[]},error=null}={}){
+function runRoute(path,{result={data:[]},error=null,upstream}={}){
  const validation=loadValidation();
  const calls=[];
  class StoreConfigurationError extends Error{}
@@ -71,7 +79,7 @@ function runRoute(path,{result={data:[]},error=null}={}){
  const exp={};
  vm.runInNewContext(compile(path),{exports:exp,require:id=>{
   if(id==="next/server")return {NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{...init,headers:{"Content-Type":"application/json",...(init.headers??{})}})}};
-  if(id==="@/store/store-service")return service;
+  if(id==="@/store/store-service")return upstream??service;
   if(id==="../validation"||id==="../../validation")return validation;
   throw new Error(`Unexpected import ${id}`);
  },URL,Response,Error});
@@ -131,6 +139,18 @@ test("Store runtime parsers reject malformed envelopes, money, locale and unsafe
  assert.throws(()=>model.parseStoreProductDetail({data:product}));
 });
 
+test("catalog and product detail keep the full safe-integer availability from the API",()=>{
+ const model=loadModel();
+ const detail={...product,description:"",suppliers:[{...product.suppliers[0],location:"Da Lat"}]};
+ for(const available_quantity of [0,1,999,1000,2147483647,2147483648,3000000000,Number.MAX_SAFE_INTEGER]){
+  assert.equal(model.parseStorePage({data:[{...product,available_quantity}],meta:{page:1,page_size:12,total:1}}).data[0].available_quantity,available_quantity);
+  assert.equal(model.parseStoreProductDetail({data:{...detail,available_quantity}}).available_quantity,available_quantity);
+ }
+ for(const available_quantity of [-1,1.5,"3000000000",Number.MAX_SAFE_INTEGER+1]){
+  assert.throws(()=>model.parseStoreProductDetail({data:{...detail,available_quantity}}));
+ }
+});
+
 test("Store request validation applies exact defaults and accepts bounded filters",()=>{
  const validation=loadValidation();
  const parsed=validation.parseStoreListRequest(new URL("http://localhost/api/store/products?locale=en&search=%20tomato%20&category_id=e55e4778-0528-4594-a4bf-cab97007c50f&csa_eligible=true&price_min=10000&price_max=50000&sort=price_asc&page=2&page_size=24&retry=3").searchParams);
@@ -145,14 +165,103 @@ test("Store request validation rejects missing locale, duplicates and unbounded 
 });
 
 test("Store service builds only public backend URLs and applies cache tags or retry bypass",async()=>{
- const list=loadService({result:{data:[product],meta:{page:1,page_size:12,total:1}}});
+ const list=loadService({result:{data:[product],meta:{page:2,page_size:12,total:13}}});
  await list.service.fetchStoreProducts({locale:"en",search:"tomato",sort:"price_asc",page:2,pageSize:12},{bypassCache:false});
  assert.equal(list.calls[0].url,"http://127.0.0.1:8000/api/v1/public/store-products?locale=en&search=tomato&sort=price_asc&page=2&page_size=12");
  assert.deepEqual(JSON.parse(JSON.stringify(list.calls[0].init.next)),{revalidate:300,tags:["store-products"]});
- const detail=loadService({result:{data:{...product,description:"Full",suppliers:[{...product.suppliers[0],location:"Da Lat"}]}}});
+ const detail=loadService({result:{data:{...product,requested_locale:"vi",is_fallback:true,description:"Full",suppliers:[{...product.suppliers[0],location:"Da Lat"}]}}});
  await detail.service.fetchStoreProduct("tomato","vi",{bypassCache:false});
  assert.equal(detail.calls[0].url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=vi");
  assert.deepEqual(JSON.parse(JSON.stringify(detail.calls[0].init.next)),{revalidate:300,tags:["store-product-details","store-product:tomato"]});
+});
+
+test("the public Store keeps a zero-stock product in the catalog and detail",async()=>{
+ const soldOut={...product,available_quantity:0};
+ const list=loadService({result:{data:[soldOut],meta:{page:1,page_size:12,total:1}}});
+ const detail=loadService({result:{data:{...soldOut,description:"Harvested today",suppliers:[]}}});
+ const catalog=await list.service.fetchStoreProducts({locale:"en",sort:"default",page:1,pageSize:12});
+ assert.equal(catalog.meta.total,1);
+ assert.equal(catalog.data[0].id,product.id);
+ assert.equal(catalog.data[0].available_quantity,0);
+ const {data}=await detail.service.fetchStoreProduct(product.slug,"en");
+ assert.equal(data.id,product.id);
+ assert.equal(data.available_quantity,0);
+});
+
+test("a discontinued product's fresh detail response stays a 404 through the Store BFF and page",async()=>{
+ const {service,calls}=loadService({status:404});
+ const {route}=runRoute("app/api/store/products/[slug]/route.ts",{upstream:service});
+ const response=await route.GET(new Request("http://localhost/api/store/products/tomato?locale=en&retry=1"),{params:Promise.resolve({slug:"tomato"})});
+ assert.equal(response.status,404);
+ assert.deepEqual(await response.json(),{error:"not_found"});
+ assert.equal(response.headers.get("cache-control"),"no-store");
+
+ const notFound=new Error("not_found");
+ const publicRequest=runModule("src/lib/public-request.ts");
+ const page=runModule("app/store/[segment]/[locale]/page.tsx",id=>{
+  if(id==="react")return require("react");
+  if(id==="next/navigation")return {notFound:()=>{throw notFound}};
+  if(id==="@/lib/public-request")return publicRequest;
+  if(id==="@/store/store-service")return service;
+  return {};
+ });
+ const pageInput={params:Promise.resolve({segment:"tomato",locale:"en"}),searchParams:Promise.resolve({retry:"1"})};
+ await assert.rejects(()=>page.default(pageInput),error=>error===notFound);
+ assert.deepEqual(Object.keys(await page.generateMetadata(pageInput)),[]);
+ assert.equal(calls.length,3);
+ for(const call of calls){
+  assert.equal(call.url,"http://127.0.0.1:8000/api/v1/public/store-products/tomato?locale=en");
+  assert.equal(call.init.cache,"no-store");
+ }
+});
+
+test("product page and metadata share a fresh request without sharing data across renders or locales",async()=>{
+ const detail={...product,description:"Harvested today",suppliers:product.suppliers.map(supplier=>({...supplier,location:"Đà Lạt"}))};
+ const {service,calls}=loadService({result:url=>({data:{...detail,requested_locale:url.searchParams.get("locale"),is_fallback:url.searchParams.get("locale")!=="en"}})});
+ const serverReact=require(join(dirname(require.resolve("react/package.json")),"cjs/react.react-server.development.js"));
+ const internals=serverReact.__SERVER_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+ const jsx=(type,props)=>({type,props});
+ const page=runModule("app/store/[segment]/[locale]/page.tsx",id=>{
+  if(id==="react")return serverReact;
+  if(id==="react/jsx-runtime")return {jsx};
+  if(id==="@/lib/public-request")return runModule("src/lib/public-request.ts");
+  if(id==="@/lib/public-metadata")return {storeProductMetadata:data=>({title:data.name})};
+  if(id==="@/store/store-service")return service;
+  return {};
+ });
+ const original=internals.A;
+ function openRender(){
+  // The RSC dispatcher owns one React cache for the current render.
+  const values=new Map();
+  internals.A={getCacheForType(factory){
+   if(!values.has(factory))values.set(factory,factory());
+   return values.get(factory);
+  }};
+ }
+ function input(locale,retry="1"){
+  return {params:Promise.resolve({segment:product.slug,locale}),searchParams:Promise.resolve(retry?{retry}:{})};
+ }
+ try{
+  openRender();
+  const [metadata,tree]=await Promise.all([page.generateMetadata(input("en")),page.default(input("en"))]);
+  assert.equal(metadata.title,product.name);
+  assert.equal(tree.props.children.props.product.id,product.id);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].init.cache,"no-store");
+  assert.ok(calls[0].init.signal instanceof AbortSignal);
+
+  await page.default(input("vi"));
+  await page.default(input("en",""));
+  assert.equal(calls.length,3);
+  assert.match(calls[1].url,/locale=vi$/);
+  assert.deepEqual(Array.from(calls[2].init.next.tags),["store-product-details",`store-product:${product.slug}`]);
+
+  openRender();
+  await page.default(input("en"));
+  assert.equal(calls.length,4);
+ }finally{
+  internals.A=original;
+ }
 });
 
 test("Store BFF routes reject invalid input before touching upstream",async()=>{
@@ -190,4 +299,40 @@ test("Store catalog accepts fractional CSA costs while stock and VND remain inte
  }
  for(const cost of ["0.25",NaN,Infinity,.001,-.25]) assert.throws(()=>model.parseStorePage({data:[{...product,csa_quota_group:{...csaQuotaGroup,cost}}],meta:{page:1,page_size:12,total:1}}));
  for(const field of ["available_quantity","retail_price_vnd"])assert.throws(()=>model.parseStorePage({data:[{...product,[field]:.25}],meta:{page:1,page_size:12,total:1}}));
+});
+
+test("Store BFF preserves zero and restored stock for the same Product across supplier changes",async()=>{
+ const farmA={...product.suppliers[0],name:"Bình Minh",location:"Đà Lạt"};
+ const farmB={id:"bcc839eb-b0e7-47e8-ad13-6d7bc70c41c6",name:"Tân Lập",location:"Lâm Đồng"};
+ // Response-consumption fixtures. The Backend lifecycle suite owns the stock calculation.
+ for(const [stock,farms] of [[10,[farmA,farmB]],[4,[farmB]],[0,[]],[3,[farmA]]]){
+  for(const locale of ["vi","en"]){
+   const card={...product,name:locale==="vi"?"Cà chua":"Tomato",requested_locale:locale,content_locale:locale,
+    available_quantity:stock,suppliers:farms.map(({id,name})=>({id,name}))};
+   const detail={...card,description:"Harvested today",suppliers:farms};
+   const meta={page:1,page_size:12,total:1};
+   const listUpstream=loadService({result:{data:[card],meta}});
+   const detailUpstream=loadService({result:{data:detail}});
+   const listRoute=runRoute("app/api/store/products/route.ts",{upstream:listUpstream.service}).route;
+   const detailRoute=runRoute("app/api/store/products/[slug]/route.ts",{upstream:detailUpstream.service}).route;
+   const list=await listRoute.GET(new Request(`http://localhost/api/store/products?locale=${locale}`));
+   const item=await detailRoute.GET(new Request(`http://localhost/api/store/products/${product.slug}?locale=${locale}&retry=1`),{params:Promise.resolve({slug:product.slug})});
+   assert.equal(list.status,200);
+   assert.equal(item.status,200);
+   assert.equal(item.headers.get("cache-control"),"no-store");
+   const listing=await list.json();
+   const view=await item.json();
+   assert.deepEqual(listing.meta,meta);
+   assert.equal(listing.data.length,1);
+   assert.deepEqual(listing.data[0].suppliers,card.suppliers);
+   assert.deepEqual(view.data.suppliers,farms);
+   for(const row of [listing.data[0],view.data]){
+    for(const key of ["id","slug","sku","retail_price_vnd","unit_size","unit_label"]){
+     assert.equal(row[key],product[key]);
+    }
+    assert.equal(row.requested_locale,locale);
+    assert.equal(row.available_quantity,stock);
+   }
+  }
+ }
 });

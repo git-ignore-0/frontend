@@ -113,7 +113,9 @@ function routeHarness({ session = null } = {}) {
       currentPublicSession: async (value) => value,
       sessionTokensChanged: () => false,
     };
+    if (id === "@/auth/public-session-context") return load("src/auth/public-session-context.ts", () => ({}));
     if (id === "@/auth/server/session") return {
+      publicSessionBinding: value => value ? "member" : "guest",
       clearSession: async () => { cleared += 1; },
       readSession: async () => session,
       writeSession: async () => {},
@@ -133,7 +135,7 @@ function routeHarness({ session = null } = {}) {
 
 test("account BFF rejects unauthenticated private reads and cross-origin mutations", async () => {
   const guest = routeHarness();
-  const privateRead = new Request("http://localhost:3000/api/account/redemptions?page=1");
+  const privateRead = new Request("http://localhost:3000/api/account/redemptions?page=1",{headers:{"X-NFV-Public-Session":"guest"}});
   const unauthorized = await guest.route.GET(privateRead, {
     params: Promise.resolve({ path: ["redemptions"] }),
   });
@@ -159,29 +161,29 @@ test("account BFF forwards the bearer token but never exposes it to the browser 
   const harness = routeHarness({
     session: { accessToken: "secret-access", refreshToken: "refresh", expiresAt: Date.now() + 60_000 },
   });
-  const request = new Request("http://localhost:3000/api/account/redemptions?locale=en&page=2");
+  const request = new Request("http://localhost:3000/api/account/redemptions?locale=en&page=2",{headers:{"X-NFV-Public-Session":"member"}});
   const response = await harness.route.GET(request, {
     params: Promise.resolve({ path: ["redemptions"] }),
   });
   assert.equal(response.status, 200);
   assert.equal(harness.calls.length, 1);
-  assert.equal(harness.calls[0].target, "http://127.0.0.1:8000/api/v1/referrals/redemptions?locale=en&page=2");
+  assert.equal(harness.calls[0].target, "http://127.0.0.1:8000/api/v1/referrals/redemptions?locale=en&page=2",{headers:{"X-NFV-Public-Session":"member"}});
   assert.equal(harness.calls[0].init.headers.Authorization, "Bearer secret-access");
   assert.equal(response.headers.get("Cache-Control"), "private, no-store");
   assert.equal((await response.text()).includes("secret-access"), false);
 });
 
 test("legacy CSA recovery is an authenticated, uncached GET by request code", async () => {
-  const request = new Request("http://localhost:3000/api/account/csa-purchase-requests/CSA-001");
+  const request = binding => new Request("http://localhost:3000/api/account/csa-purchase-requests/CSA-001",{headers:{"X-NFV-Public-Session":binding}});
   const params = (code) => ({ params: Promise.resolve({ path: ["csa-purchase-requests", code] }) });
   const guest = routeHarness();
-  assert.equal((await guest.route.GET(request, params("CSA-001"))).status, 401);
+  assert.equal((await guest.route.GET(request("guest"), params("CSA-001"))).status, 401);
   assert.equal(guest.calls.length, 0);
 
   const signedIn = routeHarness({ session: { accessToken: "member-access" } });
-  assert.equal((await signedIn.route.GET(request, params("../admin"))).status, 404);
+  assert.equal((await signedIn.route.GET(request("member"), params("../admin"))).status, 404);
   assert.equal(signedIn.calls.length, 0);
-  const response = await signedIn.route.GET(request, params("CSA-001"));
+  const response = await signedIn.route.GET(request("member"), params("CSA-001"));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Cache-Control"), "private, no-store");
   assert.equal(signedIn.calls.length, 1);

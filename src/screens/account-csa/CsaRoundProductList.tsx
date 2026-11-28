@@ -26,24 +26,53 @@ export function CsaRoundProductList({products,limits,draft,quota,used,disabled,l
   }
   const available=new Map(quota.map(row=>[row.groupId,row.availableUnits]));
   return <div className={styles.catalog}>
-    {[...groups].map(([id,group])=><section className={styles.productGroup} id={`produce-${id}`} key={id} aria-label={group.name}>
-      <CsaRoundQuota name={group.name} available={available.get(id)??0} used={used[id]??0} locale={locale}/>
-      <div className={styles.products}>{group.products.map(product=>{
-        const count=draft[product.id]??0,limit=limits[product.id]??0;
-        const hint=count>product.availableQuantity?c.stock:count>limit?c.quotaChanged:product.availableQuantity===0?c.unavailableProduct:null;
-        return <div key={product.id} className={styles.product}>
-          <StoreProductRow name={product.name}
+    {[...groups].map(([id,group])=>{
+      const allowance=available.get(id)??0;
+      const groupUsed=used[id]??0;
+      const remaining=pointHundredths(allowance)-groupUsed;
+      const groupId=`produce-${id}`;
+      const holdHelpId=`${groupId}-hold`;
+      const quotaHelpId=`${groupId}-quota`;
+      const rows=group.products.map(product=>{
+        const count=draft[product.id]??0;
+        const limit=limits[product.id]??0;
+        const cap=product.availableQuantity;
+        const cost=pointHundredths(product.quotaCost);
+        const overStock=count>cap;
+        const overQuota=!overStock && count>limit;
+        const quotaBlocked=overQuota || !overStock && count<cap && count>=limit && remaining<cost;
+        const hint=overStock
+          ? product.heldOnly ? copy.heldLimit.replace('{max}',String(cap)) : c.stock
+          : !cap ? copy.noStock : product.heldOnly ? copy.heldOnly.replace('{max}',String(cap)) : null;
+        return {product,count,limit,cost,overStock,overQuota,quotaBlocked,hint};
+      });
+      const overQuota=rows.some(row=>row.overQuota);
+      const quotaBlocked=rows.some(row=>row.quotaBlocked);
+      const hasHeld=rows.some(({product})=>product.heldOnly);
+      return <section className={`store-panel ${styles.productGroup}`} id={groupId} key={id} aria-label={group.name}>
+        <CsaRoundQuota name={group.name} available={allowance} used={groupUsed} locale={locale}/>
+        {(hasHeld || quotaBlocked) && <div className={styles.groupNotices}>
+          {hasHeld && <p id={holdHelpId}>{copy.heldUndo}</p>}
+          {quotaBlocked && <p id={quotaHelpId} className={overQuota ? styles.invalid : undefined}>
+            {overQuota ? c.quotaChanged : copy.noQuota}
+          </p>}
+        </div>}
+        {rows.map(({product,count,limit,cost,overStock,quotaBlocked,hint})=>{
+          const hintId=`${groupId}-${product.id}-hint`;
+          const describedBy=[product.heldOnly && holdHelpId, quotaBlocked && quotaHelpId, hint && hintId]
+            .filter(Boolean).join(' ') || undefined;
+          return <StoreProductRow key={product.id} name={product.name}
             image={<Photo src={product.imageUrl??undefined} alt={product.name} locale={locale}/>}
             meta={<>1 {copy.portion} · {formatUnitSize(product.unitSize)} {product.unitLabel}</>}
-            amount={`${pointsLabel(pointHundredths(product.quotaCost))} ${copy.perPortion}`}
-            actions={<fieldset disabled={disabled} aria-label={product.name} className={styles.productControls}>
+            amount={`${pointsLabel(cost)} ${copy.perPortion}`}
+            actions={<fieldset disabled={disabled} aria-label={product.name} aria-describedby={describedBy} className={styles.productControls}>
               <Quantity count={count} min={0} max={limit} id={product.name} locale={locale}
                 onMinus={()=>onChange(product.id,Math.max(0,count-1))} onPlus={()=>onChange(product.id,count+1)}/>
             </fieldset>}>
-            {hint&&<p className={count>limit?styles.invalid:styles.limitHint}>{hint}</p>}
-          </StoreProductRow>
-        </div>;
-      })}</div>
-    </section>)}
+            {hint && <p id={hintId} className={`${styles.limitHint}${overStock ? ` ${styles.invalid}` : ''}`}>{hint}</p>}
+          </StoreProductRow>;
+        })}
+      </section>;
+    })}
   </div>;
 }

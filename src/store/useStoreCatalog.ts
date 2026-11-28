@@ -27,8 +27,8 @@ export function useStoreCatalog(locale:Locale){
  const moreRequest=useRef<AbortController|null>(null);
  const [moreState,setMoreState]=useState<{key:ProductContext|null;state:State}>({key:null,state:"ready"});
  useEffect(()=>{if(searchParams.toString()!==canonical)router.replace(`${pathname}${canonical?`?${canonical}`:""}`,{scroll:false})},[canonical,pathname,router,searchParams]);
- useEffect(()=>{const controller=new AbortController();fetch(`/api/store/categories?locale=${locale}${storeRetrySuffix(categoryRetryNonce)}`,{cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw Error("categories_failed");return response.json()}).then(body=>setCategoryResult({key:categoryRequestKey,state:"ready",data:parseStoreCategories(body)})).catch(error=>{if(error?.name!=="AbortError")setCategoryResult(result=>({...result,key:categoryRequestKey,state:"error"}))});return()=>controller.abort()},[categoryRequestKey,categoryRetryNonce,locale]);
- useEffect(()=>{const controller=new AbortController();moreRequest.current?.abort();moreRequest.current=null;currentProductKey.current=productContext;const params=storeQueryParams(parsed.query);if(productRetryNonce>0)params.set("retry",String(productRetryNonce));fetch(`/api/store/products?${params}`,{cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw Error("products_failed");return response.json()}).then(body=>{if(!controller.signal.aborted&&currentProductKey.current===productContext){const page=parseStorePage(body);setProductResult({key:productContext,state:"ready",page,batch:page.data});setMoreState({key:productContext,state:"ready"});}}).catch(error=>{if(!controller.signal.aborted&&error?.name!=="AbortError"&&currentProductKey.current===productContext)setProductFailure(productContext)});return()=>{controller.abort();moreRequest.current?.abort();moreRequest.current=null;currentProductKey.current=null}},[parsed.query,productContext,productRetryNonce]);
+ useEffect(()=>{const controller=new AbortController();fetch(`/api/store/categories?locale=${locale}${storeRetrySuffix(categoryRetryNonce)}`,{cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw Error("categories_failed");return response.json()}).then(body=>setCategoryResult({key:categoryRequestKey,state:"ready",data:parseStoreCategories(body,locale)})).catch(error=>{if(error?.name!=="AbortError")setCategoryResult(result=>({...result,key:categoryRequestKey,state:"error"}))});return()=>controller.abort()},[categoryRequestKey,categoryRetryNonce,locale]);
+ useEffect(()=>{const controller=new AbortController();moreRequest.current?.abort();moreRequest.current=null;currentProductKey.current=productContext;const params=storeQueryParams(parsed.query);if(productRetryNonce>0)params.set("retry",String(productRetryNonce));fetch(`/api/store/products?${params}`,{cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw Error("products_failed");return response.json()}).then(body=>{if(!controller.signal.aborted&&currentProductKey.current===productContext){const page=parseStorePage(body,parsed.query);setProductResult({key:productContext,state:"ready",page,batch:page.data});setMoreState({key:productContext,state:"ready"});}}).catch(error=>{if(!controller.signal.aborted&&error?.name!=="AbortError"&&currentProductKey.current===productContext)setProductFailure(productContext)});return()=>{controller.abort();moreRequest.current?.abort();moreRequest.current=null;currentProductKey.current=null}},[parsed.query,productContext,productRetryNonce]);
  const setQuery=useCallback((change:Partial<StoreQuery>&{priceBand?:StorePriceBand},options?:{replace?:boolean})=>{const band=change.priceBand??parsed.priceBand;const query={...parsed.query,...change,page:change.page??1};delete (query as Partial<StoreQuery>&{priceBand?:StorePriceBand}).priceBand;const next=storePublicSearchParams(query,band).toString();(options?.replace?router.replace:router.push)(`${pathname}${next?`?${next}`:""}`,{scroll:false})},[parsed,pathname,router]);
  const categoryState:State=categoryResult.key===categoryRequestKey?categoryResult.state:"loading";
  const state:State=productResult.key===productContext?productResult.state:productFailure===productContext?"error":"loading";
@@ -39,13 +39,14 @@ export function useStoreCatalog(locale:Locale){
   if(currentProductKey.current!==productContext||productResult.key!==productContext||productResult.state!=="ready"||!hasMore||moreRequest.current)return;
   const controller=new AbortController(),key=productContext;
   moreRequest.current=controller;setMoreState({key,state:"loading"});
-  const params=storeQueryParams({...parsed.query,page:productResult.page.meta.page+1});
+  const nextPage=productResult.page.meta.page+1;
+  const params=storeQueryParams({...parsed.query,page:nextPage});
   // Only an explicit retry bypasses the server cache.
   if(moreState.key===key&&moreState.state==="error")params.set("retry","1");
   try{
    const response=await fetch(`/api/store/products?${params}`,{cache:"no-store",signal:controller.signal});
    if(!response.ok)throw Error("products_failed");
-   const page=parseStorePage(await response.json());
+   const page=parseStorePage(await response.json(),{...parsed.query,page:nextPage});
    if(controller.signal.aborted||currentProductKey.current!==key)return;
    setProductResult(previous=>{
     if(previous.key!==key)return previous;

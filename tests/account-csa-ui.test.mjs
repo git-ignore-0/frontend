@@ -174,7 +174,7 @@ test("legacy CSA recovery loads a Core-owned request after the delivery phone ch
   const saved=version===1?{confirmation:{requestCode:"CSA-001",packageName:"Untrusted cached package"}}:{reference:{requestCode:"CSA-001"}};
   const pendingRaw=JSON.stringify({version,owner:snapshotOwner,...saved});
   const calls=[];
-  const accountApi=runModule("src/account/account-api.ts",()=>{}, {fetch:async(path,init)=>{
+  const accountApi=runModule("src/account/account-api.ts",id=>id==="./bff-path.ts"?runModule("src/account/bff-path.ts",()=>({})):runModule("src/auth/public-session-context.ts",()=>({})), {Headers,fetch:async(path,init)=>{
    calls.push({path,method:init.method??"GET",body:init.body});
    return owned?Response.json({data:status}):Response.json({errors:[{code:"csa_purchase_request_not_found"}]},{status:404});
   }});
@@ -406,7 +406,7 @@ test("Account CSA state markup follows the approved active and pending surfaces"
  const purchase=source("src/screens/account-csa/AccountCsaPackageSelection.tsx");
  assert.match(benefits,/<AccountCsaPlanSummary/);
  assert.match(benefits,/className="csa-contract-inline"/);
- assert.match(benefits,/contract\.downloadUrl\?<ActionLink[^>]+csa-contract-action/);
+ assert.match(benefits,/contract\.downloadUrl&&contract\.number\?<MembershipContractButton/);
  assert.match(benefits,/:<Button[^>]+csa-contract-action[^>]+disabled>/);
  assert.match(benefits,/className="csa-rights"/);
  assert.match(benefits,/className="csa-rights-header"/);

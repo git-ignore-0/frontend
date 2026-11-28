@@ -1,4 +1,4 @@
-import {CSA_SELECTION_MAX_LINES,pointHundredths} from '../../account/csa-rounds-model.ts';
+import {CSA_SELECTION_MAX_LINES,CSA_SELECTION_MAX_QUANTITY,pointHundredths} from '../../account/csa-rounds-model.ts';
 import type {CsaProduct, CsaRoundProducts} from '../../account/csa-rounds-model.ts';
 
 export type SelectionProduct = Pick<CsaProduct, 'id' | 'name' | 'unitLabel' | 'quotaGroupId' | 'quotaCost'> & Partial<Pick<CsaProduct, 'quotaGroupName'>>;
@@ -53,9 +53,17 @@ export function quantityLimits(
     const available = availableByGroup.get(product.quotaGroupId) ?? 0;
     const total = totals[product.quotaGroupId] ?? 0;
     const own = (draft[product.id] ?? 0) * cost;
-    limits[product.id] = cost > 0 ? Math.max(0, Math.min(product.availableQuantity, Math.floor((available - total + own) / cost))) : 0;
+    limits[product.id] = cost > 0 ? Math.max(0, Math.min(CSA_SELECTION_MAX_QUANTITY, product.availableQuantity, Math.floor((available - total + own) / cost))) : 0;
   }
   return limits;
+}
+
+export function isSelectionDraftValid(
+  lines: ReturnType<typeof draftLines>,
+  limits: Record<string, number>,
+): boolean {
+  return lines.length <= CSA_SELECTION_MAX_LINES && lines.every(({productId,quantity}) =>
+    Number.isSafeInteger(quantity) && quantity > 0 && quantity <= (limits[productId] ?? 0));
 }
 
 export function pointsLabel(hundredths: number): string {

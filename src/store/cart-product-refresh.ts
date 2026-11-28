@@ -11,6 +11,30 @@ type RefreshOptions={
   onReady:(id:string,product:StoreProductCard,notice:CartProductNotice)=>void;
 };
 
+export async function verifyCartProduct(
+  {id,cached,locale}:RefreshInput,
+  {isCurrent,fetcher=fetch,signal}:{isCurrent:()=>boolean;fetcher?:typeof fetch;signal?:AbortSignal},
+):Promise<StoreProductCard|"error"|"unavailable"|null>{
+  const slugs=cached.catalogSlug&&cached.catalogSlug!==cached.slug?[cached.catalogSlug,cached.slug]:[cached.slug];
+  let failed=false;
+  for(const slug of slugs){
+    try{
+      const response=await fetcher(`/api/store/products/${encodeURIComponent(slug)}?locale=${locale}&retry=1`,{cache:"no-store",signal});
+      if(!isCurrent())return null;
+      if(response.status===404)continue;
+      if(!response.ok)throw Error("refresh_failed");
+      const product=parseStoreProductDetail(await response.json(),{slug,locale});
+      if(!isCurrent())return null;
+      if(product.id===id)return product;
+    }catch(error){
+      const aborted=signal&&!!error&&typeof error==="object"&&"name" in error&&error.name==="AbortError";
+      if(!isCurrent()||aborted)return null;
+      failed=true;
+    }
+  }
+  return failed?"error":"unavailable";
+}
+
 export function createCartProductRefreshCoordinator({fetcher=fetch,onState,onReady}:RefreshOptions){
   type Request={locale:StoreLocale;cached:StoreProductSnapshot;controller:AbortController};
   const active=new Map<string,Request>();
@@ -29,31 +53,18 @@ export function createCartProductRefreshCoordinator({fetcher=fetch,onState,onRea
       active.set(id,request);
       onState(id,"loading");
       try{
-        const slugs=cached.catalogSlug&&cached.catalogSlug!==cached.slug?[cached.catalogSlug,cached.slug]:[cached.slug];
-        let failed=false;
-        for(const slug of slugs){
-          try{
-            const response=await fetcher(`/api/store/products/${encodeURIComponent(slug)}?locale=${locale}&retry=1`,{cache:"no-store",signal:request.controller.signal});
-            if(!current(id,request))return;
-            if(response.status===404)continue;
-            if(!response.ok)throw Error("refresh_failed");
-            const product=parseStoreProductDetail(await response.json());
-            if(!current(id,request))return;
-            if(product.id!==id)continue;
-            const notice=cached.retail_price_vnd!==product.retail_price_vnd
-              ? "price_changed"
-              : cached.available_quantity!==product.available_quantity
-                ? "stock_changed"
-                : undefined;
-            onReady(id,product,notice);
-            return;
-          }catch(error){
-            const aborted=!!error&&typeof error==="object"&&"name" in error&&error.name==="AbortError";
-            if(!current(id,request)||aborted)return;
-            failed=true;
-          }
+        const result=await verifyCartProduct({id,cached,locale},{fetcher,signal:request.controller.signal,isCurrent:()=>current(id,request)});
+        if(!result||!current(id,request))return;
+        if(typeof result==="string"){
+          onState(id,result);
+          return;
         }
-        onState(id,failed?"error":"unavailable");
+        const notice=cached.retail_price_vnd!==result.retail_price_vnd
+          ? "price_changed"
+          : cached.available_quantity!==result.available_quantity
+            ? "stock_changed"
+            : undefined;
+        onReady(id,result,notice);
       }finally{
         if(current(id,request))active.delete(id);
       }

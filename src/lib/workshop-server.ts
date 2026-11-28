@@ -12,7 +12,7 @@ export async function getPublicWorkshop(slug:string,locale:Locale):Promise<Publi
       {tags:["workshops",`workshop:${slug}`]});
     const data=payload&&typeof payload==="object"?(payload as {data?:unknown}).data:undefined;
     const workshop=parsePublicWorkshop(data);
-    if(!workshop)throw Error("Invalid public workshop payload");
+    if(!workshop||workshop.slug!==slug||workshop.requested_locale!==locale||!workshop.body)throw Error("Invalid public workshop payload");
     return workshop;
   }catch(error){
     if(error instanceof PublicWorkshopFetchError&&error.status===404)return null;

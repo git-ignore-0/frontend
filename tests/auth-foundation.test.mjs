@@ -82,7 +82,7 @@ test("browser session adapter reads all active identity shapes and rejects malfo
     const requests=[];
     const core={sub:'3f7d06cb-8d37-44d5-a5ab-1e284f9d37d9',name:'NFV Customer',email:null,email_verified:false,login_phone_number:'+84912345678',phone_number:'+84 912 345 678',date_of_birth:'1990-06-15',status:'active',locale:'vi',roles:['member']};
     for(const payload of [core,{...core,email:'pending@example.com'},{...core,email:'member@example.com',email_verified:true,login_phone_number:null,phone_number:''}]){
-      globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return Response.json({data:{user:payload}});};
+      globalThis.fetch=async (path,opts)=>{requests.push({path,opts});return Response.json({data:{user:payload,binding:core.sub}});};
       const user=await service.getSession();
       assert.equal(user.authenticated,true);
       assert.equal(user.subject,core.sub);
@@ -91,7 +91,7 @@ test("browser session adapter reads all active identity shapes and rejects malfo
     assert.equal(requests[0].path,'/api/auth/session');
     assert.equal(requests[0].opts.credentials,'same-origin');
     assert.equal(requests[0].opts.cache,'no-store');
-    globalThis.fetch=async()=>new Response(JSON.stringify({data:{user:null}}),{status:200});
+    globalThis.fetch=async()=>new Response(JSON.stringify({data:{user:null,binding:"guest"}}),{status:200});
     assert.equal(await service.getSession(),null);
     globalThis.fetch=async()=>new Response(JSON.stringify({error:'session_expired'}),{status:401});
     await assert.rejects(()=>service.getSession(),e=>service.isUnauthorized(e));
@@ -102,7 +102,7 @@ test("browser session adapter reads all active identity shapes and rejects malfo
     globalThis.fetch=async()=>Response.json({data:42});
     await assert.rejects(()=>service.getSession(),/không hợp lệ/);
     for(const changes of [{email_verified:true},{email_verified:0},{email:{}},{login_phone_number:42},{login_phone_number:undefined},{phone_number:null},{sub:'legacy-sub'},{status:'suspended'}]){
-      globalThis.fetch=async()=>Response.json({data:{user:{...core,...changes}}});
+      globalThis.fetch=async()=>Response.json({data:{user:{...core,...changes},binding:core.sub}});
       await assert.rejects(()=>service.getSession(),/không hợp lệ/);
     }
   `);

@@ -58,3 +58,17 @@ test('resumed selling uses the server cap for stock 0, 2 or 10 with a saved hold
  const quota=[{groupId:'g',availableUnits:20}];
  assert.deepEqual(responses.map(response=>m.quantityLimits([{...product,...response}],{p:3},quota).p),[3,3,10]);
 `));
+
+test('CSA uses its own request ceiling and preserves a draft above the refreshed contextual stock',()=>run(`
+ import assert from 'node:assert/strict';const m=await import(${JSON.stringify(url)});
+ const product={id:'p',quotaGroupId:'g',quotaCost:.01,availableQuantity:1500};
+ const draft={p:1500},quota=[{groupId:'g',availableUnits:30}];
+ assert.equal(m.quantityLimits([product],draft,quota).p,1500);
+ assert.equal(m.isSelectionDraftValid(m.draftLines(draft),m.quantityLimits([product],draft,quota)),true);
+ const refreshed=m.quantityLimits([{...product,availableQuantity:1200}],draft,quota);
+ assert.equal(m.isSelectionDraftValid(m.draftLines(draft),refreshed),false);
+ assert.equal(draft.p,1500);
+ assert.equal(m.isSelectionDraftValid(m.draftLines({p:1200}),refreshed),true);
+ for(const quantity of [0,-1,1.5,Infinity,Number.MAX_SAFE_INTEGER+1])assert.equal(m.isSelectionDraftValid([{productId:'p',quantity}],refreshed),false);
+ assert.equal(m.quantityLimits([{...product,availableQuantity:2147483648}],{},[{groupId:'g',availableUnits:30000000}]).p,2147483647);
+`));

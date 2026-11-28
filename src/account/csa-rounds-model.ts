@@ -2,6 +2,7 @@ import {isStoreDeliveryDate} from "../store/store-delivery.ts";
 import {AccountApiError} from "./account-api.ts";
 
 export const CSA_SELECTION_MAX_LINES = 100;
+export const CSA_SELECTION_MAX_QUANTITY = 2147483647;
 
 export type CsaRound = {
   id:string; sequence:number; name:string; opensAt:string; closesAt:string; deliveryDate:string;

@@ -24,7 +24,7 @@ test("Store detail is a real localized server route with explicit status handlin
  assert.match(page,/validLocale/);
  assert.match(page,/validSlug/);
  assert.match(page,/parseRetryCacheBypass/);
- assert.match(page,/<ProductDetail product=\{product\} locale=\{locale\}/);
+ assert.match(page,/<ProductDetail key=\{product\.id\} product=\{product\} locale=\{locale\}/);
 });
 
 test("Store detail metadata provides locale alternates and noindexes fallback content",()=>{

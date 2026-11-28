@@ -12,6 +12,7 @@ import {useAuth} from "@/auth/AuthProvider";
 import {isUnauthorized} from "@/auth/auth-service";
 import {siteAccountHref,siteAuthHref,siteLogoutHref} from "@/auth/site-auth";
 import {copyText} from "@/data/account-copy";
+import {STORE_COPY} from "@/data/store-copy";
 import {readBuyAgain,clearBuyAgain,type BuyAgainSession} from "@/store/buy-again-session";
 import {buyAgainMessage} from "@/store/use-buy-again";
 import {prepareBuyAgain,type BuyAgainLine,type StoreCheckoutQuote} from "@/store/store-order-service";
@@ -31,7 +32,7 @@ import {buildStoreQuote,checkoutPayload,matchesCheckoutEstimate} from "@/store/s
 import {verifyCartProduct} from "@/store/cart-product-refresh";
 import {createStoreCheckout,getShippingQuote,getStoreQuota,storeOrderHref} from "@/store/store-order-service";
 import {readCheckoutIntent,pendingCheckoutOwner,saveCheckoutIntent,clearCheckoutIntent,checkoutSignInOwner,requireCheckoutSignIn,clearCheckoutSignIn,checkoutDefinitelyRejected,checkoutRequoteReason,type StoreCheckoutIntent} from "@/store/checkout-intent";
-import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
+import {isStorePurchaseQuantity,storePurchaseLimit,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
 import {cartAfterCheckout} from "@/store/cart-checkout";
 import {AccountApiError} from "@/account/account-api";
 import type {Address} from "@/types";
@@ -42,22 +43,35 @@ const COPY={
 };
 
 export function CartDrawer(){
- const {data,ui,cartHydrated,patch,updateCart,acknowledgeCartProduct,retryCartProduct,beginCheckout}=useNFV(),copy=COPY[ui.locale];
+ const {data,ui,storeAvailability,cartHydrated,patch,updateCart,acknowledgeCartProduct,retryCartProduct,beginCheckout}=useNFV(),copy=COPY[ui.locale];
  if(!ui.cartOpen)return null;
- const rows=Object.entries(ui.cart).map(([id,quantity])=>({id,quantity,product:data.storeProducts[id],state:ui.cartProductState[id],notice:ui.cartProductNotice[id]}));
- const valid=rows.filter(row=>row.product&&row.state==="ready"&&!row.notice&&row.quantity<=row.product.available_quantity);
+ const rows=Object.entries(ui.cart).map(([id,quantity])=>{
+  const product=data.storeProducts[id],verified=storeAvailability[id];
+  return {id,quantity,product,limit:storePurchaseLimit(verified===undefined?product?.available_quantity:verified),state:verified===null?"unavailable":ui.cartProductState[id],notice:ui.cartProductNotice[id]};
+ });
  const tooManyProducts=rows.length>STORE_MAX_ORDER_LINES;
  const checking=!cartHydrated||rows.some(row=>row.state==="loading");
- const blocked=tooManyProducts||rows.some(row=>!row.product||row.state!=="ready"||!!row.notice||row.quantity>row.product.available_quantity);
+ const blocked=tooManyProducts||rows.some(row=>!row.product||row.state!=="ready"||!!row.notice||!isStorePurchaseQuantity(row.quantity,row.limit));
  const subtotal=rows.reduce((sum,row)=>sum+(row.product?.retail_price_vnd??0)*row.quantity,0);
  const count=Object.values(ui.cart).reduce((a,b)=>a+b,0);
  return <SideDrawer title={`${copy.cart} (${count})`} closeLabel={copy.close} onClose={()=>patch({cartOpen:false})} className="cart-overlay">
   <fieldset className="store-cart-fields" disabled={ui.checkoutLocked}>
   {rows.length?<><div className="drawer-body">{rows.map(row=>{
-   const p=row.product;
-   const message=row.state==="unavailable"?copy.unavailable:row.state==="error"?copy.refreshError:row.state==="loading"?copy.refreshing:p?.available_quantity===0?copy.out:row.notice==="price_changed"?copy.priceChanged:row.notice==="stock_changed"||p&&row.quantity>p.available_quantity?copy.stockChanged:"";
-   return <div className="drawer-item" data-cart-row={row.id} key={row.id}><div className="drawer-thumb"><Photo src={p?.primary_image?.url} alt={p?.name??row.id} locale={ui.locale}/></div><div><div className="flex" style={{alignItems:"start",gap:5}}><div className="grow"><div className="item-name">{p?.name??row.id}</div>{p&&<div className="item-meta">{formatUnitSize(p.unit_size)} {p.unit_label} · {money(p.retail_price_vnd)}</div>}{message&&<div className="help-error" role="status">{message}</div>}{row.state==="error"&&<Button small variant="plain" onClick={()=>retryCartProduct(row.id)}>{copy.retry}</Button>}{row.state==="ready"&&p&&p.available_quantity>0&&row.notice&&<Button small variant="plain" onClick={()=>acknowledgeCartProduct(row.id)}>{copy.acknowledge}</Button>}</div><button className="remove-link" onClick={()=>updateCart(row.id,-row.quantity)}>{copy.remove}</button></div>{p&&<div className="drawer-row-bottom"><Quantity id={p.name} min={0} max={Math.min(STORE_MAX_LINE_QUANTITY,p.available_quantity)} count={row.quantity} disabled={row.state!=="ready"||p.available_quantity===0} locale={ui.locale} onMinus={()=>updateCart(row.id,-1)} onPlus={()=>updateCart(row.id,1)}/><strong>{money(p.retail_price_vnd*row.quantity)}</strong></div>}</div></div>;
-  })}</div><div className="drawer-foot">{tooManyProducts&&<p className="help-error" role="alert">{copy.tooManyProducts}</p>}<MoneyLine label={copy.goods} value={money(subtotal)}/><Button style={{width:"100%"}} loading={checking} disabled={blocked||!valid.length} aria-label={copy.checkout} onClick={beginCheckout}>{copy.checkout} <Icon name="arrow" size={17}/></Button><Button variant="plain" style={{width:"100%"}} onClick={()=>patch({cartOpen:false})}>{copy.continue}</Button></div></>:<div className="drawer-body cart-empty"><DataState kind={checking?"loading":"empty"} icon="bag" title={checking?copy.refreshing:copy.empty} description={checking?undefined:copy.emptyBody} action={checking?undefined:{label:copy.explore,onClick:()=>patch({cartOpen:false})}}/></div>}
+   const p=row.product,ready=row.state==="ready";
+   const stockMessage=!p||row.state==="unavailable"?copy.unavailable:row.state==="error"?copy.refreshError:row.state==="loading"?copy.refreshing:
+    row.limit===0?copy.out:row.quantity>row.limit?STORE_COPY[ui.locale].reduceQuantity.replace("{count}",String(row.limit)):row.notice==="stock_changed"?copy.stockChanged:"";
+   const priceMessage=ready&&row.notice==="price_changed"?copy.priceChanged:"";
+   const messageId=stockMessage||priceMessage?`cart-availability-${row.id}`:undefined;
+   return <div className="drawer-item" data-cart-row={row.id} key={row.id}><div className="drawer-thumb"><Photo src={p?.primary_image?.url} alt={p?.name??row.id} locale={ui.locale}/></div><div>
+    <div className="flex" style={{alignItems:"start",gap:5}}><div className="grow">
+     <div className="item-name">{p?.name??row.id}</div>{p&&<div className="item-meta">{formatUnitSize(p.unit_size)} {p.unit_label} · {money(p.retail_price_vnd)}</div>}
+     {messageId&&<div id={messageId} className="help-error" role="status">{[stockMessage,priceMessage].filter(Boolean).join(" ")}</div>}
+     {row.state==="error"&&<Button small variant="plain" onClick={()=>retryCartProduct(row.id)}>{copy.retry}</Button>}
+     {ready&&row.limit>0&&row.notice&&<Button small variant="plain" onClick={()=>acknowledgeCartProduct(row.id)}>{copy.acknowledge}</Button>}
+    </div><button type="button" className="remove-link" aria-describedby={messageId} onClick={()=>updateCart(row.id,-row.quantity)}>{copy.remove}</button></div>
+    {p&&<div className="drawer-row-bottom"><Quantity id={p.name} min={0} max={ready?row.limit:0} count={row.quantity} describedBy={messageId} locale={ui.locale} onMinus={()=>updateCart(row.id,-1)} onPlus={()=>updateCart(row.id,1)}/><strong>{money(p.retail_price_vnd*row.quantity)}</strong></div>}
+   </div></div>;
+  })}</div><div className="drawer-foot">{tooManyProducts&&<p className="help-error" role="alert">{copy.tooManyProducts}</p>}<MoneyLine label={copy.goods} value={money(subtotal)}/><Button style={{width:"100%"}} loading={checking} disabled={blocked||checking} aria-label={copy.checkout} onClick={beginCheckout}>{copy.checkout} <Icon name="arrow" size={17}/></Button><Button variant="plain" style={{width:"100%"}} onClick={()=>patch({cartOpen:false})}>{copy.continue}</Button></div></>:<div className="drawer-body cart-empty"><DataState kind={checking?"loading":"empty"} icon="bag" title={checking?copy.refreshing:copy.empty} description={checking?undefined:copy.emptyBody} action={checking?undefined:{label:copy.explore,onClick:()=>patch({cartOpen:false})}}/></div>}
  </fieldset></SideDrawer>;
 }
 
@@ -81,7 +95,7 @@ function matchesShippingAddress(quote:StoreCheckoutQuote,address:Address|null){
 
 export function Checkout(){
  const storeRequest=useStoreSession(),searchParams=useSearchParams(),buyAgainRequested=searchParams.get("source")==="buy-again";
- const {data,ui,patch,setUI,cacheStoreProducts,refreshResource,cartHydrated,accountSessionKey,retryCartProduct,markCartProductsUnavailable,acknowledgeCartProduct,updateCart}=useNFV(),router=useRouter(),copy=COPY[ui.locale],auth=useAuth();
+ const {data,ui,storeAvailability,patch,setUI,cacheStoreProducts,refreshResource,cartHydrated,accountSessionKey,retryCartProduct,markCartProductsUnavailable,acknowledgeCartProduct,updateCart}=useNFV(),router=useRouter(),copy=COPY[ui.locale],auth=useAuth();
  const authenticated=auth.status==="authenticated",authReady=auth.status==="guest"||authenticated;
  const authPending=auth.status==="checking"||auth.status==="error";
  const owner=authPending?auth.lastConfirmedSubject??"guest":authenticated?auth.session?.subject??"":"guest";
@@ -176,7 +190,12 @@ export function Checkout(){
  const quote=useMemo(()=>buildStoreQuote({products,quantities,useQuota,quota:quota.products,hasActiveCsa:authenticated&&quota.active&&!quotePending}),[products,quota,useQuota,quantities,authenticated,quotePending]);
  const guestReview=reviewGuestBuyer(guest,areas),guestValid=guestReview.complete;
  const tooManyProducts=Object.keys(quantities).length>STORE_MAX_ORDER_LINES;
- const cartReady=buyAgainMode?sourceInitialized&&sourceKey===`${owner}:${ui.locale}:${sourceVersion}`&&!sourceError&&!!buyAgainSession&&buyAgainRows.length>0&&buyAgainRows.every(line=>line.reason===null):cartHydrated&&!tooManyProducts&&products.length===Object.keys(ui.cart).length&&products.every(product=>ui.cartProductState[product.id]==="ready"&&!ui.cartProductNotice[product.id]&&product.available_quantity>=ui.cart[product.id]&&ui.cart[product.id]>0);
+ const cartReady=!tooManyProducts&&(buyAgainMode
+  ?sourceInitialized&&sourceCurrent&&!sourceError&&buyAgainRows.length>0&&buyAgainRows.every(line=>line.reason===null&&isStorePurchaseQuantity(line.quantity,line.product?.available_quantity))
+  :cartHydrated&&products.length===Object.keys(ui.cart).length&&products.every(product=>{
+   const id=product.id,verified=storeAvailability[id];
+   return ui.cartProductState[id]==="ready"&&!ui.cartProductNotice[id]&&isStorePurchaseQuantity(ui.cart[id],verified===undefined?product.available_quantity:verified);
+  }));
  const quoteFinal=accountSessionKey===owner&&(!authenticated||addressState==="ready")&&!quotePending&&!loadError&&!shippingError&&supported&&shippingKnown&&cartReady&&requoteState!=="loading"&&requoteState!=="error";
  const missingContact=address?(!address.phone.trim()?"phone":!address.name.trim()?"name":null):null;
  const ready=quoteFinal&&accountSessionKey===owner&&(authenticated?!!address?.updatedAt&&!!address.shippingAddressVersion&&address.isSupported!==false&&addressState==="ready"&&!missingContact:guestValid);
@@ -385,7 +404,7 @@ export function Checkout(){
   <p className="checkout-refresh-status" role="status" aria-live="polite">{updating?(ui.locale==="vi"?"Đang cập nhật thông tin đơn hàng…":"Updating order details…"):""}</p>
   {intentProblem}
   {buyAgainMode&&sourceError&&<DataState kind="error" title={buyAgainSession?.owner===owner?sourceError:(ui.locale==="vi"?"Chưa thể kiểm tra sản phẩm. Vui lòng thử lại.":"Products could not be checked. Please try again.")} action={{label:copy.retry,onClick:()=>setSourceVersion(value=>value+1)}}/>}
-  {tooManyProducts&&<div className="callout" role="alert">{copy.tooManyProducts} <Button small variant="plain" onClick={()=>patch({cartOpen:true})}>{copy.cart}</Button></div>}
+  {tooManyProducts&&!buyAgainMode&&<div className="callout" role="alert">{copy.tooManyProducts} <Button small variant="plain" onClick={()=>patch({cartOpen:true})}>{copy.cart}</Button></div>}
 
   <div className="checkout-flow-layout store-checkout" aria-busy={updating}>
    <div className="checkout-flow-main">
@@ -403,7 +422,7 @@ export function Checkout(){
     {requoteState==="error"&&<DataState kind="error" title={copy.loadFailed} action={{label:copy.retry,onClick:()=>void refreshRequote()}}/>}
     {loadError&&authenticated&&<DataState kind="error" title={copy.loadFailed} action={{label:copy.retry,onClick:()=>setLoadVersion(value=>value+1)}}/>}
     {shippingError&&<DataState kind="error" title={copy.loadFailed} action={{label:copy.retry,onClick:()=>setShippingVersion(value=>value+1)}}/>}
-    {!!delivery.error&&!appliedCoupon&&<DataState compact kind="error" title={delivery.error instanceof AccountApiError&&delivery.error.code==="store_membership_frozen"?storeMembershipFrozenMessage(ui.locale):DELIVERY_COPY[ui.locale].quoteFailed} action={{label:copy.retry,onClick:()=>void submit()}}/>}
+    {!!delivery.error&&!appliedCoupon&&!requote&&<DataState compact kind="error" title={delivery.error instanceof AccountApiError&&delivery.error.code==="store_membership_frozen"?storeMembershipFrozenMessage(ui.locale):DELIVERY_COPY[ui.locale].quoteFailed} action={{label:copy.retry,onClick:()=>void submit()}}/>}
     {error&&<div className="callout" role="alert">{error}</div>}
    </div>
    <StoreSection as="aside" className="store-summary" title={ui.locale==="vi"?"Đơn hàng của bạn":"Your order"}>

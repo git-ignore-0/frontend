@@ -7,13 +7,13 @@ const require=createRequire(import.meta.url),React=require("react"),jsx=require(
 const root=new URL("../",import.meta.url);
 const read=path=>readFileSync(new URL(path,root),"utf8");
 const product={id:"p",name:"Rau cải",unit_size:"1.000",unit_label:"kg",retail_price_vnd:40000,available_quantity:10,primary_image:null,csa_quota_group:{id:"g",cost:1,name:"Rau"}};
-export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false,quotaCost=1,pending=null,presented=false,failed=false,cartState="ready",availableQuantity=10}={}){
+export function renderStoreFixture({authenticated=false,active=false,useQuota=false,cart=false,quotaCost=1,pending=null,presented=false,failed=false,cartState="ready",availableQuantity=10,cartNotice}={}){
  let hook=0;
  const session=authenticated?{subject:"test-user"}:null;
  // Render the settled checkout, after quote, shipping and pending-intent ownership hydrate.
  const seeds=[[],{name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"},{active,products:[{productId:"g",availableUnits:2}]},30000,true,pending==="quote"];
  const data={authenticated,storeProducts:{p:{...product,available_quantity:availableQuantity,csa_quota_group:{...product.csa_quota_group,cost:quotaCost}}},shippingAddress:authenticated?{name:"Khách thử",phone:"0901234567",detail:"12 Đường thử",ward:"Phường thử",city:"Tỉnh thử",provinceCode:"66",wardCode:"1",updatedAt:"2026-11-01",shippingAddressVersion:"a".repeat(64)}:null};
- const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:pending==="product"?"loading":cartState},cartProductNotice:{},accountFetchState:{address:pending==="address"?"loading":failed?"error":"ready"}};
+ const ui={locale:"vi",cartOpen:true,cart:{p:3},applyCSA:{p:useQuota},cartProductState:{p:pending==="product"?"loading":cartState},cartProductNotice:{p:cartNotice},accountFetchState:{address:pending==="address"?"loading":failed?"error":"ready"}};
  const cache=new Map();
  function load(path){
   if(cache.has(path))return cache.get(path);
@@ -29,12 +29,14 @@ export function renderStoreFixture({authenticated=false,active=false,useQuota=fa
    if(name==="@/store/use-store-session")return {useStoreSession:()=>task=>task()};
     if(name==="@/auth/AuthProvider")return {useAuth:()=>({status:authenticated?"authenticated":"guest",session})};
    if(name==="next/navigation")return {useRouter:()=>({push(){}}),useSearchParams:()=>({get:()=>null})};
-   if(name==="@/state/NFVContext")return {useNFV:()=>({data,ui,cartHydrated:true,accountSessionKey:authenticated?"test-user":"guest",patch(){},updateCart(){},acknowledgeCartProduct(){},retryCartProduct(){},beginCheckout(){}})};
+   if(name==="@/state/NFVContext")return {useNFV:()=>({data,ui,storeAvailability:{},cartHydrated:true,accountSessionKey:authenticated?"test-user":"guest",patch(){},updateCart(){},acknowledgeCartProduct(){},retryCartProduct(){},beginCheckout(){}})};
    if(name==="@/components/overlays/OverlayPrimitives")return {SideDrawer:({title,children})=>React.createElement("div",{className:"side-drawer"},React.createElement("h2",{},title),children)};
    if(name==="@/components/store/StorePrimitives")return load("src/components/store/StorePrimitives.tsx");
    if(name==="@/components/account/GuestBuyerFields")return load("src/components/account/GuestBuyerFields.tsx");
    if(name==="@/components/account/ShippingAddressFields")return load("src/components/account/ShippingAddressFields.tsx");
    if(name==="@/data/account-copy")return load("src/data/account-copy.ts");
+   if(name==="@/data/store-copy")return load("src/data/store-copy.ts");
+   if(name==="@/store/store-limits")return load("src/store/store-limits.ts");
    if(name==="@/components/DiscountCodeField")return load("src/components/DiscountCodeField.tsx");
    if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
    if(name==="@/components/UI")return load("src/components/UI.tsx");
@@ -84,14 +86,25 @@ test("the proceed button shows its shared loading state while cart products are 
 });
 
 for(const [cartState,availableQuantity,message] of [["unavailable",10,"Sản phẩm không còn bán"],["ready",0,"Hết hàng"],["error",10,"Chưa thể làm mới sản phẩm"]]){
- test(`cart locks both quantity controls for ${message} and keeps removal available`,()=>{
+ test(`cart blocks increases for ${message} and keeps reduction and removal available`,()=>{
   const html=renderStoreFixture({cart:true,cartState,availableQuantity});
   assert.match(html,new RegExp(message));
-  assert.match(html,/aria-label="Giảm số lượng Rau cải" disabled=""/);
-  assert.match(html,/aria-label="Tăng số lượng Rau cải" disabled=""/);
-  assert.match(html,/<button class="remove-link">Xóa<\/button>/);
+  assert.match(html,/<button[^>]*aria-label="Giảm số lượng Rau cải"[^>]*>/);
+  assert.doesNotMatch(html,/<button[^>]*aria-label="Giảm số lượng Rau cải"[^>]*disabled/);
+  assert.match(html,/<button[^>]*aria-label="Tăng số lượng Rau cải"[^>]*disabled/);
+  assert.match(html,/<button[^>]*class="remove-link"[^>]*>Xóa<\/button>/);
  });
 }
+
+test("acknowledging a price change cannot unlock checkout while requested stock is insufficient",()=>{
+ const before=renderStoreFixture({cart:true,availableQuantity:2,cartNotice:"price_changed"});
+ const after=renderStoreFixture({cart:true,availableQuantity:2});
+ assert.match(before,/Hiện chỉ có thể mua 2.*Giá vừa được cập nhật\./);
+ assert.match(after,/Hiện chỉ có thể mua 2/);
+ assert.doesNotMatch(after,/Giá vừa được cập nhật/);
+ assert.match(before,/<button[^>]*disabled=""[^>]*aria-label="Tiến hành đặt hàng"/);
+ assert.match(after,/<button[^>]*disabled=""[^>]*aria-label="Tiến hành đặt hàng"/);
+});
 
 test("CSA summary reserves the same benefit row before and after applying points",()=>{
  const selected=renderStoreFixture({authenticated:true,active:true,useQuota:true});

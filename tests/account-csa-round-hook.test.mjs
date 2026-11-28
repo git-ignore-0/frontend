@@ -541,6 +541,31 @@ test('CSA stock conflict and later availability changes retain the Product and r
   } finally {h.h.dispose();}
 });
 
+test('an unavailable CSA product remains in the draft until the member removes it', async () => {
+  const h = selectionHarness();
+  const product = bundle.products[0];
+  try {
+    let view = await h.settle();
+    view.changeQuantity(product.id, 4);
+    h.services.saveRoundSelection = async input => {
+      h.calls.save.push(input);
+      h.latest({...bundle, products: []});
+      throw apiError(h, 'csa_product_unavailable', 409);
+    };
+    await view.submit();
+    view = await h.settle();
+    assert.equal(view.error.code, 'csa_product_unavailable');
+    assert.equal(h.calls.get, 2);
+    assert.equal(view.draft[product.id], 4);
+    assert.equal(view.current.products.length, 0);
+    await view.submit();
+    assert.equal(h.calls.save.length, 1);
+    view.changeQuantity(product.id, 0);
+    view = await h.settle();
+    assert.equal(view.draft[product.id] ?? 0, 0);
+  } finally {h.h.dispose();}
+});
+
 test('a forbidden mutation immediately clears private round data without history requests', async () => {
   const h = selectionHarness(); h.latest(heldBundle);
   try {

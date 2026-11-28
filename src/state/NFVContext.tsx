@@ -17,7 +17,8 @@ import type {StoreProductCard} from "@/store/store-model";
 import {copyWithFeedback,type ToastTone} from "@/lib/copy-feedback";
 import {mergeStoreProductSnapshots,type StoreProductSnapshot} from "@/store/store-product-snapshots";
 import {createCartProductRefreshCoordinator} from "@/store/cart-product-refresh";
-import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
+import {isStorePurchaseQuantity,STORE_MAX_ORDER_LINES} from "@/store/store-limits";
+import {STORE_COPY} from "@/data/store-copy";
 
 export {initialUI} from "./initial-state";
 type Ctx = {
@@ -278,8 +279,11 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
         const next={...s,toastSequence,toastTone:"error" as const,toast:ui.locale==="en"?`Your cart can contain up to ${STORE_MAX_ORDER_LINES} different products.`:`Giỏ hàng tối đa ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau.`};
         return openCart&&!s.cartOpen?openCartForValidation(next):next;
       }
-      const nextCount=Math.min(STORE_MAX_LINE_QUANTITY,available,count+quantity);
-      if(nextCount<=count)return openCart&&!s.cartOpen?openCartForValidation(s):s;
+      const nextCount=count+quantity;
+      if(!isStorePurchaseQuantity(quantity,available)||!isStorePurchaseQuantity(nextCount,available)){
+        const next:UIState={...s,toastSequence,toastTone:"error",toast:STORE_COPY[ui.locale].cannotAddQuantity};
+        return openCart&&!s.cartOpen?openCartForValidation(next):next;
+      }
       const cartProductNotice={...s.cartProductNotice};
       if(!count)delete cartProductNotice[product.id];
       const next:UIState={...s,
@@ -291,13 +295,22 @@ export function NFVProvider({children,initialPage="home",initialLocale="vi",init
     });
   },[storeAvailability,ui.cart,toast,ui.locale]);
   const updateCart=useCallback((id:string,delta:number)=>{
+    if(!Number.isSafeInteger(delta)||delta===0)return;
     const count=ui.cart[id];
     if(count&&count+delta<=0)cartRefresh.cancel(id);
-    setUI(s=>{const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},limit=Math.min(STORE_MAX_LINE_QUANTITY,data.storeProducts[id]?.available_quantity??STORE_MAX_LINE_QUANTITY);cart[id]=Math.max(0,Math.min(limit,(cart[id]||0)+delta));
-      if(cart[id]===0){delete cart[id];delete applyCSA[id];delete cartProductNotice[id];}
-      return {...s,cart,applyCSA,cartProductNotice};
+    const verified=storeAvailability[id];
+    const available=verified===undefined?data.storeProducts[id]?.available_quantity:verified;
+    setUI(s=>{
+      const current=s.cart[id];
+      if(!current)return s;
+      const next=current+delta;
+      if(delta>0&&(s.cartProductState[id]!=="ready"||!isStorePurchaseQuantity(next,available)))return s;
+      if(next>0)return {...s,cart:{...s.cart,[id]:next}};
+      const cart={...s.cart},applyCSA={...s.applyCSA},cartProductNotice={...s.cartProductNotice},cartProductState={...s.cartProductState};
+      delete cart[id];delete applyCSA[id];delete cartProductNotice[id];delete cartProductState[id];
+      return {...s,cart,applyCSA,cartProductNotice,cartProductState};
     });
-  },[cartRefresh,data.storeProducts,ui.cart]);
+  },[cartRefresh,data.storeProducts,storeAvailability,ui.cart]);
   const acknowledgeCartProduct=useCallback((id:string)=>setUI(s=>{const cartProductNotice={...s.cartProductNotice};delete cartProductNotice[id];return {...s,cartProductNotice}}),[]);
   const retryCartProduct=useCallback((id:string)=>{
     const cached=data.storeProducts[id];

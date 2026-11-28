@@ -13,7 +13,12 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
 const uiNames=["Button","DataState","FormInput","FormSelect","Icon","MoneyLine","Photo","Quantity","Tabs","Status"];
 const primitives=Object.fromEntries(["StoreSection","StorePageHeading","StoreProductRow"].map(k=>[k,k]));
-class ApiError extends Error{constructor(status,context){super("request_failed");this.status=status;this.context=context;this.code=status===409?"store_requote_required":"request_failed"}}
+class ApiError extends Error{constructor(statusOrCode,statusOrContext,context){
+ const code=typeof statusOrCode==="string"?statusOrCode:statusOrCode===409?"store_requote_required":"request_failed";
+ super(code);this.code=code;
+ this.status=typeof statusOrCode==="string"?statusOrContext:statusOrCode;
+ this.context=typeof statusOrCode==="string"?context:statusOrContext;
+}}
 const ADDRESS_VERSION="a".repeat(64);
 const DELIVERY_DATE="2026-11-01";
 const guest={name:"Khách thử",phone:"0901234567",provinceCode:"66",wardCode:"1",address:"12 Đường thử"};
@@ -51,6 +56,7 @@ function runtime(path,{services={},context={},auth={status:"guest",session:null}
   if(name==="@/lib/voucher-copy")return load("src/lib/voucher-copy.ts");
   if(name==="./store-limits"||name==="@/store/store-limits")return load("src/store/store-limits.ts");
   if(name==="@/store/use-buy-again")return load("src/store/use-buy-again.ts");
+  if(name==="@/data/store-copy")return load("src/data/store-copy.ts");
   if(name==="@/store/buy-again-session"||name==="./buy-again-session")return load("src/store/buy-again-session.ts");
   if(name==="./checkout-intent")return load("src/store/checkout-intent.ts");
   if(name==="./store-order-model")return load("src/store/store-order-model.ts");
@@ -163,7 +169,7 @@ test("guest lookup locks both inputs until failure and retries with the new refe
 });
 
 function checkout(options={}){
- const context={data:{authenticated:false,storeProducts:{[PRODUCT_ID]:{...product}}},ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{}},cartHydrated:true,accountSessionKey:"guest",refreshResource:async()=>{},retryCartProduct(){},acknowledgeCartProduct(){},updateCart(){},...options.context};
+ const context={data:{authenticated:false,storeProducts:{[PRODUCT_ID]:{...product}}},ui:{locale:"vi",cart:{[PRODUCT_ID]:1},applyCSA:{},cartProductState:{[PRODUCT_ID]:"ready"},cartProductNotice:{},accountFetchState:{}},storeAvailability:{},cartHydrated:true,accountSessionKey:"guest",refreshResource:async()=>{},retryCartProduct(){},acknowledgeCartProduct(){},updateCart(){},...options.context};
  context.markCartProductsUnavailable=ids=>{for(const id of ids)if(context.ui.cart[id])context.ui.cartProductState[id]="unavailable"};context.patch=update=>Object.assign(context.ui,update);context.setUI=update=>Object.assign(context.ui,typeof update==="function"?update(context.ui):update);context.cacheStoreProducts=ps=>ps.forEach(p=>context.data.storeProducts[p.id]=p);
  let buyAgainProducts=[],serverFee=30000;
  const defaultQuote=async input=>{
@@ -1520,6 +1526,36 @@ const checkoutTotal=r=>nodes(r.tree).find(n=>n.type==='MoneyLine'&&n.props.label
 function authoritativeQuote(input,{fee=17000,token=null,code=null,subtotal=40000}={}){
  return {deliveryDate:input.delivery_date,shippingDiscountReason:fee===0?'csa_companion_delivery':null,subtotalVnd:subtotal,eligibleSubtotalVnd:subtotal,discountAmountVnd:code?1000:0,shippingFeeVnd:fee,totalVnd:subtotal+fee-(code?1000:0),coupon:code?{id:SOURCE_ORDER,code}:null,voucherQuote:token,shippingAddressUpdatedAt:input.guest?null:'2026-11-01T00:00:00Z',shippingAddressVersion:input.guest?undefined:ADDRESS_VERSION,lines:input.lines.map(line=>({product_id:line.product_id,quantity:line.quantity,use_quota:line.use_quota,expected_unit_price_vnd:40000,expected_available_quantity:10,expected_quota_quantity:0}))};
 }
+test('Buy Again explains an order line above the Store limit even when current stock is sufficient',async()=>{
+ const r=buyAgainCheckout({services:{prepareBuyAgain:async()=>[{productId:PRODUCT_ID,quantity:1000,name:"Rau",reason:null,product:{...product,available_quantity:1500}}]}});
+ try{
+  r.render('Checkout');await r.settle();
+  const messages=nodes(r.tree).filter(n=>n.type==="DataState").map(n=>n.props.title);
+  assert.ok(messages.some(message=>/999.*1[.,]?000/.test(message)));
+  assert.equal(confirm(r).props.disabled,true);
+  assert.equal(r.context.ui.cart[PRODUCT_ID],7);
+ }finally{r.dispose()}
+});
+test('insufficient capacity in a quote requires stock review without creating an intent',async()=>{
+ const storage=new Map(),sent=[],quotes=[];
+ const r=checkout({storage,services:{
+  getStoreQuote:async input=>{
+   quotes.push(input);
+   const quote=authoritativeQuote(input,{fee:30000});
+   quote.lines[0].expected_available_quantity=0;
+   return quote;
+  },
+  createStoreCheckout:async payload=>{sent.push(payload);return order()},
+ }});
+ try{
+  r.render('Checkout');await r.settle();await confirm(r).props.onClick();await r.settle();
+  assert.equal(quotes.length,1);
+  assert.equal(r.context.ui.cart[PRODUCT_ID],1);
+  assert.match(text(r.tree),/Tồn kho vừa thay đổi/);
+  assert.equal(sent.length,0);
+  assert.equal(storage.has('nfv_store_checkout_intent_v1:guest'),false);
+ }finally{r.dispose()}
+});
 test('new checkout selects days locally and only Continue quotes the chosen day',async()=>{
  const requests=[],sent=[];const r=checkout({autoSelect:false,services:{
   getStoreDeliveryDates:async()=>({serverTime:'2026-11-01T00:00:00Z',dates:Array.from({length:8},(_,i)=>({date:`2026-11-0${i+1}`,freeShipping:i===3}))}),

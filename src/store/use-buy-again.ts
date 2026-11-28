@@ -7,11 +7,18 @@ import {useStoreSession} from "./use-store-session";
 import {prepareBuyAgain,type BuyAgainLine} from "./store-order-service";
 import {pendingCheckoutOwner} from "./checkout-intent";
 import {saveBuyAgain} from "./buy-again-session";
+import {STORE_MAX_LINE_QUANTITY,STORE_MAX_ORDER_LINES} from "./store-limits";
 import type {Locale} from "@/types";
 
 export function buyAgainMessage(lines:BuyAgainLine[],locale:Locale){
- return lines.filter(line=>line.reason!==null).map(line=>{
+ if(lines.length>STORE_MAX_ORDER_LINES)return locale==="vi"
+  ?`Đơn cũ có hơn ${STORE_MAX_ORDER_LINES} sản phẩm khác nhau. Vui lòng chọn lại sản phẩm ở Cửa hàng.`
+  :`The previous order has more than ${STORE_MAX_ORDER_LINES} different products. Choose products in the Store to continue.`;
+ return lines.filter(line=>line.reason!==null||line.quantity>STORE_MAX_LINE_QUANTITY).map(line=>{
   const name=line.product?.name??line.name,available=line.product?.available_quantity??0;
+  if(line.reason===null)return locale==="vi"
+   ?`Không thể mua lại: ${name} mua tối đa ${STORE_MAX_LINE_QUANTITY}, đơn cũ cần ${line.quantity}.`
+   :`Cannot buy again: ${name} has a purchase limit of ${STORE_MAX_LINE_QUANTITY}. The previous order needs ${line.quantity}.`;
   if(locale==="vi")return `Không thể mua lại: ${name} ${line.reason==="unavailable"?"không còn được bán.":line.reason==="out_of_stock"?"đã hết hàng.":`chỉ còn ${available}, đơn cũ cần ${line.quantity}.`}`;
   return `Cannot buy again: ${name} ${line.reason==="unavailable"?"is no longer available.":line.reason==="out_of_stock"?"is out of stock.":`has only ${available} available; the previous order needs ${line.quantity}.`}`;
  }).join(" ");

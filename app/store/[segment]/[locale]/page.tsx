@@ -29,5 +29,5 @@ export default async function Page({params,searchParams}:RouteProps){
  const {segment:slug,locale}=await params;if(!validLocale(locale)||!validSlug(slug))notFound();
  const retry=retryState(await searchParams);if(retry===null)notFound();
  const product=await loadProduct(slug,locale,retry);
- return <NFVApp initialPage="store" initialLocale={locale}><ProductDetail product={product} locale={locale}/></NFVApp>;
+ return <NFVApp initialPage="store" initialLocale={locale}><ProductDetail key={product.id} product={product} locale={locale}/></NFVApp>;
 }

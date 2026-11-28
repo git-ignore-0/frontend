@@ -24,6 +24,7 @@ function providerHarness({authenticated=false,initialResources=[],initialPage="h
  const initial={initialData:{authenticated,storeProducts:{p:original}},initialUI:{locale:"vi",cart:{p:1},cartProductState:{p:"ready"},cartProductNotice:{},accountFetchState:{},toastSequence:0,busyKeys:[],error:""},ACCOUNT_SERVICE_RESOURCES:initialResources};
  const provider=load("src/state/NFVContext.tsx",name=>{
   if(name==="@/store/store-limits")return load("src/store/store-limits.ts",()=>({}));
+  if(name==="@/data/store-copy")return load("src/data/store-copy.ts",()=>({}));
   if(name==="react")return react;
   if(name==="react/jsx-runtime")return jsx;
   if(name==="@/account/rewards-service")return {redeemGift:input=>{const response=deferred();redemptions.push({...response,input});return response.promise}};
@@ -404,10 +405,47 @@ test("cart quantities above 99 survive persistence before checkout",()=>{
 
 test("add and quantity updates respect the backend line limit and current stock",()=>{
  const h=providerHarness();let context=h.render();const product={...h.original,available_quantity:1500};
- context.setData(state=>({...state,storeProducts:{p:product}}));context=h.render();context.addCart(product,1499);context=h.render();
+ context.cacheStoreProducts([product],"verified");context=h.render();
+ context.addCart(product,999);context=h.render();
+ assert.equal(context.ui.cart.p,1);assert.equal(context.ui.toastTone,"error");
+ context.addCart(product,998);context=h.render();
  assert.equal(context.ui.cart.p,999);context.updateCart("p",1);context=h.render();assert.equal(context.ui.cart.p,999);
  context.updateCart("p",-1);context=h.render();assert.equal(context.ui.cart.p,998);
- context.setData(state=>({...state,storeProducts:{p:{...product,available_quantity:120}}}));context=h.render();context.updateCart("p",1);context=h.render();assert.equal(context.ui.cart.p,120);
+ context.cacheStoreProducts([{...product,available_quantity:120}],"verified");context=h.render();
+ context.updateCart("p",1);context=h.render();assert.equal(context.ui.cart.p,998);
+});
+
+test("rapid additions are all-or-nothing against the latest cart count",()=>{
+ const h=providerHarness(),product={...h.original,available_quantity:6};
+ let context=h.render();context.patch({cart:{p:1}});context.cacheStoreProducts([product],"verified");context=h.render();
+ context.addCart(product,3,{openCart:false});
+ context.addCart(product,5,{openCart:false});
+ assert.equal(h.render().ui.cart.p,4);
+ assert.equal(h.render().ui.toastTone,"error");
+ assert.ok(!h.render().ui.cartOpen);
+ for(const invalid of [0,-1,0.5,Infinity,Number.MAX_SAFE_INTEGER+1])context.addCart(product,invalid,{openCart:false});
+ assert.equal(h.render().ui.cart.p,4);
+ assert.equal(h.responses.length,0);
+});
+
+test("overstock cart decrements exactly and zero stock permits removal",()=>{
+ const h=providerHarness();let context=h.render();
+ context.patch({cart:{p:10},applyCSA:{p:true}});
+ context.cacheStoreProducts([{...h.original,available_quantity:6}],"verified");
+ context=h.render();context.updateCart("p",1);
+ assert.equal(h.render().ui.cart.p,10);
+ context.updateCart("p",-1);
+ assert.equal(h.render().ui.cart.p,9);
+ context.updateCart("p",-3);
+ assert.equal(h.render().ui.cart.p,6);
+ context.cacheStoreProducts([{...h.original,available_quantity:0}],"verified");
+ context=h.render();
+ assert.equal(context.ui.cart.p,6);
+ context.updateCart("p",-1);
+ assert.equal(h.render().ui.cart.p,5);
+ h.render().updateCart("p",-5);
+ assert.equal(h.render().ui.cart.p,undefined);
+ assert.equal(h.render().ui.applyCSA.p,undefined);
 });
 
 test("repeat refreshes retain price and stock notices until buyer acknowledgement",async()=>{
@@ -427,6 +465,7 @@ test("repeat refreshes retain price and stock notices until buyer acknowledgemen
 test("refresh keeps the requested quantity through partial, zero and reduced restored supply",async()=>{
  const h=providerHarness();
  h.render();h.hydrateCart();
+ h.render().cacheStoreProducts([h.original],"verified");
  h.render().updateCart("p",4);
  h.render().patch({cartOpen:true});
  h.render();h.validateCart();
@@ -530,6 +569,19 @@ test("a cached zero-stock product stays viewable with disabled detail purchase c
  assert.equal(h.responses.length,0);
 });
 
+test("two supplier entries do not increase the authoritative six-unit capacity",()=>{
+ const h=catalogCardHarness();
+ const product={...h.context().data.storeProducts.p,available_quantity:6,name:"Rau",
+  category:{id:"c",name:"Rau"},suppliers:[{name:"Farm A"},{name:"Farm B"}]};
+ const detail=h.renderDetail(product);
+ assert.equal(detail.find(node=>node.type===h.ui.Quantity).props.max,6);
+ const add=()=>h.render(product).find(node=>node.type===h.ui.Button);
+ for(let i=0;i<5;i++)add().props.onClick();
+ assert.equal(h.context().ui.cart.p,6);
+ assert.equal(add().props.disabled,true);
+ assert.equal(h.responses.length,0);
+});
+
 test("catalog blocks a confirmed unavailable product even after removal from the cart",async()=>{
  const h=catalogCardHarness(),context=h.context();
  const product={...context.data.storeProducts.p,name:"Cải ngọt",unit_size:"500.000",unit_label:"g",primary_image:null,csa_quota_group:null};
@@ -630,7 +682,7 @@ test("Store detail and cart pass their real stock/line limits to the shared Quan
  const jsx=(type,props)=>({type,props}),ui={};
  vm.runInNewContext(compile("src/components/UI.tsx"),{exports:ui,require:name=>name==="react/jsx-runtime"?{jsx,jsxs:jsx}:{}});
  const all=tree=>Array.isArray(tree)?tree.flatMap(all):!tree||typeof tree!=="object"?[]:[tree,...all(tree.props?.children)];
- for(const stock of [150,2000]){
+ for(const stock of [150,2000,6,0]){
   const product={id:"p",slug:"p",name:"Rau",category:{id:"c",name:"Rau"},available_quantity:stock,retail_price_vnd:10000,unit_size:"1.000",unit_label:"kg",primary_image:null,csa_quota_group:null};
   const exports={},context={data:{storeProducts:{p:product}},ui:{locale:"vi",cartOpen:true,cart:{p:99},cartProductState:{p:"ready"},cartProductNotice:{}},storeAvailability:{},cartHydrated:true,recheckStoreProducts(){},addCart(){}};
   const requireModule=name=>{
@@ -638,14 +690,21 @@ test("Store detail and cart pass their real stock/line limits to the shared Quan
    if(name==="react")return {useState:()=>[99,()=>{}],useEffect:effect=>effect(),useRef:current=>({current})};
    if(name==="@/components/UI")return ui;
    if(name==="@/state/NFVContext")return {useNFV:()=>context};
+   if(name==="@/data/store-copy"){const value={};vm.runInNewContext(compile("src/data/store-copy.ts"),{exports:value});return value}
    if(name==="@/store/store-limits"){const value={};vm.runInNewContext(compile("src/store/store-limits.ts"),{exports:value});return value}
    if(name==="@/store/store-format")return {formatUnitSize:String};
    if(name==="@/lib/format")return {money:String};return {};
   };
   for(const [file,component,props] of [["src/screens/store/ProductDetail.tsx","ProductDetail",{product,locale:"vi"}],["src/screens/Checkout.tsx","CartDrawer",undefined]]){
    vm.runInNewContext(compile(file),{exports,require:requireModule});
-   const quantity=all(exports[component](props)).find(node=>node.type===ui.Quantity);assert.ok(quantity);assert.equal(quantity.props.max,Math.min(999,stock));
-   const plus=all(ui.Quantity(quantity.props)).find(node=>node.type==="button"&&node.props["aria-label"].includes("Tăng"));assert.equal(plus.props.disabled,false);
+   const tree=all(exports[component](props));
+   const quantity=tree.find(node=>node.type===ui.Quantity);assert.ok(quantity);assert.equal(quantity.props.max,Math.min(999,stock));
+   assert.equal(quantity.props.count,99);
+   const controls=all(ui.Quantity(quantity.props));
+   const plus=controls.find(node=>node.type==="button"&&node.props["aria-label"].includes("Tăng"));assert.equal(plus.props.disabled,stock<99);
+   const minus=controls.find(node=>node.type==="button"&&node.props["aria-label"].includes("Giảm"));assert.equal(minus.props.disabled,false);
+   const purchase=tree.find(node=>node.type===ui.Button&&(component==="ProductDetail"||node.props["aria-label"]));
+   assert.equal(purchase.props.disabled,stock<99);
    const full=all(ui.Quantity({...quantity.props,count:Math.min(999,stock)})).find(node=>node.type==="button"&&node.props["aria-label"].includes("Tăng"));assert.equal(full.props.disabled,true);
   }
  }

@@ -189,6 +189,21 @@ test("voucher BFF preserves backend errors and maps transport failure without in
  }
 });
 
+test("quote and checkout preserve Backend stock conflicts for both guest and member",async()=>{
+ for(const [route,upstreamPath,code] of [["quote","store-quotes","store_stock_changed"],["checkout","store-checkouts","store_requote_required"]]){
+  for(const storedSession of [null,{accessToken:"owner-token"}]){
+   const error={errors:[{code,context:{reason:"stock_changed",product_id:UUID,available_quantity:6}}]};
+   const harness=routeHarness({storedSession,upstream:()=>Response.json(error,{status:409})});
+   const body={locale:"vi",lines:[{product_id:UUID,quantity:7,use_quota:false}]};
+   const response=await harness.call([route],{method:"POST",body});
+   assert.equal(response.status,409);assert.deepEqual(await response.json(),error);
+   assert.equal(response.headers.get("Cache-Control"),"private, no-store");
+   assert.equal(harness.calls[0].url,`https://auth.test/api/v1/public/${upstreamPath}`);
+   assert.deepEqual(JSON.parse(harness.calls[0].init.body),body);
+  }
+ }
+});
+
 test('calendar and shared quote forward optional buyer session, stay private and never downgrade expired sessions',async()=>{
  for(const [path,method,upstreamPath] of [[['delivery-dates'],'GET','store-delivery-dates'],[['quote'],'POST','store-quotes']]){
   for(const session of [null,{accessToken:'owner-token'}]){
